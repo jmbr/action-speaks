@@ -478,7 +478,7 @@ class Verifier:
           introduced, so it sees exactly the submission's own constants.
         * The target is audited through an **alias with an unpredictable name**, so a
           subverted elaborator cannot special-case the declaration it needs to lie about.
-          `def alias := target` reproduces the target's axiom footprint exactly, since the
+          `def alias := @target` reproduces the target's axiom footprint exactly, since the
           alias depends on it and on nothing else.
         * A **canary** with an indistinguishable name is audited alongside it. The canary is
           built from a `sorry`, so honest machinery must report it untrusted; machinery that
@@ -491,8 +491,13 @@ class Verifier:
 
         setup = [
             f"theorem {seed} : (2 : Nat) + 2 = 5 := by sorry",
-            f"def {alias} := {target}",
-            f"def {canary} := {seed}",
+            # `@` matters: without it Lean inserts metavariables for the declaration's
+            # leading implicit and instance-implicit binders, and instance resolution gets
+            # stuck ("typeclass instance problem is stuck"), so the alias never gets
+            # defined and a perfectly good proof is reported as unverifiable. The canary is
+            # written the same way so the two remain indistinguishable.
+            f"def {alias} := @{target}",
+            f"def {canary} := @{seed}",
         ]
         # Randomise the order so position carries no information either.
         audit_pair = [f"#audit_axioms {alias}", f"#audit_axioms {canary}"]

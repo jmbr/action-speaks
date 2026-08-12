@@ -144,6 +144,16 @@ GENUINE: list[tuple[str, str, str]] = [
         "  simpa using (Nat.prime_two).irrational_sqrt\n",
         "t",
     ),
+    (
+        # Regression: the audit aliases the target with `def alias := @target`. Without the
+        # `@`, Lean inserts metavariables for these leading implicit and instance-implicit
+        # binders, instance resolution gets stuck, and the alias is never defined - so this
+        # entirely ordinary polymorphic theorem came back as `target_declared` FAILED.
+        "implicit_binders",
+        "theorem t {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] (x y : E) :\n"
+        "    ‖x + y‖ ≤ ‖x‖ + ‖y‖ := norm_add_le x y\n",
+        "t",
+    ),
 ]
 
 
