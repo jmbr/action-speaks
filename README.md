@@ -76,7 +76,9 @@ skills/lean-proof-check/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
-tests/test_cookbook.py   re-verifies every example in COOKBOOK.md
+tests/test_docs.py       re-runs every Lean example in the documentation
+tests/check_names.py     catches renamed tools and superseded revisions in prose
+.pre-commit-config.yaml  runs all three before a commit lands (via prek)
 AGENTS.md                the contract handed to the agent
 COOKBOOK.md              worked patterns for applied mathematics
 INTEGRATION.md           how to drive this from a harness
@@ -179,7 +181,7 @@ See **[SETUP-AGENTS.md](SETUP-AGENTS.md)** to enable this in pi or Copilot,
 **[INTEGRATION.md](INTEGRATION.md)** for driving it from a harness (Python API, HTTP service,
 MCP, CLI), and **[AGENTS.md](AGENTS.md)** for the contract handed to the agent.
 **[COOKBOOK.md](COOKBOOK.md)** works through what to check in applied mathematics, and what
-not to bother with; every example in it is re-verified by `tests/test_cookbook.py`.
+not to bother with; every example in it is re-run by `tests/test_docs.py`.
 
 ```python
 from nullius import Harness
@@ -278,8 +280,15 @@ lake build repl                                 # the REPL, pinned by lake-manif
 lake build Physlib                              # physics; builds from source, ~15 min
 cd .. && python3 -m nullius.cli doctor
 python3 tests/test_adversarial.py
-python3 tests/test_cookbook.py
+python3 tests/test_docs.py
+prek install                                    # run both before each commit
 ./install.sh                                    # enable the skill and MCP server
 ```
 
 `lake exe cache get` only serves Mathlib, so Physlib compiles locally the first time.
+
+`prek install` wires the checks into `git commit`: prose is scanned for renamed tools and
+superseded revisions on every commit (72 ms, no Lean), and the two Lean suites run only when
+something they cover actually changes — about 12 s for a commit that touches everything. Use
+`prek run --all-files` to check the whole tree, and `SKIP=nullius-docs git commit` to bypass
+a hook deliberately. `pre-commit` reads the same config if you prefer it to `prek`.

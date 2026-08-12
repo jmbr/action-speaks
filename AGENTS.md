@@ -38,6 +38,10 @@ close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }     # ask L
 Inventing a plausible-sounding lemma name is the single most common reason proofs fail.
 `close` cannot hallucinate: it reports only lemmas that genuinely close the goal.
 
+(The five tools are named `verify`, `statement`, `search`, `close`, `log` — the same names as
+the CLI subcommands. Your client namespaces them by server, typically as `nullius-search` and
+so on, which is what distinguishes this `search` from any other tool of that name.)
+
 **4. Verify the proof.**
 
 ```

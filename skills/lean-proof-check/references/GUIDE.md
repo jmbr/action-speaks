@@ -9,11 +9,11 @@ What each verdict line means and what to do about it.
 | Check | Meaning | What to do |
 |---|---|---|
 | `static_guard` | banned construct in the source | remove it; these are never negotiable |
-| `elaboration` | the proof does not compile | read the Lean error; use `goal` to find the lemma |
+| `elaboration` | the proof does not compile | read the Lean error; use `close` to find the lemma |
 | `no_sorry` | proof incomplete, anywhere in the file | finish it, or admit you cannot prove it |
 | `target_declared` | the named theorem does not exist | name the theorem you want audited, put it last |
 | `audit_integrity` | the submission interfered with the verifier | submit a plain proof |
-| `trusted_axioms` | rests on something beyond `propext`, `Classical.choice`, `Quot.sound` | remove the axiom / `native_decide` |
+| `trusted_axioms` | rests on something beyond `propext`, `Classical.choice`, `Quot.sound` | remove the axiom / `native_decide`, or stop citing an unfinished Physlib result (see below) |
 | `statement_sorry_free` | `sorry` inside the statement itself | write the statement out fully |
 | `not_vacuous` | hypotheses contradict each other | **fix the statement, not the proof** |
 | `hypotheses_used` | conclusion holds without the hypotheses | strengthen the conclusion, or drop the hypotheses and claim the stronger result |
@@ -51,6 +51,25 @@ theorem good (n : ℕ) (hn : 0 < n) : n - 1 < n := by omega
 division, or "the difference between", either add the hypothesis that makes it well-behaved
 or state it over `ℤ`/`ℝ`.
 
+### Physlib: the result you cited may not be proved yet
+
+Mathlib and Physlib are both imported, but they hold themselves to different standards.
+Physlib deliberately ships unfinished results, marked `@[sorryful]` (resting on `sorryAx`) or
+`@[pseudo]` (resting on `Lean.ofReduceBool`). Nothing in your submission looks wrong when you
+cite one — there is no `sorry` to see, and the proof can be a bare `rfl` — but the axiom
+footprint gives it away:
+
+```
+[FAIL] trusted_axioms - untrusted: sorryAx
+  axioms: sorryAx
+```
+
+That is not a defect in your proof. It means the physics result you leaned on is a
+placeholder, so the claim is not available to you yet. Say so, rather than working around it.
+
+Note also that `search` indexes Mathlib only, so Physlib lemmas never appear in its results;
+`close` runs in the real environment and does see them.
+
 ## Finding lemmas
 
 Three routes, in increasing order of reliability and cost:
@@ -66,8 +85,8 @@ scripts/nullius close '0 ≤ x^2' -b '(x : ℝ)'
 Loogle patterns: `?a` is a named wildcard, `_` an anonymous one, `|-` restricts the match to
 the conclusion, commas conjoin constraints, `"foo"` matches names containing `foo`.
 
-`goal` runs `exact?`/`apply?` inside Lean. Slower (seconds), but whatever it returns actually
-closes the goal — it cannot invent a name. When search and `goal` disagree, trust `goal`.
+`close` runs `exact?`/`apply?` inside Lean. Slower (seconds), but whatever it returns actually
+closes the goal — it cannot invent a name. When `search` and `close` disagree, trust `close`.
 
 ## Worked example: claim to verdict
 
@@ -77,7 +96,7 @@ Claim: *the arithmetic mean of two nonnegative reals is at least their geometric
 scripts/nullius statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
 # → ∀ (a b : ℝ), 0 ≤ a → 0 ≤ b → √(a * b) ≤ (a + b) / 2 ; hypotheses satisfiable
 
-scripts/nullius check "AM-GM for two nonnegative reals" <<'EOF'
+scripts/nullius verify "AM-GM for two nonnegative reals" <<'EOF'
 theorem am_gm_two (a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) :
     Real.sqrt (a * b) ≤ (a + b) / 2 := by
   rw [show a * b = ((a+b)/2)^2 - ((a-b)/2)^2 by ring]
@@ -96,11 +115,10 @@ Then report: *"Machine-checked in Lean 4 / Mathlib: `∀ (a b : ℝ), 0 ≤ a �
 To refute something, prove its negation — equally checkable:
 
 ```bash
-scripts/nullius check "not every continuous function is differentiable" <<'EOF'
+scripts/nullius verify "not every continuous function is differentiable" <<'EOF'
 theorem not_all_cont_diff : ¬ (∀ f : ℝ → ℝ, Continuous f → Differentiable ℝ f) := by
   intro h
-  have : Differentiable ℝ (fun x : ℝ => |x|) := h _ continuous_abs
-  simpa using (this 0).differentiableAt
+  exact not_differentiableAt_abs_zero (h _ continuous_abs 0)
 EOF
 ```
 
@@ -109,8 +127,8 @@ this" is a legitimate and useful answer; a fabricated proof is not.
 
 ## Repeated or batch use
 
-Each CLI invocation starts its own Lean session (~2.5 s to import Mathlib). For more than a
-handful of checks, drive the Python API, which keeps sessions warm:
+Each CLI invocation starts its own Lean session (~2.6 s to import Mathlib and Physlib). For
+more than a handful of checks, drive the Python API, which keeps sessions warm:
 
 ```python
 import sys; sys.path.insert(0, "<verifier repo>")   # the directory containing nullius/

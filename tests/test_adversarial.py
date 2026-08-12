@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from nullius import guard as G  # noqa: E402
 from nullius import verify as V  # noqa: E402
+from nullius.config import ConfigError  # noqa: E402
 from nullius.repl import Session  # noqa: E402
 
 # The audit machinery emits `NULLIUS_AUDIT {...}`; inside a Lean interpolated string the
@@ -180,7 +181,12 @@ GENUINE: list[tuple[str, str, str]] = [
 
 def main() -> int:
     session = Session()
-    session.start()
+    try:
+        session.start()
+    except ConfigError as exc:
+        # Reached from a commit hook on a machine where the verifier is not built.
+        print(f"cannot run the suite: {exc}")
+        return 1
     verifier = V.Verifier(session)
     print(f"session ready in {session.startup_seconds:.2f}s\n")
 

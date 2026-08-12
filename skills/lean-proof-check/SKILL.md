@@ -1,7 +1,7 @@
 ---
 name: lean-proof-check
-description: Verify a mathematical claim by proving it in Lean 4 with Mathlib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, or algorithm correctness. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib lemma name instead of guessing.
-compatibility: Requires the nullius verifier (Lean 4.33.0 + Mathlib, ~8GB built) installed via its install.sh. Linux/macOS with python3.
+description: Verify a mathematical claim by proving it in Lean 4 with Mathlib and Physlib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, algorithm correctness, or physics. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib lemma name instead of guessing.
+compatibility: Requires the nullius verifier (Lean 4.32.0 + Mathlib + Physlib, ~9GB built) installed via its install.sh. Linux/macOS with python3.
 metadata:
   repository: nullius
 ---
@@ -55,12 +55,13 @@ scripts/nullius search '|- Irrational (Real.sqrt _)'            # by shape (Loog
 scripts/nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean directly
 ```
 
-`goal` cannot hallucinate: it only reports lemmas that genuinely close the goal.
+`close` cannot hallucinate: it only reports lemmas that genuinely close the goal. `search`
+consults remote indexes and can hand back a name that does not exist; `close` cannot.
 
 ### 4. Verify the proof
 
 ```bash
-scripts/nullius check "if n > 5 then n squared exceeds 25" <<'EOF'
+scripts/nullius verify "if n > 5 then n squared exceeds 25" <<'EOF'
 theorem main (n : ℕ) (h : 5 < n) : 25 < n * n := by nlinarith
 EOF
 ```
@@ -80,7 +81,7 @@ whose hypotheses turn out to be unnecessary.
 - **No `import` lines.** Mathlib and Physlib are already imported; an `import` is rejected.
 - **Physlib ships incomplete results** marked `@[sorryful]` / `@[pseudo]`. Citing one gets
   rejected on its axiom footprint, which means that physics result is not proved yet. Note
-  also that `search` indexes Mathlib only; `goal` sees Physlib too.
+  also that `search` indexes Mathlib only; `close` sees Physlib too.
 - Helper lemmas first, the claim you care about **last** (that one is audited by default).
 - Workhorse tactics: `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
   `aesop`, `simp`, `decide`, `grind`.

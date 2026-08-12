@@ -1,0 +1,60 @@
+# Hooks for `prek` (or `pre-commit`; the config format is the same).
+#
+#   prek install     enable them for this clone
+#   prek run --all-files
+#
+# The Lean-backed hooks need the verifier built (`cd lean && lake exe cache get && lake
+# build`), because they actually run proofs rather than pattern-matching them. They are
+# scoped with `files:` so that editing prose alone does not start a Lean session, and each
+# one is skippable in an emergency with `SKIP=<id> git commit`.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      # Instant and Lean-free, so it runs on every commit. Catches the failure mode that
+      # tests cannot: prose that still refers to a renamed tool or a superseded revision.
+      - id: nullius-names
+        name: no stale names or version citations
+        entry: python3 tests/check_names.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Every Lean example in the documentation is executed. Examples rot silently
+      # otherwise: the refutation example in GUIDE.md stopped elaborating and nothing
+      # noticed until it was read again.
+      - id: nullius-docs
+        name: documented Lean examples still verify
+        entry: python3 tests/test_docs.py
+        language: system
+        pass_filenames: false
+        files: >-
+          ^(COOKBOOK\.md
+          |skills/lean-proof-check/(SKILL\.md|references/GUIDE\.md)
+          |nullius/.*\.py
+          |lean/.*\.lean
+          |lean/(lakefile\.toml|lean-toolchain|lake-manifest\.json)
+          |tests/test_docs\.py)$
+
+      # The soundness guarantee itself: attacks must still be rejected and honest proofs
+      # still accepted. Only worth running when the verifier or its Lean side changes.
+      - id: nullius-adversarial
+        name: verifier still rejects attacks and accepts proofs
+        entry: python3 tests/test_adversarial.py
+        language: system
+        pass_filenames: false
+        files: >-
+          ^(nullius/.*\.py
+          |lean/.*\.lean
+          |lean/(lakefile\.toml|lean-toolchain|lake-manifest\.json)
+          |tests/test_adversarial\.py)$

@@ -234,7 +234,7 @@ While writing a paper, formalise the two or three inequalities you are least sur
 them so they are easy to find again, and move on:
 
 ```bash
-nullius check "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
+nullius verify "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
 nullius log --tag paper-draft
 ```
 
