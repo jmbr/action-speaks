@@ -9,6 +9,37 @@ Every Lean block below is verified on each run of `tests/test_cookbook.py`, agai
 toolchain and revisions this repository pins. The `-- expect:` line says what the verifier
 must return; blocks marked `rejected` are there because failing usefully is half the point.
 
+## Two interfaces, same verifier
+
+The shell commands in this document (`nullius check`, `nullius goal`, …) are the CLI. Inside
+an agent — Copilot, pi, Claude Code — the same operations arrive as MCP tools instead, and
+the shell commands are not available there. They correspond one to one:
+
+| Task | CLI | MCP tool |
+|---|---|---|
+| Verify a proof | `nullius check "claim" < f.lean` | `lean_verify` |
+| Elaborate a statement, test for vacuity | `nullius statement '(n : ℕ) …'` | `lean_check_statement` |
+| Find a lemma by meaning or shape | `nullius search '…'` | `lean_search_lemma` |
+| Ask Lean to close a goal | `nullius goal '…' -b '…'` | `lean_find_proof` |
+| Look up past verdicts | `nullius log` | `lean_ledger` |
+
+The flags map to arguments of the same name: `--require-nontrivial` is `require_nontrivial`,
+`--tag` is `tag`, `-t` is `target`, `-c` is `claim`, `-b` is `binders`. So
+
+```bash
+nullius check "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
+```
+
+is, from an agent:
+
+```json
+{"source": "theorem …", "claim": "energy estimate, eq. (3.7)",
+ "tag": "paper-draft", "require_nontrivial": true}
+```
+
+Both write to the same ledger, so a result checked from the shell is visible to the agent and
+the other way round.
+
 ## The shape of a useful check
 
 The pattern that makes this affordable is **assume the analysis**: the hard analytic facts
@@ -154,17 +185,17 @@ theorem euler_growth_guessed (h L : ℝ) (n : ℕ) (hh : 0 ≤ h) (hL : 0 ≤ L)
         rw [← Real.exp_nat_mul]; ring_nf
 ```
 
-The fix is to ask instead of guess:
+The fix is to ask instead of guess — `nullius goal`, or `lean_find_proof` from an agent:
 
 ```
 nullius goal 'a ^ n ≤ b ^ n' -b '(a b : ℝ) (n : ℕ) (ha : 0 ≤ a) (hab : a ≤ b)'
 ```
 
 which answers `exact pow_le_pow_left₀ ha hab n` — the `₀` suffix being exactly the kind of
-detail nobody recalls correctly. `goal` cannot hallucinate: it reports only lemmas that
-actually close the goal. `search` is the complement, by meaning or by shape, and is worth
-using even if you never formalise anything, to answer "does Mathlib already have my bound,
-and what is it called?"
+detail nobody recalls correctly. `goal` / `lean_find_proof` cannot hallucinate: it reports
+only lemmas that actually close the goal. `search` / `lean_search_lemma` is the complement,
+by meaning or by shape, and is worth using even if you never formalise anything, to answer
+"does Mathlib already have my bound, and what is it called?"
 
 ## Pattern: make unused hypotheses fatal
 
@@ -204,6 +235,9 @@ them so they are easy to find again, and move on:
 nullius check "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
 nullius log --tag paper-draft
 ```
+
+From an agent, the same two steps are `lean_verify` with `tag: "paper-draft"` and
+`lean_ledger` with `tag: "paper-draft"`.
 
 The ledger keeps rejections as well as successes, so the history of a claim — including a
 step that stopped verifying after a dependency bump — stays visible.

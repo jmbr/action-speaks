@@ -113,6 +113,14 @@ TOOLS: list[dict[str, Any]] = [
                     ),
                     "default": False,
                 },
+                "tag": {
+                    "type": "string",
+                    "description": (
+                        "Optional label recorded with this verdict, so a group of related "
+                        "checks can be retrieved later with `lean_ledger`. Useful for "
+                        "collecting every result belonging to one paper or project."
+                    ),
+                },
             },
             "required": ["source"],
         },
@@ -195,6 +203,10 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "limit": {"type": "integer", "default": 10},
                 "status": {"type": "string", "enum": ["verified", "rejected", "error"]},
+                "tag": {
+                    "type": "string",
+                    "description": "Only entries recorded with this tag by `lean_verify`.",
+                },
                 "stats": {"type": "boolean", "default": False},
             },
         },
@@ -212,7 +224,7 @@ def tool_lean_verify(args: dict[str, Any]) -> str:
         claim=args.get("claim"),
         require_nontrivial=bool(args.get("require_nontrivial", False)),
     )
-    row = ledger().record(verdict, source, tag="mcp")
+    row = ledger().record(verdict, source, tag=args.get("tag") or "mcp")
     out = [verdict.render(), f"\nledger entry: #{row}"]
     if verdict.verified:
         out.append(
@@ -272,7 +284,9 @@ def tool_lean_ledger(args: dict[str, Any]) -> str:
     lg = ledger()
     if args.get("stats"):
         return json.dumps(lg.stats(), indent=2)
-    rows = lg.recent(limit=int(args.get("limit", 10)), status=args.get("status"))
+    rows = lg.recent(
+        limit=int(args.get("limit", 10)), status=args.get("status"), tag=args.get("tag")
+    )
     if not rows:
         return "ledger is empty"
     lines = []
