@@ -36,6 +36,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"lake         : {cfg.lake_bin}")
     print(f"toolchain    : {cfg.toolchain()}")
     print(f"mathlib rev  : {cfg.mathlib_rev()}")
+    print(f"repl rev     : {cfg.package_rev('repl')}")
     print(f"ledger       : {cfg.ledger_path}")
     try:
         cfg.validate()

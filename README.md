@@ -55,11 +55,10 @@ Anything outside `{propext, Classical.choice, Quot.sound}` is disqualifying.
 ## Layout
 
 ```
-lean/LeanAI/Audit.lean   the audit commands (#audit_axioms, #audit_vacuity,
+lean/LeanAI/Audit.lean   the audit commands (#audit_axioms, #audit_replay, #audit_vacuity,
                          #audit_triviality, #audit_shape), pinned to Lean v4.33.0
-repl/                    leanprover-community/repl, checked out at the commit whose
-                         toolchain matches (bbeedf3)
-leanai/config.py         locates the project, records toolchain + Mathlib revision
+lean/lakefile.toml       pins Mathlib and the Lean REPL; lake-manifest.json locks both
+leanai/config.py         locates the project, records toolchain + Mathlib + REPL revisions
 leanai/repl.py           persistent REPL session and pool
 leanai/guard.py          static ban-list, applied before Lean sees the source
 leanai/verify.py         the pipeline and the Verdict type
@@ -78,34 +77,95 @@ INTEGRATION.md           how to drive this from a harness
 SETUP-AGENTS.md          enabling it in pi / Copilot (skill + MCP)
 ```
 
+The Lean REPL is a pinned `require` in `lean/lakefile.toml`, so `lake build` fetches it, locks
+its revision in `lake-manifest.json`, and guarantees it is built against the same toolchain as
+the project — a mismatch there breaks elaboration in ways that are tedious to diagnose.
+
+## Prior art
+
+This is not the first tool in this space, and the soundness layer is not novel:
+
+* [SafeVerify](https://github.com/GasStationManager/SafeVerify) checks Lean submissions
+  against a target spec, requires the same three axioms via `CollectAxioms.collect`, bans
+  `partial`/`unsafe`, and uses `Environment.replay` to defend against environment
+  manipulation. It is the proof-checking backend for PutnamBench's leaderboard and has been
+  used to check DeepSeek-Prover-V2, Kimina, Seed-Prover and Trinity output. The kernel replay
+  here follows its approach.
+* [lean4checker](https://github.com/leanprover/lean4checker) is the kernel re-checker
+  SafeVerify is built on.
+* [LeanTool](https://github.com/GasStationManager/LeanTool) provides an LLM↔Lean feedback
+  loop with MCP/HTTP/CLI interfaces, and its `check_false` tactic — which tries to prove the
+  negation of the goal at a `sorry` hole — is the nearest predecessor to the vacuity check.
+* [lean-lsp-mcp](https://github.com/oOo0oOo/lean-lsp-mcp) exposes Lean's LSP, Loogle,
+  LeanSearch and friends to agents.
+
+What is unusual here is treating **vacuity and triviality as blocking gates**: rejecting a
+proof because its hypotheses are contradictory, or because they do no work. Those checks
+matter precisely when the agent writes its *own* statement, which is the case the
+submission-against-a-spec tools do not have to handle — when a trusted party pins the
+statement in advance, a vacuous statement is the spec author's problem, not the checker's.
+
+If you need to verify submissions against a known specification, use SafeVerify. This tool is
+for the case where the claim itself is the thing being invented.
+
 ## The pipeline
 
 A submission is accepted only if it survives, in order:
 
 | Check | Rejects |
 |---|---|
-| `static_guard` | `axiom`, `sorryAx`, `native_decide`, `debug.skipKernelTC`, `unsafe`, `partial def`, `@[implemented_by]`, `@[extern]`, `#exit`, `maxHeartbeats 0`, `#eval`, IO, custom syntax, audit tampering |
+| `static_guard` | `axiom`, `sorryAx`, `native_decide`, `debug.skipKernelTC`, `unsafe`, `partial def`, `@[implemented_by]`, `@[extern]`, `#exit`, `maxHeartbeats 0`, `#eval`/`run_cmd`, direct environment writes, IO, custom syntax, audit tampering |
 | `elaboration` | anything Lean reports an error for |
 | `no_sorry` | `sorry` in the target or in any helper it depends on |
 | `target_declared` | the claimed theorem does not exist |
+| `kernel_replay` | declarations the elaborator accepted but the kernel does not |
 | `audit_integrity` | the submission subverted the audit machinery (tripwire) |
 | `trusted_axioms` | dependence on anything outside the trusted three |
 | `statement_sorry_free` | `sorry` inside the statement itself |
 | `not_vacuous` | contradictory hypotheses |
 | `hypotheses_used` | hypotheses that do no work (warning by default) |
 
-The static guard and the axiom audit are deliberately redundant: the test suite disables the
-guard and confirms the Lean-side audit still rejects every attack unaided.
+The layers are deliberately redundant: the test suite disables the guard and confirms the
+Lean-side checks still reject every attack unaided.
+
+### Why the kernel replay matters
+
+The axiom audit is only meaningful if the declarations it walks were themselves accepted by
+the kernel, and they need not have been. A declaration inserted with `addDeclCore ... false`,
+or admitted under `set_option debug.skipKernelTC true`, is in the environment without ever
+having been checked. Demonstrated on this machine:
+
+```
+theorem forged : 4 = 5     -- installed with doCheck := false, value is `trivial`
+#print axioms forged       -- 'forged' does not depend on any axioms
+```
+
+A false theorem with a spotless axiom footprint. `kernel_replay` re-adds every declaration
+the submission introduced through `Kernel.Environment.addDecl` under a fresh name, and the
+kernel rejects it:
+
+```
+(kernel) declaration type mismatch, has type True but is expected to have type 4 = 5
+```
+
+This is the approach used by [lean4checker](https://github.com/leanprover/lean4checker) and
+[SafeVerify](https://github.com/GasStationManager/SafeVerify), which re-check submissions
+against the kernel rather than trusting the elaborator's environment. Replay runs *before*
+the axiom audit, since the axiom audit's result is worthless otherwise.
 
 ### The tripwire
 
-The audit commands necessarily run inside the environment the submission created, so a
-submission could in principle redefine `#audit_axioms` to report success. This was a real
-hole — the adversarial suite caught it. The fix: each audit run injects a **canary** built
-from a `sorry`, alongside the target aliased under an unpredictable random name. Honest audit
-machinery must flag the canary as untrusted; machinery rigged to say "trusted" clears the
-canary too and is caught. Names are random and the order is shuffled, so the forgery cannot
-special-case its way out.
+Replay defeats a forged environment, but the audit commands themselves are elaborated in the
+environment the submission created, so a submission could redefine `#audit_axioms` to report
+success. This was a real hole — the adversarial suite caught it. Each audit run injects a
+**canary** built from a `sorry`, alongside the target aliased under an unpredictable random
+name, with the order shuffled. Honest audit machinery must flag the canary as untrusted;
+machinery rigged to say "trusted" clears the canary too and is caught.
+
+SafeVerify avoids this problem more thoroughly by never entering the submission's environment
+at all: it works on `.olean` files in a separate process. That is the stronger design where
+latency does not matter. This harness keeps the audit in-process to preserve millisecond
+checks, and pays for it with the guard and the tripwire.
 
 ## Usage
 
@@ -190,8 +250,8 @@ mathlib     db584cd6d46c92f209a44c0f1c829460d327499d
 ## Setup from scratch
 
 ```bash
-cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached)
-cd ../repl && lake build                        # REPL, toolchain must match lean/
+cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached) + the audit module
+lake build repl                                 # the REPL, pinned by lake-manifest.json
 cd .. && python3 -m leanai.cli doctor
 python3 tests/test_adversarial.py
 ./install.sh                                    # enable the skill and MCP server

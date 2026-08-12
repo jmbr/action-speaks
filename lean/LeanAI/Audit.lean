@@ -136,6 +136,82 @@ def elabAuditAxioms : CommandElab := fun stx => do
     emit s!"\{\"check\":\"axioms\",\"decl\":{jstr n.toString},\"axioms\":{jnames axl},\"untrusted\":{jnames untrusted},\"uses_sorry\":{jbool usesSorry},\"trusted\":{jbool untrusted.isEmpty}}"
   | _ => throwUnsupportedSyntax
 
+/-! ### Kernel re-checking
+
+`#print axioms` is only meaningful if the declarations it walks were themselves accepted by
+the kernel. They need not have been: `set_option debug.skipKernelTC true` admits a
+declaration without checking it, and metaprogramming can insert constants into the
+environment directly. Both produce an environment in which a false theorem looks impeccable.
+
+The defence, taken from `lean4checker` and `SafeVerify`, is to re-check with the kernel
+rather than to trust the elaborator's environment. `Kernel.Environment.addDecl` is the
+primitive those tools are built on; running every declaration the submission added back
+through it re-establishes the guarantee. Declarations are replayed under fresh names because
+the kernel rejects a duplicate, and a rename is harmless: it is the *proof term* being
+re-checked, and its dependencies are already present.
+-/
+
+/-- Constants added since the imports, i.e. everything the submission declared.
+`SMap.map₂` holds exactly the locally-added constants; `map₁` is the imported world, which
+we neither need nor want to re-check. -/
+def localConstants (env : Environment) : Array (Name × ConstantInfo) :=
+  env.constants.map₂.foldl (init := #[]) fun acc n ci => acc.push (n, ci)
+
+/-- Rename a `ConstantInfo` so it can be re-added to an environment that already contains
+the original. Only the outermost name changes; the type and value are untouched, which is
+the point — those are what the kernel must check. -/
+private def renameDeclaration (d : Declaration) (fresh : Name) : Declaration :=
+  match d with
+  | .thmDecl v => .thmDecl { v with name := fresh }
+  | .defnDecl v => .defnDecl { v with name := fresh }
+  | .axiomDecl v => .axiomDecl { v with name := fresh }
+  | .opaqueDecl v => .opaqueDecl { v with name := fresh }
+  | other => other
+
+/-- Re-check `ci` with the kernel. Returns an error message when the kernel rejects it. -/
+def kernelRecheck (env : Environment) (n : Name) (ci : ConstantInfo) (nonce : Name) :
+    CoreM (Option String) := do
+  -- Constructors, recursors and quotient constants are introduced by their parent inductive
+  -- and cannot be added standalone; the inductive itself is replayed instead.
+  match ci with
+  | .ctorInfo _ | .recInfo _ | .quotInfo _ | .inductInfo _ => return none
+  | _ =>
+    let decl := renameDeclaration ci.toDeclaration! (nonce ++ n.getPrefix ++ n.getString!.toName)
+    let kenv := env.toKernelEnv
+    match kenv.addDecl (← getOptions) decl with
+    | .ok _ => return none
+    | .error ex =>
+      let msg ← (ex.toMessageData (← getOptions)).toString
+      return some s!"{n}: {msg}"
+
+/-- `#audit_replay` re-checks every declaration the submission added, with the kernel.
+
+A submission that used `debug.skipKernelTC`, or that inserted a constant into the environment
+by metaprogramming, has a declaration here that the kernel never accepted; replaying it fails
+and the submission is rejected. Declarations whose names begin with `skip` are ignored, which
+is how the driver excludes the aliases and canaries it injects itself. -/
+syntax (name := auditReplay) "#audit_replay " ident : command
+
+@[command_elab auditReplay]
+def elabAuditReplay : CommandElab := fun stx => do
+  match stx with
+  | `(#audit_replay $skip:ident) => do
+    let skipPrefix := skip.getId.toString
+    let env ← getEnv
+    let locals := localConstants env
+    let mut failures : List String := []
+    let mut checked := 0
+    for (n, ci) in locals do
+      if n.isInternal || skipPrefix.isPrefixOf n.toString then
+        continue
+      checked := checked + 1
+      match ← liftCoreM (kernelRecheck env n ci (`leanaiReplay)) with
+      | some err => failures := err :: failures
+      | none => pure ()
+    let msgs := failures.map fun f => jstr (f.replace "\n" " ")
+    emit s!"\{\"check\":\"replay\",\"checked\":{checked},\"ok\":{jbool failures.isEmpty},\"failures\":[{String.intercalate "," msgs}]}"
+  | _ => throwUnsupportedSyntax
+
 /-- `#audit_vacuity foo` — try to derive `False` from `foo`'s hypotheses. On success, `foo`
 is vacuously true: it is a valid theorem that carries no information about the claim it was
 meant to formalize. This is the single most common way an autoformalized statement is wrong. -/

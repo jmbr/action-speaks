@@ -30,9 +30,8 @@ class Config:
     def discover(cls) -> "Config":
         root = Path(os.environ.get("LEANAI_ROOT", ROOT))
         lean_dir = Path(os.environ.get("LEANAI_LEAN_DIR", root / "lean"))
-        repl_bin = Path(
-            os.environ.get("LEANAI_REPL_BIN", root / "repl" / ".lake" / "build" / "bin" / "repl")
-        )
+        repl_bin = Path(os.environ["LEANAI_REPL_BIN"]) if "LEANAI_REPL_BIN" in os.environ \
+            else cls._find_repl(root, lean_dir)
         lake = os.environ.get("LEANAI_LAKE_BIN") or shutil.which("lake")
         if not lake:
             raise ConfigError("`lake` not found on PATH; is elan installed?")
@@ -48,6 +47,24 @@ class Config:
             pool_size=int(os.environ.get("LEANAI_POOL_SIZE", 2)),
         )
 
+    @staticmethod
+    def _find_repl(root: Path, lean_dir: Path) -> Path:
+        """Locate the REPL binary.
+
+        The REPL is a lake dependency of the Lean project, so lake builds it into
+        `.lake/packages/repl/` with the toolchain pinned by `lake-manifest.json`. A
+        hand-cloned `repl/` at the repository root is still honoured, for setups predating
+        that change.
+        """
+        candidates = [
+            lean_dir / ".lake" / "packages" / "repl" / ".lake" / "build" / "bin" / "repl",
+            root / "repl" / ".lake" / "build" / "bin" / "repl",
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return candidates[0]
+
     def validate(self) -> None:
         if not self.lean_dir.is_dir():
             raise ConfigError(f"Lean project directory not found: {self.lean_dir}")
@@ -56,7 +73,7 @@ class Config:
         if not self.repl_bin.exists():
             raise ConfigError(
                 f"REPL binary not found at {self.repl_bin}.\n"
-                f"Build it with:  cd {self.repl_bin.parents[2]} && lake build"
+                f"Build it with:  cd {self.lean_dir} && lake build repl"
             )
 
     def toolchain(self) -> str:
@@ -64,6 +81,9 @@ class Config:
         return f.read_text().strip() if f.exists() else "unknown"
 
     def mathlib_rev(self) -> str:
+        return self.package_rev("mathlib")
+
+    def package_rev(self, name: str) -> str:
         manifest = self.lean_dir / "lake-manifest.json"
         if not manifest.exists():
             return "unknown"
@@ -72,7 +92,7 @@ class Config:
         except json.JSONDecodeError:
             return "unknown"
         for pkg in data.get("packages", []):
-            if pkg.get("name") == "mathlib":
+            if pkg.get("name") == name:
                 return pkg.get("rev", "unknown")
         return "unknown"
 
@@ -81,6 +101,7 @@ class Config:
         return {
             "toolchain": self.toolchain(),
             "mathlib_rev": self.mathlib_rev(),
+            "repl_rev": self.package_rev("repl"),
             "lean_dir": str(self.lean_dir),
             "repl_bin": str(self.repl_bin),
         }

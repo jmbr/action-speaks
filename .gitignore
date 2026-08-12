@@ -4,9 +4,6 @@ __pycache__/
 *.pyc
 *.bak
 
-# Vendored: cloned and built by setup (see README), not tracked here
-/repl/
-
 # Local state
 ledger.sqlite3
 ledger.sqlite3-*

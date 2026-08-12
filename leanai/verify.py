@@ -34,6 +34,10 @@ from .repl import ReplError, ReplResponse, ReplTimeout, Session
 
 TRUSTED_AXIOMS = ("propext", "Classical.choice", "Quot.sound")
 
+# Prefix for the alias, seed and canary declarations the auditor injects. The kernel-replay
+# command is told to ignore it so the auditor does not re-check its own scaffolding.
+_HELPER_PREFIX = "leanaiRef"
+
 _DECL_RE = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)*(?:private\s+|protected\s+|noncomputable\s+)*"
     r"(theorem|lemma|def|abbrev|instance|example)\s+"
@@ -157,6 +161,12 @@ class Verdict:
             elif c.name == "audit_integrity":
                 advice.append(
                     "The submission interfered with the verifier. Submit a plain proof."
+                )
+            elif c.name == "kernel_replay":
+                advice.append(
+                    "Lean's kernel rejected declarations that the elaborator accepted, which "
+                    "means the environment was manipulated or a kernel check was skipped. "
+                    "Submit a plain proof that type-checks normally."
                 )
             elif c.name == "trusted_axioms":
                 advice.append(
@@ -317,11 +327,39 @@ class Verifier:
         by_check = {r.get("check"): r for r in records}
         by_decl = {(r.get("check"), r.get("decl")): r for r in records}
 
-        # 4a. tripwire ------------------------------------------------------
-        # The audit commands necessarily run inside the environment the submission created,
-        # so a submission that redefines them could forge its own verdict. The canary is a
-        # declaration we inject that provably rests on `sorryAx`; honest audit machinery must
-        # report it as untrusted. If it comes back clean, the machinery has been subverted.
+        # 4a. kernel re-check --------------------------------------------------
+        # This must precede the axiom audit, because `#print axioms` only means something if
+        # the declarations it walks were themselves accepted by the kernel. A declaration
+        # inserted with `doCheck := false` reports "does not depend on any axioms" while
+        # proving 4 = 5; only replaying it through the kernel exposes that.
+        replay = by_check.get("replay")
+        if replay is None:
+            v.status = Status.ERROR
+            v.checks.append(Check("kernel_replay", False, "no replay record returned"))
+            v.elapsed = time.time() - t0
+            return v
+        replay_ok = bool(replay.get("ok"))
+        v.checks.append(
+            Check(
+                "kernel_replay",
+                replay_ok,
+                ""
+                if replay_ok
+                else "the kernel rejected declarations the elaborator accepted: "
+                + "; ".join(replay.get("failures", []))[:600],
+                replay,
+            )
+        )
+        if not replay_ok:
+            v.elapsed = time.time() - t0
+            return v
+
+        # 4b. tripwire ------------------------------------------------------
+        # Replay defeats a forged *environment*, but the audit commands themselves are
+        # elaborated in the submission's environment, so a submission could redefine them to
+        # report success. The canary is a declaration we inject that provably rests on
+        # `sorryAx`; honest audit machinery must report it as untrusted. If it comes back
+        # clean, the machinery has been subverted.
         canary_rec = by_decl.get(("axioms", canary))
         canary_ok = bool(canary_rec) and not canary_rec.get("trusted", True) and bool(
             canary_rec.get("uses_sorry")
@@ -341,7 +379,7 @@ class Verifier:
             v.elapsed = time.time() - t0
             return v
 
-        # 4b. axioms --------------------------------------------------------
+        # 4c. axioms --------------------------------------------------------
         ax = by_decl.get(("axioms", alias))
         if ax is None:
             v.status = Status.ERROR
@@ -431,20 +469,25 @@ class Verifier:
     ) -> tuple[ReplResponse, list[dict[str, Any]], str, str] | None:
         """Run the audit commands in the environment produced by the submission.
 
-        Two precautions make the result hard to forge:
+        Three precautions make the result hard to forge:
 
+        * **Kernel replay first.** Every declaration the submission added is re-checked by
+          the kernel before anything else is believed, because a declaration inserted into
+          the environment without a kernel check reports a clean axiom footprint while
+          proving something false. Replay runs before the helper declarations below are
+          introduced, so it sees exactly the submission's own constants.
         * The target is audited through an **alias with an unpredictable name**, so a
           subverted elaborator cannot special-case the declaration it needs to lie about.
           `def alias := target` reproduces the target's axiom footprint exactly, since the
           alias depends on it and on nothing else.
         * A **canary** with an indistinguishable name is audited alongside it. The canary is
           built from a `sorry`, so honest machinery must report it untrusted; machinery that
-          has been rigged to report success will clear the canary too and be caught.
+          has been rigged to report success clears the canary too and is caught.
         """
         nonce = secrets.token_hex(6)
-        alias = f"leanaiRef{nonce}a"
-        seed = f"leanaiRef{nonce}b"
-        canary = f"leanaiRef{nonce}c"
+        alias = f"{_HELPER_PREFIX}{nonce}a"
+        seed = f"{_HELPER_PREFIX}{nonce}b"
+        canary = f"{_HELPER_PREFIX}{nonce}c"
 
         setup = [
             f"theorem {seed} : (2 : Nat) + 2 = 5 := by sorry",
@@ -456,7 +499,10 @@ class Verifier:
         if secrets.randbelow(2):
             audit_pair.reverse()
 
-        cmds = setup + audit_pair + [f"#audit_shape {target}"]
+        # The replay command is told to ignore our own helpers by name prefix; it runs first
+        # regardless, so they do not yet exist.
+        cmds = [f"#audit_replay {_HELPER_PREFIX}"] + setup + audit_pair
+        cmds += [f"#audit_shape {target}"]
         if check_vacuity:
             cmds += [f"#audit_vacuity {target}", f"#audit_triviality {target}"]
         try:

@@ -102,6 +102,25 @@ theorem t2 : 2 + 2 = 5 := by sorry
 """,
         "t",
     ),
+    (
+        "forged_environment",
+        # The attack that defeats the axiom audit outright. `addDeclCore` with `doCheck :=
+        # false` installs `forged : 4 = 5` without the kernel ever seeing it, and
+        # `#print axioms forged` then reports "does not depend on any axioms". Only replaying
+        # the declaration through the kernel exposes it.
+        """theorem decoy : True := trivial
+open Lean Elab Command in
+run_cmd do
+  let env <- getEnv
+  let bogusType := mkApp3 (mkConst ``Eq [Level.one]) (mkConst ``Nat) (mkNatLit 4) (mkNatLit 5)
+  let decl := Declaration.thmDecl
+    { name := `forged, levelParams := [], type := bogusType, value := mkConst ``trivial }
+  match env.addDeclCore 0 0 decl none false with
+  | .ok env' => modifyEnv fun _ => env'
+  | .error _ => logInfo "rejected"
+""",
+        "forged",
+    ),
 ]
 
 # `exit_hiding` proves a true (if useless) statement, so only the guard should stop it.

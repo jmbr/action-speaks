@@ -111,8 +111,15 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "meta_execution",
-        _rx(r"^\s*#eval\b"),
-        "`#eval` runs arbitrary code at elaboration time",
+        _rx(r"^\s*#eval\b|\brun_cmd\b|\brun_tac\b|\b#eval!\b"),
+        "runs arbitrary metaprogram code at elaboration time",
+    ),
+    Rule(
+        "environment_manipulation",
+        _rx(r"\b(?:addDeclCore|addDeclWithoutChecking|modifyEnv|setEnv|replaceEnv|"
+            r"addConstAsync|toKernelEnv|Environment\.add|MonadEnv)\b"),
+        "writes to the environment directly, which can install declarations the kernel "
+        "never checked",
     ),
     Rule(
         "io_access",
