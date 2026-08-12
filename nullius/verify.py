@@ -112,10 +112,14 @@ class Verdict:
         if self.lean_messages:
             lines.append("  lean output:\n" + _indent(self.lean_messages, 4))
         if self.provenance:
-            lines.append(
+            prov = (
                 f"  toolchain: {self.provenance.get('toolchain')} "
                 f"mathlib: {self.provenance.get('mathlib_rev', '')[:12]}"
             )
+            physlib = self.provenance.get("physlib_rev") or ""
+            if physlib:
+                prov += f" physlib: {physlib[:12]}"
+            lines.append(prov)
         lines.append(f"  elapsed: {self.elapsed:.2f}s")
         return "\n".join(lines)
 

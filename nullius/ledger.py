@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS verifications (
     failures      TEXT    NOT NULL,
     toolchain     TEXT,
     mathlib_rev   TEXT,
+    physlib_rev   TEXT,
     elapsed       REAL,
     tag           TEXT
 );
@@ -56,6 +57,21 @@ class Ledger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(SCHEMA)
+            self._migrate(c)
+
+    @staticmethod
+    def _migrate(c: sqlite3.Connection) -> None:
+        """Add columns introduced after a ledger was first created.
+
+        `CREATE TABLE IF NOT EXISTS` is a no-op on an existing ledger, so a new provenance
+        field would silently be dropped for everyone with history. Rows predating a column
+        keep NULL there, which is the honest answer: that verification genuinely did not
+        record it.
+        """
+        have = {r[1] for r in c.execute("PRAGMA table_info(verifications)")}
+        for col, decl in (("physlib_rev", "TEXT"),):
+            if col not in have:
+                c.execute(f"ALTER TABLE verifications ADD COLUMN {col} {decl}")
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.path), timeout=30)
@@ -71,8 +87,8 @@ class Ledger:
                 """INSERT INTO verifications
                    (created_at, created_iso, status, verified, target, claim, statement,
                     source, source_sha256, axioms, checks, failures, toolchain, mathlib_rev,
-                    elapsed, tag)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    physlib_rev, elapsed, tag)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
@@ -98,6 +114,7 @@ class Ledger:
                     json.dumps(failures),
                     verdict.provenance.get("toolchain"),
                     verdict.provenance.get("mathlib_rev"),
+                    verdict.provenance.get("physlib_rev"),
                     verdict.elapsed,
                     tag,
                 ),
