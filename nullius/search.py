@@ -7,11 +7,14 @@ declarations and models invent plausible-sounding names that do not exist.
 Three complementary routes are offered:
 
 * `loogle` - search by *shape*: `Nat.succ_le_succ`, `(?a + ?b) * ?c`, `|- Continuous _`.
-  Exact, fast, and the right tool when you know the form of the statement. Served by a local
-  Loogle when one has been built (`scripts/build-loogle.sh`), falling back to the hosted
-  service otherwise. The local index is built from the same `.olean` files a submission is
-  checked against, so it covers Physlib — which the hosted service does not index — and
-  cannot disagree with the verifier about which lemmas exist.
+  Exact, fast, and the right tool when you know the form of the statement. Runs against a
+  local index built from the same `.olean` files a submission is checked against, so it
+  covers Physlib and agrees with the verifier about which lemmas exist. Requires
+  `scripts/build-loogle.sh`; if that has not been run, the shortfall is reported rather than
+  papered over with a different index.
+* `loogle_remote` - the same, against the hosted service, when explicitly asked for. Handy
+  when no local index has been built, but its answers describe a different Mathlib revision
+  and no Physlib.
 * `leansearch` - search by *meaning*, in natural language. Right when you know what you want
   mathematically but not how Mathlib spells it. Remote only: it is a hosted semantic model,
   with nothing to run locally.
@@ -271,7 +274,12 @@ def local_loogle_session() -> LoogleSession:
 
 
 def loogle_remote(query: str, limit: int = 12, timeout: float = 20.0) -> SearchResult:
-    """Shape-directed search against the hosted service at loogle.lean-lang.org."""
+    """Shape-directed search against the hosted service at loogle.lean-lang.org.
+
+    Only used when asked for by name. Its index is a Mathlib revision that is not
+    necessarily ours and contains no Physlib, so a hit may name a lemma this verifier does
+    not have, and a miss does not mean the lemma is absent here.
+    """
     try:
         raw = _http_json(LOOGLE_URL, params={"q": query}, timeout=timeout)
     except urllib.error.HTTPError as exc:
@@ -282,7 +290,7 @@ def loogle_remote(query: str, limit: int = 12, timeout: float = 20.0) -> SearchR
 
 
 def loogle(query: str, limit: int = 12, timeout: float = 20.0) -> SearchResult:
-    """Shape-directed search.
+    """Shape-directed search, against the local index.
 
     Query forms Loogle understands:
       `Nat.succ_le_succ`        - declarations mentioning this constant
@@ -291,30 +299,27 @@ def loogle(query: str, limit: int = 12, timeout: float = 20.0) -> SearchResult:
       `|- Continuous _`         - declarations whose *conclusion* matches
       `Real.sqrt, |- _ < _`     - conjunction of constraints
 
-    Served by a local Loogle when one is built (see `scripts/build-loogle.sh`), and by the
-    hosted service otherwise. Local is preferred because it indexes the very libraries a
-    submission is checked against — including Physlib, which the hosted service does not
-    index — and works offline. A rejected *query* (bad syntax) is returned as-is; only an
-    unavailable backend falls through to the network, since asking a second backend to parse
-    a query the first one rejected just yields a second, more confusing error.
+    This never silently uses the hosted service. The local index is built from the very
+    `.olean` files a submission is checked against, so its answers agree with the verifier
+    by construction; the hosted one indexes a different Mathlib revision and no Physlib at
+    all. Quietly swapping the second for the first would make "not found" ambiguous between
+    "no such lemma" and "wrong library" — and an agent reads the first meaning and goes back
+    to guessing names. If the local index is unavailable, that is reported, and the hosted
+    service remains available by asking for it: `loogle_remote`, or `backend="loogle-remote"`.
     """
     session = local_loogle_session()
-    if session.available:
-        res = session.query(query, limit=limit)
-        if res.error is None or not _is_backend_failure(res.error):
-            return res
-    return loogle_remote(query, limit=limit, timeout=timeout)
-
-
-def _is_backend_failure(error: str) -> bool:
-    """Distinguish "the backend is broken" from "your query is wrong".
-
-    Only the former is worth retrying elsewhere: a syntax error in the query will be a
-    syntax error remotely too, and Loogle's own message (with its suggestions) is more
-    useful than a second copy of it.
-    """
-    markers = ("process exited", "returned nothing", "unparsable reply", "binary not found")
-    return any(m in error for m in markers)
+    if not session.available:
+        return SearchResult(
+            query,
+            "loogle-local",
+            error=(
+                "no local Loogle index. Build one with `scripts/build-loogle.sh` (~15 s, plus "
+                "a few minutes for the first index), or search the hosted service explicitly "
+                "with backend='loogle-remote' — noting that it indexes a different Mathlib "
+                "revision and does not cover Physlib."
+            ),
+        )
+    return session.query(query, limit=limit)
 
 
 def leansearch(query: str, limit: int = 8, timeout: float = 25.0) -> SearchResult:
@@ -429,11 +434,29 @@ def local_search(
     )
 
 
-def search(query: str, limit: int = 10, timeout: float = 20.0) -> list[SearchResult]:
-    """Run both remote backends; a natural-language query rarely works on Loogle and a
-    pattern rarely works on LeanSearch, so trying both and letting the caller pick is more
-    robust than guessing which one the query was meant for."""
-    return [
-        loogle(query, limit=limit, timeout=timeout),
-        leansearch(query, limit=limit, timeout=timeout),
-    ]
+BACKENDS = ("loogle", "loogle-remote", "leansearch", "both")
+
+
+def search(
+    query: str, limit: int = 10, timeout: float = 20.0, backend: str = "both"
+) -> list[SearchResult]:
+    """Dispatch a query to the requested backend(s).
+
+    `both` means local shape search plus natural-language search: a natural-language query
+    rarely works on Loogle and a pattern rarely works on LeanSearch, so running both and
+    letting the caller pick beats guessing which one the query was meant for. The hosted
+    Loogle is never included implicitly — it has to be named.
+
+    Shared by the CLI, the MCP server and the harness so that "which backend answers" cannot
+    drift between them.
+    """
+    if backend not in BACKENDS:
+        raise ValueError(f"unknown backend {backend!r}; expected one of {', '.join(BACKENDS)}")
+    out: list[SearchResult] = []
+    if backend in ("loogle", "both"):
+        out.append(loogle(query, limit=limit, timeout=timeout))
+    if backend == "loogle-remote":
+        out.append(loogle_remote(query, limit=limit, timeout=timeout))
+    if backend in ("leansearch", "both"):
+        out.append(leansearch(query, limit=limit, timeout=timeout))
+    return out

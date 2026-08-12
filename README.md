@@ -257,10 +257,12 @@ submission from leaving definitions behind for the next to exploit.
 - **The toolchain is pinned by Physlib, not by us.** Physlib tracks Mathlib about one release
   behind, so the whole graph sits at whatever it supports (currently v4.32.0). Bump both pins
   in `lean/lakefile.toml` together, or not at all; a mismatch fails to resolve.
-- **Search backends vary in reach.** Shape search (Loogle) runs locally once built, covering
-  Mathlib *and* Physlib at the pinned revisions; without it, it falls back to the hosted
-  service, whose index is Mathlib alone. Natural-language search (LeanSearch) is remote
-  either way. `close` works offline and is authoritative.
+- **Search backends vary in reach.** Shape search (Loogle) runs against a local index
+  covering Mathlib *and* Physlib at the pinned revisions. It is never silently replaced by
+  the public service, whose index is a different Mathlib revision without Physlib — that has
+  to be requested by name (`--backend loogle-remote`), because a miss against the wrong
+  library is indistinguishable from a lemma that does not exist. Natural-language search
+  (LeanSearch) is remote either way. `close` works offline and is authoritative.
 
 ## Reproducing a verdict
 
@@ -283,7 +285,7 @@ accepted" is only meaningful against a known revision.
 cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached) + the audit module
 lake build repl                                 # the REPL, pinned by lake-manifest.json
 lake build Physlib                              # physics; builds from source, ~15 min
-cd .. && ./scripts/build-loogle.sh              # optional: offline shape search (~15 s)
+cd .. && ./scripts/build-loogle.sh              # shape search, offline (~15 s)
 python3 -m nullius.cli doctor
 python3 tests/test_adversarial.py
 python3 tests/test_docs.py
@@ -293,15 +295,16 @@ prek install                                    # run both before each commit
 
 `lake exe cache get` only serves Mathlib, so Physlib compiles locally the first time.
 
-`scripts/build-loogle.sh` is optional but recommended. Loogle has no dependencies and does
+`scripts/build-loogle.sh` is what makes shape search work. Loogle has no dependencies and does
 not need to be one of ours: the binary reads the `.olean` files of any Lake project built
 with the same toolchain, so the script clones it into `vendor/`, copies our `lean-toolchain`
 over its own, and builds — about 15 seconds, with nothing of Mathlib rebuilt. Shape search
 then runs offline, covers Physlib as well as Mathlib, and answers from the exact revisions
 pinned here rather than whatever the hosted service last deployed. The first query builds a
 374 MB index (~2 min, cached beside the oleans and rebuilt automatically when they change);
-pass `--index` to pay that cost up front instead. Without the binary, shape search silently
-uses the hosted service, as before.
+pass `--index` to pay that cost up front instead. Skip the script and shape search reports
+that it has no index, rather than quietly answering from the public service — that one is
+still there, but you have to ask for it: `nullius search --backend loogle-remote`.
 
 `prek install` wires the checks into `git commit`: prose is scanned for renamed tools and
 superseded revisions on every commit (72 ms, no Lean), and the two Lean suites run only when

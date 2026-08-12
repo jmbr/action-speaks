@@ -158,12 +158,8 @@ class Harness:
             return Verifier(session, self.config).check_statement(statement, timeout=timeout)
 
     def search(self, query: str, backend: str = "both", limit: int = 8) -> list[S.SearchResult]:
-        out = []
-        if backend in ("loogle", "both"):
-            out.append(S.loogle(query, limit=limit))
-        if backend in ("leansearch", "both"):
-            out.append(S.leansearch(query, limit=limit))
-        return out
+        """Find a lemma. `loogle` is the local index; `loogle-remote` the hosted service."""
+        return S.search(query, limit=limit, backend=backend)
 
     def find_proof(
         self,

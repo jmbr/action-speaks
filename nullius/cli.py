@@ -126,11 +126,7 @@ def cmd_statement(args: argparse.Namespace) -> int:
 
 def cmd_search(args: argparse.Namespace) -> int:
     query = " ".join(args.query)
-    results = []
-    if args.backend in ("loogle", "both"):
-        results.append(S.loogle(query, limit=args.limit))
-    if args.backend in ("leansearch", "both"):
-        results.append(S.leansearch(query, limit=args.limit))
+    results = S.search(query, limit=args.limit, backend=args.backend)
     S.local_loogle_session().close()
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2, ensure_ascii=False))
@@ -205,7 +201,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     se = sub.add_parser("search", help="find Mathlib lemmas")
     se.add_argument("query", nargs="+")
-    se.add_argument("-b", "--backend", choices=("loogle", "leansearch", "both"), default="both")
+    se.add_argument(
+        "-b", "--backend", choices=S.BACKENDS, default="both",
+        help="'loogle' is the local index; 'loogle-remote' is the hosted service",
+    )
     se.add_argument("-n", "--limit", type=int, default=8)
     se.add_argument("--json", action="store_true")
     se.set_defaults(func=cmd_search)

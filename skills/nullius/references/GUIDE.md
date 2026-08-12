@@ -85,10 +85,12 @@ the conclusion, commas conjoin constraints, `"foo"` matches names containing `fo
 `close` runs `exact?`/`apply?` inside Lean. Slower (seconds), but whatever it returns actually
 closes the goal — it cannot invent a name. When `search` and `close` disagree, trust `close`.
 
-Shape search runs against a local Loogle index when one has been built, and against the
-hosted service otherwise; the local index covers Physlib as well as Mathlib and matches the
-exact revisions this verifier pins. Which one answered is visible in the result: the backend
-is reported as `loogle-local` or `loogle`. Natural-language search is remote either way.
+Shape search runs against a **local** Loogle index covering Mathlib and Physlib at exactly
+the revisions this verifier pins, so what it finds is what you can cite. If that index has
+not been built the search says so rather than answering from somewhere else; the public
+service is one explicit request away (`--backend loogle-remote`), but its index is a
+different Mathlib revision with no Physlib, so a miss there means little. The result names
+which answered: `loogle-local` or `loogle`. Natural-language search is remote either way.
 
 ## Worked example: claim to verdict
 

@@ -38,6 +38,12 @@ close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }     # ask L
 Inventing a plausible-sounding lemma name is the single most common reason proofs fail.
 `close` cannot hallucinate: it reports only lemmas that genuinely close the goal.
 
+`search`'s shape backend queries a local index of the same Mathlib and Physlib you are
+checked against, so what it finds is what you can cite. If it reports that no local index
+exists, say so rather than guessing a name; `backend: "loogle-remote"` will reach the public
+service, but it indexes a different Mathlib revision and no Physlib, so a miss there is not
+evidence that a lemma is absent here.
+
 (The five tools are named `verify`, `statement`, `search`, `close`, `log` — the same names as
 the CLI subcommands. Your client namespaces them by server, typically as `nullius-search` and
 so on, which is what distinguishes this `search` from any other tool of that name.)

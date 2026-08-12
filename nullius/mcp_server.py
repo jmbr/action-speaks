@@ -153,11 +153,16 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "search",
         "description": (
-            "Search Mathlib for a lemma. Two backends: 'leansearch' takes natural language "
-            "('sum of two even numbers is even'); 'loogle' takes a shape ('|- Irrational "
-            "(Real.sqrt _)', '(?a + ?b) * ?c', 'Nat.succ_le_succ'). Use this instead of "
-            "guessing lemma names - invented names are the most common cause of failed "
-            "proofs."
+            "Search for a lemma by name, shape or meaning. Backends: 'loogle' (default, "
+            "with 'leansearch') searches a local index built from the very Mathlib and "
+            "Physlib this verifier checks against, so its answers agree with what you can "
+            "actually cite; 'leansearch' takes natural language ('sum of two even numbers "
+            "is even'); 'loogle' takes a shape ('|- Irrational (Real.sqrt _)', "
+            "'(?a + ?b) * ?c', 'Nat.succ_le_succ'). Use this instead of guessing lemma "
+            "names - invented names are the most common cause of failed proofs. "
+            "'loogle-remote' queries the public loogle.lean-lang.org instead; ask for it "
+            "only if the local index is unavailable, and treat its results with care, since "
+            "it indexes a different Mathlib revision and no Physlib at all."
         ),
         "inputSchema": {
             "type": "object",
@@ -165,7 +170,7 @@ TOOLS: list[dict[str, Any]] = [
                 "query": {"type": "string"},
                 "backend": {
                     "type": "string",
-                    "enum": ["loogle", "leansearch", "both"],
+                    "enum": ["loogle", "loogle-remote", "leansearch", "both"],
                     "default": "both",
                 },
                 "limit": {"type": "integer", "default": 8},
@@ -270,12 +275,11 @@ def tool_search(args: dict[str, Any]) -> str:
     query = args.get("query", "")
     backend = args.get("backend", "both")
     limit = int(args.get("limit", 8))
-    out = []
-    if backend in ("loogle", "both"):
-        out.append(S.loogle(query, limit=limit).render(limit))
-    if backend in ("leansearch", "both"):
-        out.append(S.leansearch(query, limit=limit).render(limit))
-    return "\n\n".join(out) or "no results"
+    try:
+        results = S.search(query, limit=limit, backend=backend)
+    except ValueError as exc:
+        return f"error: {exc}"
+    return "\n\n".join(r.render(limit) for r in results) or "no results"
 
 
 def tool_close(args: dict[str, Any]) -> str:

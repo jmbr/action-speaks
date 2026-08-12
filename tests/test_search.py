@@ -9,8 +9,9 @@ Two properties matter and neither is covered elsewhere:
 * the local index reaches Physlib, which is the reason for running Loogle locally at all —
   the hosted service has no Physlib in its index, and a search that cannot see a library the
   verifier can is worse than useless, because its silence looks like an answer;
-* an absent binary degrades to the hosted service rather than failing, so a checkout that
-  never runs `scripts/build-loogle.sh` still works.
+* an absent binary is *reported* rather than quietly answered from the hosted index, whose
+  contents describe a different Mathlib. The hosted service stays reachable, but only when
+  asked for by name.
 
 Skipped (exit 0) when no local Loogle is built, so this is safe in a commit hook.
 """
@@ -62,16 +63,26 @@ def main() -> int:
 
     session.close()
 
-    # With no binary, `loogle()` must reach the hosted service rather than erroring. The
-    # network may be unavailable, which is not this test's business: only a *local* failure
-    # counts against us here.
+    # With no binary, shape search must say so rather than answering from a different
+    # library. The hosted service has to be asked for by name.
     os.environ["NULLIUS_LOOGLE_BIN"] = "/nonexistent/loogle"
     S._local_loogle = None  # force rediscovery with the patched environment
-    fallback = S.loogle("Nat.succ_le_succ", limit=1)
-    ok = fallback.backend == "loogle"
-    print(f"  {'ok  ' if ok else 'FAIL'}  fallback backend={fallback.backend}")
+    absent = S.loogle("Nat.succ_le_succ", limit=1)
+    ok = not absent.hits and bool(absent.error) and "loogle-remote" in (absent.error or "")
+    print(f"  {'ok  ' if ok else 'FAIL'}  absent binary reports, does not substitute")
     if not ok:
-        failures.append(f"absent binary should fall back to the hosted service, got {fallback.backend}")
+        failures.append(
+            "an absent local index should report itself and point at backend='loogle-remote', "
+            f"got backend={absent.backend} hits={len(absent.hits)} error={absent.error!r}"
+        )
+
+    # ...and the hosted service must still be reachable when named explicitly. A network
+    # failure is not this test's business, so only the routing is asserted.
+    explicit = S.search("Nat.succ_le_succ", limit=1, backend="loogle-remote")
+    ok = len(explicit) == 1 and explicit[0].backend == "loogle"
+    print(f"  {'ok  ' if ok else 'FAIL'}  explicit remote routes to the hosted service")
+    if not ok:
+        failures.append(f"backend='loogle-remote' should query the hosted service, got {explicit}")
 
     print()
     if failures:
@@ -79,7 +90,7 @@ def main() -> int:
         for f in failures:
             print("  -", f)
         return 1
-    print("Local shape search covers Mathlib and Physlib, and degrades gracefully.")
+    print("Local shape search covers Mathlib and Physlib; the hosted index is never implicit.")
     return 0
 
 
