@@ -78,21 +78,25 @@ Or point pi's settings at them: `{ "skills": ["~/.claude/skills", "~/.codex/skil
   "mcpServers": {
     "nullius": {
       "type": "local",
-      "command": "python3",
+      "command": "/path/to/nullius/.venv/bin/python3",
       "args": ["-m", "nullius.mcp_server"],
       "cwd": "/path/to/nullius",
-      "env": {"PYTHONPATH": "/path/to/nullius", "PYTHONUNBUFFERED": "1"},
+      "env": {"PYTHONUNBUFFERED": "1"},
       "tools": ["*"]
     }
   }
 }
 ```
 
+`install.sh` writes this for you, pointing `command` at the interpreter the package was
+installed into so the server cannot be caught out by whatever `python3` means in the agent's
+environment. Without a `.venv` it falls back to a bare `python3` with `PYTHONPATH` set.
+
 Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
 subcommands. Restart Copilot after installing.
 
-The server keeps one warm Lean session per process, so the first call pays ~2.5 s for the
-Mathlib import and the rest are milliseconds — a real advantage over the skill's shell path,
+The server keeps one warm Lean session per process, so the first call pays ~2.6 s for the
+Mathlib and Physlib imports and the rest are milliseconds — a real advantage over the skill's shell path,
 which starts a fresh session per invocation.
 
 **pi deliberately has no MCP support** ("It intentionally does not include built-in MCP,

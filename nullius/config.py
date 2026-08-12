@@ -16,6 +16,26 @@ class ConfigError(RuntimeError):
     pass
 
 
+def _missing_lean_dir_message(lean_dir: Path) -> str:
+    """Explain a missing Lean tree, distinguishing the two ways to arrive here.
+
+    The usual cause is a copied (non-editable) install: this package is a driver for a Lean
+    project of several gigabytes that has to be built locally, and it locates that project
+    relative to its own source file. Copy the Python into `site-packages` and it looks for
+    the Lean tree beside the copy, where nothing was ever built. `pip install -e .` from a
+    checkout keeps the two together, which is why that is the documented way in.
+    """
+    base = f"Lean project directory not found: {lean_dir}"
+    if "site-packages" in str(lean_dir):
+        return (
+            f"{base}\n"
+            "This looks like a copied install. nullius drives a Lean project that must be "
+            "built from a checkout, so install it from one with `pip install -e .`, or set "
+            "NULLIUS_ROOT to the checkout you built."
+        )
+    return f"{base}\nSet NULLIUS_ROOT to the checkout containing lean/, or build it there."
+
+
 @dataclass
 class Config:
     lean_dir: Path
@@ -85,7 +105,7 @@ class Config:
 
     def validate(self) -> None:
         if not self.lean_dir.is_dir():
-            raise ConfigError(f"Lean project directory not found: {self.lean_dir}")
+            raise ConfigError(_missing_lean_dir_message(self.lean_dir))
         if not (self.lean_dir / "lakefile.toml").exists():
             raise ConfigError(f"No lakefile.toml in {self.lean_dir}")
         if not self.repl_bin.exists():

@@ -26,6 +26,7 @@ FORBIDDEN = {
     "lean_find_proof": "renamed to `close`",
     "lean_ledger": "renamed to `log`",
     "nullius goal": "the `goal` subcommand is now `close`",
+    "nullius.cli goal": "the `goal` subcommand is now `close`",
     "leanai": "the project is called nullius",
     "LeanAI": "the project is called nullius",
     "LEANAI": "the project is called nullius",

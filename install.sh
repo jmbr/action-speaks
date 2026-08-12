@@ -89,6 +89,14 @@ template_path, dst_path, root, dry = sys.argv[1], sys.argv[2], sys.argv[3], sys.
 
 entry = json.loads(open(template_path).read().replace("__NULLIUS_ROOT__", root))["mcpServers"]["nullius"]
 
+# Point the server at the interpreter the package was installed into, when there is one.
+# A venv's python needs no PYTHONPATH and cannot be shadowed by whatever `python3` happens
+# to mean in the agent's environment, which is the failure this avoids.
+venv_python = os.path.join(root, ".venv", "bin", "python3")
+if os.path.exists(venv_python):
+    entry["command"] = venv_python
+    entry.get("env", {}).pop("PYTHONPATH", None)
+
 existing = {}
 if os.path.exists(dst_path):
     try:

@@ -3,6 +3,10 @@
 __pycache__/
 *.pyc
 *.bak
+*.egg-info/
+build/
+dist/
+.venv/
 
 # Loogle is cloned and built here by scripts/build-loogle.sh, pinned to a revision recorded
 # in that script rather than vendored into this repository.

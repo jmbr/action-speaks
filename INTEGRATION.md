@@ -9,8 +9,15 @@ Four integration paths, in rough order of how tightly coupled they are.
 | MCP server | the agent should call it as a tool, mid-conversation | once per server |
 | CLI | one-off checks, shell scripts, CI | **once per invocation** |
 
-The Mathlib import costs ~2.5 s and ~7 GB per Lean session. Everything below except the CLI
+The Mathlib and Physlib imports cost ~2.6 s per Lean session. Everything below except the CLI
 pays that once and then answers in milliseconds. Do not shell out to the CLI in a loop.
+
+All four paths need the package installed from a checkout, which is one line and pulls in
+nothing — see [Setup from scratch](README.md#setup-from-scratch):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e .
+```
 
 ## 1. Python
 
@@ -123,8 +130,9 @@ arbitrary elaboration in Lean, so keep it off untrusted networks.
 
 ```json
 {"mcpServers": {"nullius": {
-  "command": "python3", "args": ["-m", "nullius.mcp_server"],
-  "cwd": "/home/jmbr/sources/nullius"}}}
+  "command": "/path/to/nullius/.venv/bin/python3",
+  "args": ["-m", "nullius.mcp_server"],
+  "cwd": "/path/to/nullius"}}}
 ```
 
 Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
@@ -134,8 +142,8 @@ rejection rules.
 ## 4. CLI
 
 ```bash
-python3 -m nullius.cli verify proof.lean -c "claim" --json --require-nontrivial
-echo "$SRC" | python3 -m nullius.cli verify - --json
+nullius verify proof.lean -c "claim" --json --require-nontrivial
+echo "$SRC" | nullius verify - --json
 ```
 
 Exit code is 0 when verified, 1 otherwise, so it drops into CI directly. Each invocation

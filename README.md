@@ -76,6 +76,7 @@ nullius/http_server.py    HTTP service for non-Python harnesses
 nullius/mcp_server.py     MCP server (stdio, standard library only)
 skills/nullius/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
+pyproject.toml           packaging; `pip install -e .` gives the `nullius` command
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
 tests/test_docs.py       re-runs every Lean example in the documentation
@@ -196,12 +197,12 @@ with Harness(pool_size=4).warm() as h:
 ```
 
 ```bash
-python3 -m nullius.cli doctor                      # check the installation
-python3 -m nullius.cli verify proof.lean -c "..."  # verify a file
-python3 -m nullius.cli statement '(n : Nat) (h : 5 < n) : 25 < n * n'
-python3 -m nullius.cli search 'sum of two even numbers is even'
-python3 -m nullius.cli goal '25 < n * n' -b '(n : Nat) (h : 5 < n)'
-python3 -m nullius.cli log --stats
+nullius doctor                      # check the installation
+nullius verify proof.lean -c "..."  # verify a file
+nullius statement '(n : Nat) (h : 5 < n) : 25 < n * n'
+nullius search 'sum of two even numbers is even'
+nullius close '25 < n * n' -b '(n : Nat) (h : 5 < n)'
+nullius log --stats
 
 python3 -m nullius.http_server --port 823 --pool 4  # HTTP service
 ```
@@ -281,16 +282,64 @@ accepted" is only meaningful against a known revision.
 
 ## Setup from scratch
 
+### Prerequisites
+
+| | Why | Check |
+|---|---|---|
+| **elan** | provides `lake` and the pinned Lean toolchain | `lake --version` |
+| **Python 3.10+** | the driver | `python3 --version` |
+| **git** | fetches Mathlib, Physlib, the REPL and Loogle | `git --version` |
+| **~12 GB free** | ~10 GB of built oleans and indexes here, ~2 GB for the toolchain under `~/.elan` | `df -h .` |
+
+Install elan if `lake` is missing (<https://github.com/leanprover/elan>); it downloads the
+right Lean version by itself, driven by `lean/lean-toolchain`.
+
+### Install
+
 ```bash
-cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached) + the audit module
-lake build repl                                 # the REPL, pinned by lake-manifest.json
-lake build Physlib                              # physics; builds from source, ~15 min
-cd .. && ./scripts/build-loogle.sh              # shape search, offline (~15 s)
-python3 -m nullius.cli doctor
-python3 tests/test_adversarial.py
+python3 -m venv .venv && .venv/bin/pip install -e .   # the driver; no dependencies
+source .venv/bin/activate                             # or call .venv/bin/nullius directly
+```
+
+An editable install from a checkout is the supported arrangement, and the only one that
+works: this package is a driver for a Lean project of several gigabytes that has to be built
+here, and it finds that project relative to its own source file. A copied install would look
+for `lean/` inside `site-packages`, and fails with a message saying so. For the same reason
+there is nothing on PyPI to install: the Python is a few thousand lines of stdlib, and
+everything that gives a verdict its weight is the Lean tree beside it, pinned to exact
+revisions.
+
+If you would rather not install at all, every entry point still works from the repository
+root (`python3 -m nullius.cli ...`), and `skills/nullius/scripts/nullius` works from
+anywhere regardless — it prefers `.venv` and falls back to the source tree.
+
+### Build the Lean side
+
+```bash
+cd lean
+lake exe cache get && lake build     # Mathlib (~3.6 GB, cached) + the audit module
+lake build repl                      # the REPL, pinned by lake-manifest.json
+lake build Physlib                   # physics; builds from source, ~15 min
+cd .. && ./scripts/build-loogle.sh   # shape search, offline (~15 s)
+```
+
+### Check it, and enable it
+
+```bash
+nullius doctor              # or .venv/bin/nullius doctor
+./install.sh                # enable the skill and MCP server in your agents
+```
+
+`doctor` verifies a genuine proof, a `sorry` proof and a vacuous one, so it fails loudly if
+the verifier has stopped discriminating.
+
+### Contributing
+
+```bash
+.venv/bin/pip install -e ".[dev]"    # adds prek
+prek install                         # run the checks before each commit
+python3 tests/test_adversarial.py    # or run them directly
 python3 tests/test_docs.py
-prek install                                    # run both before each commit
-./install.sh                                    # enable the skill and MCP server
 ```
 
 `lake exe cache get` only serves Mathlib, so Physlib compiles locally the first time.

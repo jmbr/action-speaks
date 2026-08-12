@@ -135,8 +135,7 @@ Each CLI invocation starts its own Lean session (~2.6 s to import Mathlib and Ph
 more than a handful of checks, drive the Python API, which keeps sessions warm:
 
 ```python
-import sys; sys.path.insert(0, "<verifier repo>")   # the directory containing nullius/
-from nullius import Harness
+from nullius import Harness            # after `pip install -e .` in a checkout
 
 with Harness(pool_size=4).warm() as h:
     verdicts = h.verify_many([{"source": s, "claim": c} for s, c in items])

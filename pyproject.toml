@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nullius"
+description = "Machine-checked backing for an agent's mathematical claims, via Lean 4 + Mathlib"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["lean4", "mathlib", "theorem-proving", "verification", "llm", "agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dynamic = ["version"]
+
+# Deliberately empty. The verifier drives Lean through a subprocess and speaks JSON-RPC and
+# HTTP with the standard library alone, so installing it pulls in nothing. That keeps the
+# trusted computing base to Lean's kernel, Mathlib and `lean/Nullius/Audit.lean` — adding a
+# dependency here would widen it for no benefit.
+dependencies = []
+
+[project.optional-dependencies]
+# `prek` runs the commit hooks in `.pre-commit-config.yaml`. Only contributors need it.
+dev = ["prek>=0.2"]
+
+[project.scripts]
+nullius = "nullius.cli:main"
+
+[tool.setuptools]
+# Discovery rather than an explicit list, so that adding a subpackage cannot silently leave
+# it out of the install.
+[tool.setuptools.packages.find]
+include = ["nullius*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "nullius.__version__" }

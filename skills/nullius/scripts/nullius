@@ -45,7 +45,15 @@ fi
 cmd="${1:-}"
 [ $# -gt 0 ] && shift
 
-run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m nullius.cli "$@"); }
+# Prefer the interpreter the package was installed into, falling back to a bare `python3`
+# with PYTHONPATH set. The fallback matters: the skill has to work in a checkout where
+# `pip install -e .` has not been run, and the verifier depends on nothing outside the
+# standard library, so running it straight from the source tree is legitimate.
+if [ -x "$ROOT/.venv/bin/python3" ]; then
+  run() { (cd "$ROOT" && "$ROOT/.venv/bin/python3" -m nullius.cli "$@"); }
+else
+  run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m nullius.cli "$@"); }
+fi
 
 case "$cmd" in
   check|verify)
