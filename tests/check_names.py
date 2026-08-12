@@ -30,6 +30,7 @@ FORBIDDEN = {
     "LeanAI": "the project is called nullius",
     "LEANAI": "the project is called nullius",
     "lean-ai": "the project is called nullius",
+    "lean-proof-check": "the skill is named after the project: `nullius`",
 }
 
 # Where a documented revision is expected to match what lake actually pins.
@@ -37,6 +38,12 @@ REV_CITATION = re.compile(r"\b(mathlib|physlib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40}
 LEAN_VERSION = re.compile(r"\b(?:leanprover/lean4:)?v?(4\.\d+\.\d+)\b")
 
 SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/check_names.py")
+
+# Deliberate uses of a retired name: (path, string). Migration code has to name the thing it
+# is migrating away from.
+ALLOWED = {
+    ("install.sh", "lean-proof-check"),
+}
 
 
 def tracked_files() -> list[Path]:
@@ -76,7 +83,7 @@ def main() -> int:
 
         for lineno, line in enumerate(text.splitlines(), start=1):
             for bad, why in FORBIDDEN.items():
-                if bad in line:
+                if bad in line and (str(rel), bad) not in ALLOWED:
                     problems.append(f"{rel}:{lineno}: stale name {bad!r} — {why}")
 
             # A cited Lean version must be the one that is pinned.

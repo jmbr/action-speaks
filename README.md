@@ -72,7 +72,7 @@ nullius/cli.py            command-line interface
 nullius/harness.py        pooled, thread-safe entry point for programmatic use
 nullius/http_server.py    HTTP service for non-Python harnesses
 nullius/mcp_server.py     MCP server (stdio, standard library only)
-skills/lean-proof-check/ the agent skill (pi, Copilot, Claude Code, Codex)
+skills/nullius/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass

@@ -1,5 +1,5 @@
 ---
-name: lean-proof-check
+name: nullius
 description: Verify a mathematical claim by proving it in Lean 4 with Mathlib and Physlib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, algorithm correctness, or physics. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib lemma name instead of guessing.
 compatibility: Requires the nullius verifier (Lean 4.32.0 + Mathlib + Physlib, ~9GB built) installed via its install.sh. Linux/macOS with python3.
 metadata:
@@ -35,7 +35,7 @@ You will need it to check that the Lean statement actually says the same thing.
 ### 2. Check the statement before proving it
 
 ```bash
-~/.agents/skills/lean-proof-check/scripts/nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+~/.agents/skills/nullius/scripts/nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
 ```
 
 (That path is a symlink into the verifier repository, so it works from any directory. The

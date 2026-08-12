@@ -13,8 +13,8 @@
 set -euo pipefail
 
 ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$ROOT/skills/lean-proof-check"
-SKILL_DST="$HOME/.agents/skills/lean-proof-check"
+SKILL_SRC="$ROOT/skills/nullius"
+SKILL_DST="$HOME/.agents/skills/nullius"
 MCP_TEMPLATE="$ROOT/mcp/copilot-mcp-config.json"
 MCP_DST="$HOME/.copilot/mcp-config.json"
 
@@ -54,9 +54,21 @@ install_skill() {
   act "ln -sfn '$SKILL_SRC' '$SKILL_DST'"
   act "chmod +x '$SKILL_SRC/scripts/nullius'"
   say "  ok (pi and Copilot both read ~/.agents/skills)"
+  remove_legacy_skill
+}
+
+# The skill used to be called `lean-proof-check`. A symlink under the old name still points
+# into this repository, so leaving it behind registers the same skill twice under two names.
+remove_legacy_skill() {
+  local legacy="$HOME/.agents/skills/lean-proof-check"
+  if [ -L "$legacy" ] && [ "$(readlink -f "$legacy")" = "$(readlink -f "$SKILL_SRC")" ]; then
+    say "  removing superseded symlink $legacy (skill renamed to nullius)"
+    act "rm '$legacy'"
+  fi
 }
 
 uninstall_skill() {
+  remove_legacy_skill
   if [ -L "$SKILL_DST" ]; then
     say "removing skill symlink $SKILL_DST"
     act "rm '$SKILL_DST'"
@@ -147,6 +159,6 @@ fi
 
 if [ "$dry" -eq 0 ]; then
   say ""
-  say "Next: ./skills/lean-proof-check/scripts/nullius doctor"
+  say "Next: ./skills/nullius/scripts/nullius doctor"
   say "      (checks Lean, Mathlib and that the verifier discriminates correctly)"
 fi

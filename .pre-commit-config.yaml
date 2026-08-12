@@ -40,7 +40,7 @@ repos:
         pass_filenames: false
         files: >-
           ^(COOKBOOK\.md
-          |skills/lean-proof-check/(SKILL\.md|references/GUIDE\.md)
+          |skills/nullius/(SKILL\.md|references/GUIDE\.md)
           |nullius/.*\.py
           |lean/.*\.lean
           |lean/(lakefile\.toml|lean-toolchain|lake-manifest\.json)

@@ -27,7 +27,7 @@ while [ -L "$self" ]; do
 done
 script_dir="$(cd -P "$(dirname "$self")" && pwd)"
 
-# <repo>/skills/lean-proof-check/scripts/nullius  ->  <repo>
+# <repo>/skills/nullius/scripts/nullius  ->  <repo>
 default_root="$(cd -P "$script_dir/../../.." && pwd)"
 ROOT="${NULLIUS_ROOT:-$default_root}"
 
@@ -35,7 +35,7 @@ if [ ! -d "$ROOT/nullius" ]; then
   cat >&2 <<EOF
 nullius verifier not found at: $ROOT
 
-This skill expects to live inside the verifier repository (as skills/lean-proof-check), or to
+This skill expects to live inside the verifier repository (as skills/nullius), or to
 be symlinked from it. Reinstall with the repository's install.sh, or set NULLIUS_ROOT to the
 repository path.
 EOF

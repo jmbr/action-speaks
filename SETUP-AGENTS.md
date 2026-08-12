@@ -3,7 +3,7 @@
 Everything needed lives in this repository:
 
 ```
-skills/lean-proof-check/     the skill (SKILL.md, references/, scripts/)
+skills/nullius/     the skill (SKILL.md, references/, scripts/)
 mcp/copilot-mcp-config.json  MCP server entry, with the repo path templated
 install.sh                   symlinks the skill and merges the MCP entry into place
 ```
@@ -39,11 +39,11 @@ inside this repository, and the entire point is to verify claims made anywhere.
 
 ## The skill
 
-Installed to `~/.agents/skills/lean-proof-check` — a directory both pi and Copilot scan, so a
+Installed to `~/.agents/skills/nullius` — a directory both pi and Copilot scan, so a
 single symlink serves both.
 
 ```
-skills/lean-proof-check/
+skills/nullius/
 ├── SKILL.md               # frontmatter + workflow (only the description is always loaded)
 ├── references/GUIDE.md    # failure catalogue, worked examples (loaded on demand)
 └── scripts/nullius         # wrapper; resolves the repo through the symlink, runs from any cwd
@@ -56,7 +56,7 @@ Only the `description` sits in the system prompt, which is why it enumerates con
 Check that pi sees it:
 
 ```bash
-pi --print "/skill:lean-proof-check"
+pi --print "/skill:nullius"
 ```
 
 ### Other harnesses
@@ -64,7 +64,7 @@ pi --print "/skill:lean-proof-check"
 Claude Code and Codex read their own directories:
 
 ```bash
-ln -s ~/sources/nullius/skills/lean-proof-check ~/.claude/skills/lean-proof-check
+ln -s ~/sources/nullius/skills/nullius ~/.claude/skills/nullius
 ```
 
 Or point pi's settings at them: `{ "skills": ["~/.claude/skills", "~/.codex/skills"] }`.

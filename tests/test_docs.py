@@ -32,8 +32,8 @@ from nullius.verify import Verifier  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 COOKBOOK = ROOT / "COOKBOOK.md"
 HEREDOC_DOCS = [
-    ROOT / "skills" / "lean-proof-check" / "SKILL.md",
-    ROOT / "skills" / "lean-proof-check" / "references" / "GUIDE.md",
+    ROOT / "skills" / "nullius" / "SKILL.md",
+    ROOT / "skills" / "nullius" / "references" / "GUIDE.md",
 ]
 
 BLOCK = re.compile(r"```lean\n(.*?)```", re.DOTALL)
