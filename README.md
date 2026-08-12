@@ -76,7 +76,9 @@ skills/lean-proof-check/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
+tests/test_cookbook.py   re-verifies every example in COOKBOOK.md
 AGENTS.md                the contract handed to the agent
+COOKBOOK.md              worked patterns for applied mathematics
 INTEGRATION.md           how to drive this from a harness
 SETUP-AGENTS.md          enabling it in pi / Copilot (skill + MCP)
 ```
@@ -176,6 +178,8 @@ checks, and pays for it with the guard and the tripwire.
 See **[SETUP-AGENTS.md](SETUP-AGENTS.md)** to enable this in pi or Copilot,
 **[INTEGRATION.md](INTEGRATION.md)** for driving it from a harness (Python API, HTTP service,
 MCP, CLI), and **[AGENTS.md](AGENTS.md)** for the contract handed to the agent.
+**[COOKBOOK.md](COOKBOOK.md)** works through what to check in applied mathematics, and what
+not to bother with; every example in it is re-verified by `tests/test_cookbook.py`.
 
 ```python
 from nullius import Harness
@@ -274,6 +278,7 @@ lake build repl                                 # the REPL, pinned by lake-manif
 lake build Physlib                              # physics; builds from source, ~15 min
 cd .. && python3 -m nullius.cli doctor
 python3 tests/test_adversarial.py
+python3 tests/test_cookbook.py
 ./install.sh                                    # enable the skill and MCP server
 ```
 

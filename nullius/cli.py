@@ -150,7 +150,7 @@ def cmd_log(args: argparse.Namespace) -> int:
     if args.stats:
         print(json.dumps(ledger.stats(), indent=2))
         return 0
-    rows = ledger.recent(limit=args.limit, status=args.status)
+    rows = ledger.recent(limit=args.limit, status=args.status, tag=args.tag)
     if args.json:
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return 0
@@ -212,6 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     lg = sub.add_parser("log", help="show recent verifications")
     lg.add_argument("-n", "--limit", type=int, default=20)
     lg.add_argument("--status", choices=("verified", "rejected", "error"))
+    lg.add_argument("--tag", help="only entries recorded with this --tag")
     lg.add_argument("--stats", action="store_true")
     lg.add_argument("--json", action="store_true")
     lg.set_defaults(func=cmd_log)

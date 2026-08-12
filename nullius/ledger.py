@@ -126,12 +126,20 @@ class Ledger:
             row = c.execute("SELECT * FROM verifications WHERE id = ?", (row_id,)).fetchone()
         return dict(row) if row else None
 
-    def recent(self, limit: int = 20, status: str | None = None) -> list[dict[str, Any]]:
+    def recent(
+        self, limit: int = 20, status: str | None = None, tag: str | None = None
+    ) -> list[dict[str, Any]]:
         q = "SELECT * FROM verifications"
         args: list[Any] = []
+        where = []
         if status:
-            q += " WHERE status = ?"
+            where.append("status = ?")
             args.append(status)
+        if tag:
+            where.append("tag = ?")
+            args.append(tag)
+        if where:
+            q += " WHERE " + " AND ".join(where)
         q += " ORDER BY id DESC LIMIT ?"
         args.append(limit)
         with self._conn() as c:
