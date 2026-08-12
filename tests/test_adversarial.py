@@ -121,6 +121,17 @@ run_cmd do
 """,
         "forged",
     ),
+    (
+        # Physlib ships deliberately incomplete results, marked `@[sorryful]`. Nothing in
+        # the *submission* looks suspicious - there is no `sorry` token for the static guard
+        # to find, and the proof really is `rfl` - so this is caught only by walking the
+        # axiom footprint through the cited constant.
+        "physlib_sorryful_citation",
+        "theorem t :\n"
+        "    ClassicalMechanics.CoplanarDoublePendulum.ConfigurationSpace =\n"
+        "      ClassicalMechanics.CoplanarDoublePendulum.ConfigurationSpace := rfl\n",
+        "t",
+    ),
 ]
 
 # `exit_hiding` proves a true (if useless) statement, so only the guard should stop it.
@@ -152,6 +163,16 @@ GENUINE: list[tuple[str, str, str]] = [
         "implicit_binders",
         "theorem t {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] (x y : E) :\n"
         "    ‖x + y‖ ≤ ‖x‖ + ‖y‖ := norm_add_le x y\n",
+        "t",
+    ),
+    (
+        # Physlib's complete results must remain usable, or importing it buys nothing.
+        "physlib_theorem",
+        "open ClassicalMechanics ClassicalMechanics.FreeParticle in\n"
+        "theorem t (s : FreeParticle) (q : Trajectory)\n"
+        "    (h : ∀ u, s.NewtonsSecondLaw q u) (hcont : ContDiff ℝ 2 q) :\n"
+        "    ∃ p, ∀ u, s.linearMomentum q u = p :=\n"
+        "  ClassicalMechanics.FreeParticle.linearMomentum_conserved s q h hcont\n",
         "t",
     ),
 ]

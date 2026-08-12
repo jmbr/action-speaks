@@ -137,11 +137,12 @@ resolving its own symlink; set `NULLIUS_ROOT` to override.
 
 ## Provenance
 
-Every verdict records the toolchain and Mathlib revision, and each check is appended to a
-SQLite ledger. When a verification matters, cite it:
+Every verdict records the toolchain and the Mathlib and Physlib revisions, and each check is
+appended to a SQLite ledger. When a verification matters, cite it:
 
 ```
-Lean 4.33.0, Mathlib db584cd6d46c, axioms: propext, Classical.choice, Quot.sound
+Lean 4.32.0, Mathlib 81a5d257c8e4, Physlib cf1d86d1fbba,
+axioms: propext, Classical.choice, Quot.sound
 ```
 
 A proof that verifies against one Mathlib revision may not even elaborate against another,

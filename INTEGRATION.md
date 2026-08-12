@@ -111,7 +111,8 @@ curl -s localhost:823/verify -H 'Content-Type: application/json' \
  "axioms": ["propext", "Classical.choice", "Quot.sound"],
  "checks": [{"name": "static_guard", "passed": true}, ...],
  "feedback": "VERIFIED. Cite this as machine-checked, ...",
- "provenance": {"toolchain": "leanprover/lean4:v4.33.0", "mathlib_rev": "db584cd6..."}}
+ "provenance": {"toolchain": "leanprover/lean4:v4.32.0", "mathlib_rev": "81a5d257c8e4...",
+                "physlib_rev": "cf1d86d1fbba..."}}
 ```
 
 Endpoints: `GET /health`, `GET /ledger`, `POST /verify`, `/verify_many`, `/statement`,

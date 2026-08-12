@@ -36,6 +36,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"lake         : {cfg.lake_bin}")
     print(f"toolchain    : {cfg.toolchain()}")
     print(f"mathlib rev  : {cfg.mathlib_rev()}")
+    print(f"physlib rev  : {cfg.package_rev('Physlib')}")
     print(f"repl rev     : {cfg.package_rev('repl')}")
     print(f"ledger       : {cfg.ledger_path}")
     try:
@@ -43,7 +44,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         print(f"\nFAIL: {exc}")
         return 1
-    print("\nstarting REPL (first run imports Mathlib) ...")
+    print("\nstarting REPL (first run imports Mathlib and Physlib) ...")
     t0 = time.time()
     try:
         s = _session(cfg)

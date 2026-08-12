@@ -102,6 +102,10 @@ class Config:
             "toolchain": self.toolchain(),
             "mathlib_rev": self.mathlib_rev(),
             "repl_rev": self.package_rev("repl"),
+            # Recorded because Physlib ships deliberately incomplete results, and which
+            # ones are complete changes between revisions. A verdict citing it is only
+            # reproducible against the exact revision it was checked at.
+            "physlib_rev": self.package_rev("Physlib"),
             "lean_dir": str(self.lean_dir),
             "repl_bin": str(self.repl_bin),
         }

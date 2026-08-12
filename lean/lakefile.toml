@@ -8,13 +8,27 @@ name = "Nullius"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.33.0"
+rev = "v4.32.0"
 
 # The REPL is the verification backend. Requiring it here rather than cloning it by hand
 # means lake fetches it, pins the exact revision in lake-manifest.json, and guarantees it is
 # built against the same toolchain as this project - a mismatch silently breaks elaboration.
-# This revision is the one whose lean-toolchain is v4.33.0.
+# This revision is the one whose lean-toolchain is v4.32.0.
 [[require]]
 name = "repl"
 git = "https://github.com/leanprover-community/repl"
-rev = "bbeedf38e0898869fc3b7c009e1ea877b46204e4"
+rev = "68a3b3a059787a7db44fb1e6281e4a657efee470"
+
+# Physlib is the physics library. It is pinned to an exact commit rather than a branch
+# because it ships deliberately incomplete results - `sorryful` (`sorryAx`), `pseudo`
+# (`Lean.ofReduceBool`) and `semiformal_result` (an inconsistent `axiom helper : α`) - and
+# which results are complete changes over time. A ledger entry only means something if the
+# revision it was checked against is known. The audit rejects all three kinds anyway, since
+# none of those axioms is in `Nullius.Audit.trustedAxioms`.
+#
+# Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.32.0 above is
+# its constraint, not ours. Revisit both pins together when it bumps.
+[[require]]
+name = "Physlib"
+git = "https://github.com/leanprover-community/physlib"
+rev = "cf1d86d1fbba4fe42ce52577bab8b9df40d83a28"

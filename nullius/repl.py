@@ -24,7 +24,7 @@ from typing import Any
 
 from .config import Config
 
-PRELUDE = "import Mathlib\nimport Nullius.Audit"
+PRELUDE = "import Mathlib\nimport Physlib\nimport Nullius.Audit"
 
 AUDIT_MARKER = "NULLIUS_AUDIT "
 

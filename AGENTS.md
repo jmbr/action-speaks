@@ -53,8 +53,14 @@ anything else, do not present the claim as proved.
 
 ## Writing the Lean source
 
-- **No `import` lines.** Mathlib is already imported. An `import` in your submission is
-  rejected.
+- **No `import` lines.** Mathlib and Physlib are already imported. An `import` in your
+  submission is rejected.
+- **Physlib results are not all complete.** It ships placeholders marked `@[sorryful]`
+  (`sorryAx`) and `@[pseudo]` (`Lean.ofReduceBool`). Citing one is not an error you will see
+  in the proof — the audit catches it as an untrusted axiom, and the verdict is a rejection.
+  If that happens, the physics result you leaned on is not actually proved yet.
+- `lean_search_lemma` indexes Mathlib only, so Physlib lemmas will not appear in its results.
+  `lean_find_proof` runs in the real environment and does see them.
 - Put helper lemmas first and the claim you care about **last**; that last theorem is what
   gets audited by default.
 - Prefer `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,

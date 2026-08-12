@@ -60,9 +60,9 @@ Anything outside `{propext, Classical.choice, Quot.sound}` is disqualifying.
 
 ```
 lean/Nullius/Audit.lean   the audit commands (#audit_axioms, #audit_replay, #audit_vacuity,
-                         #audit_triviality, #audit_shape), pinned to Lean v4.33.0
-lean/lakefile.toml       pins Mathlib and the Lean REPL; lake-manifest.json locks both
-nullius/config.py         locates the project, records toolchain + Mathlib + REPL revisions
+                         #audit_triviality, #audit_shape), pinned to Lean v4.32.0
+lean/lakefile.toml       pins Mathlib, Physlib and the Lean REPL; lake-manifest.json locks all
+nullius/config.py         locates the project, records toolchain + Mathlib + Physlib + REPL revs
 nullius/repl.py           persistent REPL session and pool
 nullius/guard.py          static ban-list, applied before Lean sees the source
 nullius/verify.py         the pipeline and the Verdict type
@@ -220,10 +220,14 @@ Measured on this machine (24 cores, 62 GB):
 
 | Operation | Time |
 |---|---|
-| Session start (`import Mathlib`) | ~2.5 s, ~7 GB resident |
+| Session start (`import Mathlib` + `import Physlib`) | ~2.6 s, ~0.8 GB resident / ~5.2 GB mapped |
 | Verify a simple theorem | 10–20 ms |
 | Verify with vacuity + triviality probes | 60–200 ms |
 | Rejection by static guard | < 1 ms (no Lean involved) |
+
+Adding Physlib costs almost nothing at startup: oleans are memory-mapped, so pages are only
+faulted in as they are used, and a session that never touches physics never pays for it.
+Budget by mapped size rather than resident when setting `pool_size`.
 
 The import cost is paid once per process. Every check then branches off that same pristine
 environment — which is also a soundness property, not just a speed one: it stops one
@@ -238,25 +242,39 @@ submission from leaving definitions behind for the next to exploit.
   statement means what the English claim meant. The verdict shows the elaborated statement
   precisely so a human (or a second agent) can compare. This is the residual trust.
 - **The trusted computing base** is Lean's kernel, Mathlib, and `Nullius/Audit.lean`.
+  Physlib is *not* in it: its incomplete results rest on `sorryAx` or `Lean.ofReduceBool`,
+  and the axiom audit rejects anything that reaches them, so importing it cannot weaken a
+  verdict — it can only make more things provable.
+- **The toolchain is pinned by Physlib, not by us.** Physlib tracks Mathlib about one release
+  behind, so the whole graph sits at whatever it supports (currently v4.32.0). Bump both pins
+  in `lean/lakefile.toml` together, or not at all; a mismatch fails to resolve.
 - **Remote search backends** (Loogle, LeanSearch) are external services; `lean_find_proof`
   works offline and is authoritative.
 
 ## Reproducing a verdict
 
-Every ledger row stores the toolchain and Mathlib revision, so a third party can rebuild the
-exact environment:
+Every ledger row stores the toolchain, Mathlib and Physlib revisions, so a third party can
+rebuild the exact environment:
 
 ```
-toolchain   leanprover/lean4:v4.33.0
-mathlib     db584cd6d46c92f209a44c0f1c829460d327499d
+toolchain   leanprover/lean4:v4.32.0
+mathlib     81a5d257c8e410db227a6665ed08f64fea08e997
+physlib     cf1d86d1fbba4fe42ce52577bab8b9df40d83a28
 ```
+
+The Physlib revision matters more than the other two. Physlib ships results that are
+deliberately incomplete, and which ones are complete changes between commits, so "this was
+accepted" is only meaningful against a known revision.
 
 ## Setup from scratch
 
 ```bash
 cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached) + the audit module
 lake build repl                                 # the REPL, pinned by lake-manifest.json
+lake build Physlib                              # physics; builds from source, ~15 min
 cd .. && python3 -m nullius.cli doctor
 python3 tests/test_adversarial.py
 ./install.sh                                    # enable the skill and MCP server
 ```
+
+`lake exe cache get` only serves Mathlib, so Physlib compiles locally the first time.
