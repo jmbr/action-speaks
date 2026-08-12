@@ -80,8 +80,7 @@ whose hypotheses turn out to be unnecessary.
 
 - **No `import` lines.** Mathlib and Physlib are already imported; an `import` is rejected.
 - **Physlib ships incomplete results** marked `@[sorryful]` / `@[pseudo]`. Citing one gets
-  rejected on its axiom footprint, which means that physics result is not proved yet. Note
-  also that `search` indexes Mathlib only; `close` sees Physlib too.
+  rejected on its axiom footprint, which means that physics result is not proved yet.
 - Helper lemmas first, the claim you care about **last** (that one is audited by default).
 - Workhorse tactics: `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
   `aesop`, `simp`, `decide`, `grind`.

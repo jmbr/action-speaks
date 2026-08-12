@@ -64,6 +64,8 @@ class Harness:
 
     def close(self) -> None:
         self.pool.close()
+        # Also release the local Loogle process and its in-memory index, if search was used.
+        S.local_loogle_session().close()
 
     def __enter__(self) -> "Harness":
         return self

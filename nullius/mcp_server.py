@@ -390,6 +390,8 @@ def serve(stdin=None, stdout=None) -> int:
             stdout.flush()
     if _session is not None:
         _session.close()
+    # The local Loogle process, if one was started, holds a large index in memory.
+    S.local_loogle_session().close()
     return 0
 
 

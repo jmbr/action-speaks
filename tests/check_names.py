@@ -31,6 +31,7 @@ FORBIDDEN = {
     "LEANAI": "the project is called nullius",
     "lean-ai": "the project is called nullius",
     "lean-proof-check": "the skill is named after the project: `nullius`",
+    "indexes Mathlib only": "shape search covers Physlib too when loogle is built locally",
 }
 
 # Where a documented revision is expected to match what lake actually pins.

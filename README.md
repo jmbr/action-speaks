@@ -67,7 +67,9 @@ nullius/repl.py           persistent REPL session and pool
 nullius/guard.py          static ban-list, applied before Lean sees the source
 nullius/verify.py         the pipeline and the Verdict type
 nullius/ledger.py         append-only SQLite record of every verdict
-nullius/search.py         Loogle, LeanSearch, and local exact?/apply?
+nullius/search.py         Loogle (local or hosted), LeanSearch, and local exact?/apply?
+scripts/build-loogle.sh  builds Loogle against our toolchain, for offline shape search
+lean/NulliusAll.lean     import-only root whose Loogle index covers Mathlib + Physlib
 nullius/cli.py            command-line interface
 nullius/harness.py        pooled, thread-safe entry point for programmatic use
 nullius/http_server.py    HTTP service for non-Python harnesses
@@ -77,8 +79,9 @@ mcp/                     MCP server entry, templated on the repo path
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
 tests/test_docs.py       re-runs every Lean example in the documentation
+tests/test_search.py     local shape search reaches Mathlib and Physlib
 tests/check_names.py     catches renamed tools and superseded revisions in prose
-.pre-commit-config.yaml  runs all three before a commit lands (via prek)
+.pre-commit-config.yaml  runs all four before a commit lands (via prek)
 AGENTS.md                the contract handed to the agent
 COOKBOOK.md              worked patterns for applied mathematics
 INTEGRATION.md           how to drive this from a harness
@@ -254,8 +257,10 @@ submission from leaving definitions behind for the next to exploit.
 - **The toolchain is pinned by Physlib, not by us.** Physlib tracks Mathlib about one release
   behind, so the whole graph sits at whatever it supports (currently v4.32.0). Bump both pins
   in `lean/lakefile.toml` together, or not at all; a mismatch fails to resolve.
-- **Remote search backends** (Loogle, LeanSearch) are external services; `close`
-  works offline and is authoritative.
+- **Search backends vary in reach.** Shape search (Loogle) runs locally once built, covering
+  Mathlib *and* Physlib at the pinned revisions; without it, it falls back to the hosted
+  service, whose index is Mathlib alone. Natural-language search (LeanSearch) is remote
+  either way. `close` works offline and is authoritative.
 
 ## Reproducing a verdict
 
@@ -278,7 +283,8 @@ accepted" is only meaningful against a known revision.
 cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached) + the audit module
 lake build repl                                 # the REPL, pinned by lake-manifest.json
 lake build Physlib                              # physics; builds from source, ~15 min
-cd .. && python3 -m nullius.cli doctor
+cd .. && ./scripts/build-loogle.sh              # optional: offline shape search (~15 s)
+python3 -m nullius.cli doctor
 python3 tests/test_adversarial.py
 python3 tests/test_docs.py
 prek install                                    # run both before each commit
@@ -286,6 +292,16 @@ prek install                                    # run both before each commit
 ```
 
 `lake exe cache get` only serves Mathlib, so Physlib compiles locally the first time.
+
+`scripts/build-loogle.sh` is optional but recommended. Loogle has no dependencies and does
+not need to be one of ours: the binary reads the `.olean` files of any Lake project built
+with the same toolchain, so the script clones it into `vendor/`, copies our `lean-toolchain`
+over its own, and builds — about 15 seconds, with nothing of Mathlib rebuilt. Shape search
+then runs offline, covers Physlib as well as Mathlib, and answers from the exact revisions
+pinned here rather than whatever the hosted service last deployed. The first query builds a
+374 MB index (~2 min, cached beside the oleans and rebuilt automatically when they change);
+pass `--index` to pay that cost up front instead. Without the binary, shape search silently
+uses the hosted service, as before.
 
 `prek install` wires the checks into `git commit`: prose is scanned for renamed tools and
 superseded revisions on every commit (72 ms, no Lean), and the two Lean suites run only when

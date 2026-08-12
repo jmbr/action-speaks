@@ -67,9 +67,6 @@ footprint gives it away:
 That is not a defect in your proof. It means the physics result you leaned on is a
 placeholder, so the claim is not available to you yet. Say so, rather than working around it.
 
-Note also that `search` indexes Mathlib only, so Physlib lemmas never appear in its results;
-`close` runs in the real environment and does see them.
-
 ## Finding lemmas
 
 Three routes, in increasing order of reliability and cost:
@@ -87,6 +84,11 @@ the conclusion, commas conjoin constraints, `"foo"` matches names containing `fo
 
 `close` runs `exact?`/`apply?` inside Lean. Slower (seconds), but whatever it returns actually
 closes the goal — it cannot invent a name. When `search` and `close` disagree, trust `close`.
+
+Shape search runs against a local Loogle index when one has been built, and against the
+hosted service otherwise; the local index covers Physlib as well as Mathlib and matches the
+exact revisions this verifier pins. Which one answered is visible in the result: the backend
+is reported as `loogle-local` or `loogle`. Natural-language search is remote either way.
 
 ## Worked example: claim to verdict
 

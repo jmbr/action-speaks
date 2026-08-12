@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,8 @@ class Config:
     repl_bin: Path
     lake_bin: Path
     ledger_path: Path
+    loogle_bin: Path | None = None
+    loogle_module: str = "NulliusAll"
     startup_timeout: float = 300.0
     command_timeout: float = 120.0
     lean_threads: int = 4
@@ -41,11 +44,26 @@ class Config:
             repl_bin=repl_bin,
             lake_bin=Path(lake),
             ledger_path=ledger,
+            loogle_bin=cls._find_loogle(root),
+            loogle_module=os.environ.get("NULLIUS_LOOGLE_MODULE", "NulliusAll"),
             command_timeout=float(os.environ.get("NULLIUS_COMMAND_TIMEOUT", 120.0)),
             startup_timeout=float(os.environ.get("NULLIUS_STARTUP_TIMEOUT", 300.0)),
             lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", 4)),
             pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", 2)),
         )
+
+    @staticmethod
+    def _find_loogle(root: Path) -> Path | None:
+        """Locate a local Loogle binary, if one has been built.
+
+        Optional by design: without it, shape search falls back to the hosted service, so a
+        checkout that never runs `scripts/build-loogle.sh` still works.
+        """
+        explicit = os.environ.get("NULLIUS_LOOGLE_BIN")
+        if explicit:
+            return Path(explicit)
+        candidate = root / "vendor" / "loogle" / ".lake" / "build" / "bin" / "loogle"
+        return candidate if candidate.exists() else None
 
     @staticmethod
     def _find_repl(root: Path, lean_dir: Path) -> Path:
@@ -96,9 +114,28 @@ class Config:
                 return pkg.get("rev", "unknown")
         return "unknown"
 
+    def loogle_rev(self) -> str:
+        """The revision of the local Loogle checkout, if there is one.
+
+        Recorded because a lemma search is part of how a proof was arrived at, and because
+        the local index reflects *these* Mathlib and Physlib revisions rather than whatever
+        the hosted service last deployed.
+        """
+        if not self.loogle_bin:
+            return ""
+        repo = Path(self.loogle_bin).parents[3]
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            return out.stdout.strip() if out.returncode == 0 else ""
+        except Exception:
+            return ""
+
     def provenance(self) -> dict[str, str]:
         """Everything needed to reproduce a verification on another machine."""
-        return {
+        prov = {
             "toolchain": self.toolchain(),
             "mathlib_rev": self.mathlib_rev(),
             "repl_rev": self.package_rev("repl"),
@@ -109,3 +146,7 @@ class Config:
             "lean_dir": str(self.lean_dir),
             "repl_bin": str(self.repl_bin),
         }
+        rev = self.loogle_rev()
+        if rev:
+            prov["loogle_rev"] = rev
+        return prov

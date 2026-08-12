@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 *.bak
 
+# Loogle is cloned and built here by scripts/build-loogle.sh, pinned to a revision recorded
+# in that script rather than vendored into this repository.
+vendor/
+
 # Local state
 ledger.sqlite3
 ledger.sqlite3-*

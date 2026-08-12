@@ -63,8 +63,7 @@ anything else, do not present the claim as proved.
   (`sorryAx`) and `@[pseudo]` (`Lean.ofReduceBool`). Citing one is not an error you will see
   in the proof — the audit catches it as an untrusted axiom, and the verdict is a rejection.
   If that happens, the physics result you leaned on is not actually proved yet.
-- `search` indexes Mathlib only, so Physlib lemmas will not appear in its results.
-  `close` runs in the real environment and does see them.
+- `search` and `close` both see Mathlib and Physlib.
 - Put helper lemmas first and the claim you care about **last**; that last theorem is what
   gets audited by default.
 - Prefer `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,

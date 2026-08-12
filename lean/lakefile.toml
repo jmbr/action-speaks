@@ -5,6 +5,13 @@ defaultTargets = ["Nullius"]
 [[lean_lib]]
 name = "Nullius"
 
+# The root module for local lemma search: it imports Mathlib, Physlib and the audit module,
+# so a Loogle index built from it covers exactly what a submission can refer to. Nothing
+# depends on it, and it is not part of `defaultTargets` — `scripts/build-loogle.sh` builds
+# it on demand.
+[[lean_lib]]
+name = "NulliusAll"
+
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"

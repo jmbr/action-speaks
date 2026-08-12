@@ -41,6 +41,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"mathlib rev  : {cfg.mathlib_rev()}")
     print(f"physlib rev  : {cfg.package_rev('Physlib')}")
     print(f"repl rev     : {cfg.package_rev('repl')}")
+    if cfg.loogle_bin:
+        print(f"loogle       : {cfg.loogle_bin} ({cfg.loogle_rev()[:12] or 'unknown rev'})")
+    else:
+        print("loogle       : not built (shape search uses the hosted service)")
     print(f"ledger       : {cfg.ledger_path}")
     try:
         cfg.validate()
@@ -127,6 +131,7 @@ def cmd_search(args: argparse.Namespace) -> int:
         results.append(S.loogle(query, limit=args.limit))
     if args.backend in ("leansearch", "both"):
         results.append(S.leansearch(query, limit=args.limit))
+    S.local_loogle_session().close()
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2, ensure_ascii=False))
         return 0

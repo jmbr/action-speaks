@@ -14,7 +14,15 @@ from .config import Config, ConfigError
 from .harness import Attempt, Harness, verify_once
 from .ledger import Ledger
 from .repl import ReplError, ReplTimeout, Session, SessionPool
-from .search import SearchResult, leansearch, local_search, loogle
+from .search import (
+    LoogleSession,
+    SearchResult,
+    leansearch,
+    local_loogle_session,
+    local_search,
+    loogle,
+    loogle_remote,
+)
 from .verify import Check, Status, Verdict, Verifier
 
 __version__ = "0.1.0"
@@ -36,7 +44,10 @@ __all__ = [
     "Ledger",
     "SearchResult",
     "loogle",
+    "loogle_remote",
     "leansearch",
     "local_search",
+    "LoogleSession",
+    "local_loogle_session",
     "__version__",
 ]
