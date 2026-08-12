@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "leanai": {
+      "type": "local",
+      "command": "python3",
+      "args": ["-m", "leanai.mcp_server"],
+      "cwd": "__LEANAI_ROOT__",
+      "env": {
+        "PYTHONPATH": "__LEANAI_ROOT__",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "tools": ["*"]
+    }
+  }
+}

@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Thin wrapper around the lean-ai verifier, callable from any working directory.
+#
+#   leanai check "informal claim" < proof.lean      verify (stdin or -f FILE)
+#   leanai statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+#   leanai search 'sum of two even numbers is even'
+#   leanai goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
+#   leanai log
+#   leanai doctor
+#
+# Exit status for `check` is 0 when verified, 1 otherwise, so it composes with && / ||.
+
+set -uo pipefail
+
+# Resolve this script's real path, following symlinks, so the verifier is found whether the
+# skill runs from inside the repository or through a symlink in ~/.agents/skills.
+self="${BASH_SOURCE[0]}"
+while [ -L "$self" ]; do
+  target="$(readlink "$self")"
+  case "$target" in
+    /*) self="$target" ;;
+    *)  self="$(cd -P "$(dirname "$self")" && pwd)/$target" ;;
+  esac
+done
+script_dir="$(cd -P "$(dirname "$self")" && pwd)"
+
+# <repo>/skills/lean-proof-check/scripts/leanai  ->  <repo>
+default_root="$(cd -P "$script_dir/../../.." && pwd)"
+ROOT="${LEANAI_ROOT:-$default_root}"
+
+if [ ! -d "$ROOT/leanai" ]; then
+  cat >&2 <<EOF
+lean-ai verifier not found at: $ROOT
+
+This skill expects to live inside the verifier repository (as skills/lean-proof-check), or to
+be symlinked from it. Reinstall with the repository's install.sh, or set LEANAI_ROOT to the
+repository path.
+EOF
+  exit 2
+fi
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+
+run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m leanai.cli "$@"); }
+
+case "$cmd" in
+  check)
+    claim=""
+    file=""
+    extra=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -f|--file) file="$2"; shift 2 ;;
+        -*)        extra+=("$1"); shift ;;
+        *)         if [ -z "$claim" ]; then claim="$1"; else extra+=("$1"); fi; shift ;;
+      esac
+    done
+
+    if [ -n "$file" ]; then
+      src_arg="$file"
+    else
+      # Read the proof from stdin into a temp file so the CLI can report line numbers.
+      tmp="$(mktemp -t leanai-XXXXXX.lean)"
+      trap 'rm -f "$tmp"' EXIT
+      cat > "$tmp"
+      if [ ! -s "$tmp" ]; then
+        echo "no Lean source on stdin; pipe a proof or pass -f FILE" >&2
+        exit 2
+      fi
+      src_arg="$tmp"
+    fi
+
+    if [ -n "$claim" ]; then
+      run verify "$src_arg" -c "$claim" "${extra[@]+"${extra[@]}"}"
+    else
+      run verify "$src_arg" "${extra[@]+"${extra[@]}"}"
+    fi
+    ;;
+
+  statement|search|goal|log|doctor|verify)
+    run "$cmd" "$@"
+    ;;
+
+  ""|-h|--help|help)
+    sed -n '3,11p' "$self" | sed 's/^# \{0,1\}//'
+    ;;
+
+  *)
+    echo "unknown command: $cmd (try: check, statement, search, goal, log, doctor)" >&2
+    exit 2
+    ;;
+esac

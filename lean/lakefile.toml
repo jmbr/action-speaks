@@ -1,0 +1,11 @@
+name = "lean-ai"
+version = "0.1.0"
+defaultTargets = ["LeanAI"]
+
+[[lean_lib]]
+name = "LeanAI"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.33.0"
