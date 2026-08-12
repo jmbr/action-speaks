@@ -4,7 +4,7 @@
 one per process, keep it for the lifetime of the run, and call `verify` as often as you like:
 the Mathlib import is paid once per pooled session, not once per call.
 
-    from leanai import Harness
+    from nullius import Harness
 
     with Harness(pool_size=4) as h:
         v = h.verify("theorem t (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
@@ -186,7 +186,7 @@ def verify_once(source: str, claim: str | None = None, **kwargs: Any) -> Verdict
     """One-shot convenience for scripts. Starts and tears down a session, so it pays the
     Mathlib import every call - use `Harness` for anything repeated.
 
-    Named `verify_once` rather than `verify` so that it does not shadow the `leanai.verify`
+    Named `verify_once` rather than `verify` so that it does not shadow the `nullius.verify`
     module when re-exported from the package.
     """
     with Harness(pool_size=1, **{k: kwargs.pop(k) for k in ("config", "log") if k in kwargs}) as h:

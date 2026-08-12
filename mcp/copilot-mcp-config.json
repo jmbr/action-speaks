@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "leanai": {
+    "nullius": {
       "type": "local",
       "command": "python3",
-      "args": ["-m", "leanai.mcp_server"],
-      "cwd": "__LEANAI_ROOT__",
+      "args": ["-m", "nullius.mcp_server"],
+      "cwd": "__NULLIUS_ROOT__",
       "env": {
-        "PYTHONPATH": "__LEANAI_ROOT__",
+        "PYTHONPATH": "__NULLIUS_ROOT__",
         "PYTHONUNBUFFERED": "1"
       },
       "tools": ["*"]

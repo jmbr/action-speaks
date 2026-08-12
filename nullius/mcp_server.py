@@ -31,7 +31,7 @@ from .repl import ReplError, Session
 from .verify import Verifier
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "leanai", "version": "0.1.0"}
+SERVER_INFO = {"name": "nullius", "version": "0.1.0"}
 
 # Reentrant: `session()` holds this lock while calling `config()`, which takes it again.
 _state_lock = threading.RLock()

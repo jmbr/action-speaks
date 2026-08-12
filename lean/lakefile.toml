@@ -1,9 +1,9 @@
-name = "lean-ai"
+name = "nullius"
 version = "0.1.0"
-defaultTargets = ["LeanAI"]
+defaultTargets = ["Nullius"]
 
 [[lean_lib]]
-name = "LeanAI"
+name = "Nullius"
 
 [[require]]
 name = "mathlib"

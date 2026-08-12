@@ -1,11 +1,11 @@
 """Command-line interface.
 
-    leanai doctor                     check the installation
-    leanai verify FILE                verify a Lean file (or - for stdin)
-    leanai statement 'STMT'           elaborate a statement without proving it
-    leanai search QUERY               find Mathlib lemmas
-    leanai goal 'GOAL' -b '(n : Nat)' ask Lean what closes a goal
-    leanai log                        show recent verifications
+    nullius doctor                     check the installation
+    nullius verify FILE                verify a Lean file (or - for stdin)
+    nullius statement 'STMT'           elaborate a statement without proving it
+    nullius search QUERY               find Mathlib lemmas
+    nullius goal 'GOAL' -b '(n : Nat)' ask Lean what closes a goal
+    nullius log                        show recent verifications
 """
 
 from __future__ import annotations
@@ -168,7 +168,7 @@ def cmd_log(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="leanai", description=__doc__,
+    p = argparse.ArgumentParser(prog="nullius", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
 

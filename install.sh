@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the lean-ai skill and MCP server into the agent harnesses on this machine.
+# Install the nullius skill and MCP server into the agent harnesses on this machine.
 #
 #   ./install.sh              install skill + MCP config
 #   ./install.sh --skill      skill only
@@ -52,7 +52,7 @@ install_skill() {
     return 1
   fi
   act "ln -sfn '$SKILL_SRC' '$SKILL_DST'"
-  act "chmod +x '$SKILL_SRC/scripts/leanai'"
+  act "chmod +x '$SKILL_SRC/scripts/nullius'"
   say "  ok (pi and Copilot both read ~/.agents/skills)"
 }
 
@@ -75,7 +75,7 @@ import json, os, shutil, sys
 
 template_path, dst_path, root, dry = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
 
-entry = json.loads(open(template_path).read().replace("__LEANAI_ROOT__", root))["mcpServers"]["leanai"]
+entry = json.loads(open(template_path).read().replace("__NULLIUS_ROOT__", root))["mcpServers"]["nullius"]
 
 existing = {}
 if os.path.exists(dst_path):
@@ -86,14 +86,14 @@ if os.path.exists(dst_path):
         sys.exit(1)
 
 servers = existing.setdefault("mcpServers", {})
-if servers.get("leanai") == entry:
+if servers.get("nullius") == entry:
     print("  ok (already configured)")
     sys.exit(0)
 
-action = "updating" if "leanai" in servers else "adding"
-servers["leanai"] = entry
-others = [k for k in servers if k != "leanai"]
-print(f"  {action} `leanai`" + (f", preserving: {', '.join(others)}" if others else ""))
+action = "updating" if "nullius" in servers else "adding"
+servers["nullius"] = entry
+others = [k for k in servers if k != "nullius"]
+print(f"  {action} `nullius`" + (f", preserving: {', '.join(others)}" if others else ""))
 
 if dry:
     print("  would write:", dst_path)
@@ -118,10 +118,10 @@ remove_mcp() {
 import json, sys
 dst, dry = sys.argv[1], sys.argv[2] == "1"
 cfg = json.load(open(dst))
-if cfg.get("mcpServers", {}).pop("leanai", None) is None:
-    print("  mcp: `leanai` not present")
+if cfg.get("mcpServers", {}).pop("nullius", None) is None:
+    print("  mcp: `nullius` not present")
     sys.exit(0)
-print("  removing `leanai` from", dst)
+print("  removing `nullius` from", dst)
 if not dry:
     with open(dst, "w") as f:
         json.dump(cfg, f, indent=2); f.write("\n")
@@ -147,6 +147,6 @@ fi
 
 if [ "$dry" -eq 0 ]; then
   say ""
-  say "Next: ./skills/lean-proof-check/scripts/leanai doctor"
+  say "Next: ./skills/lean-proof-check/scripts/nullius doctor"
   say "      (checks Lean, Mathlib and that the verifier discriminates correctly)"
 fi

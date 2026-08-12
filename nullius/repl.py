@@ -24,9 +24,9 @@ from typing import Any
 
 from .config import Config
 
-PRELUDE = "import Mathlib\nimport LeanAI.Audit"
+PRELUDE = "import Mathlib\nimport Nullius.Audit"
 
-AUDIT_MARKER = "LEANAI_AUDIT "
+AUDIT_MARKER = "NULLIUS_AUDIT "
 
 
 class ReplError(RuntimeError):
@@ -76,7 +76,7 @@ class ReplResponse:
         return not self.errors
 
     def audit_records(self) -> list[dict[str, Any]]:
-        """Decode the `LEANAI_AUDIT {json}` messages emitted by `LeanAI.Audit`."""
+        """Decode the `NULLIUS_AUDIT {json}` messages emitted by `Nullius.Audit`."""
         out: list[dict[str, Any]] = []
         for text in self.infos:
             for line in text.splitlines():

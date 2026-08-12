@@ -32,7 +32,7 @@ from .repl import ReplError, Session
 
 LOOGLE_URL = "https://loogle.lean-lang.org/json"
 LEANSEARCH_URL = "https://leansearch.net/search"
-USER_AGENT = "leanai-verifier/0.1 (+local research tool)"
+USER_AGENT = "nullius-verifier/0.1 (+local research tool)"
 
 
 @dataclass

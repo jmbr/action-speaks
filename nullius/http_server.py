@@ -1,6 +1,6 @@
 """HTTP service, for harnesses that are not written in Python.
 
-    python3 -m leanai.http_server --port 823 --pool 4
+    python3 -m nullius.http_server --port 823 --pool 4
 
 Endpoints (all JSON):
 
@@ -32,7 +32,7 @@ MAX_BODY = 4 * 1024 * 1024
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "leanai/0.1"
+    server_version = "nullius/0.1"
 
     def log_message(self, fmt: str, *args: Any) -> None:  # quieter default logging
         if self.server.verbose:  # type: ignore[attr-defined]
@@ -150,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main(argv: list[str] | None = None) -> int:
     global _harness
-    p = argparse.ArgumentParser(prog="leanai.http_server", description=__doc__,
+    p = argparse.ArgumentParser(prog="nullius.http_server", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=823)
@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     server.verbose = args.verbose  # type: ignore[attr-defined]
     prov = _harness.provenance()
     print(
-        f"leanai listening on http://{args.host}:{args.port}  "
+        f"nullius listening on http://{args.host}:{args.port}  "
         f"({prov['toolchain']}, mathlib {prov['mathlib_rev'][:12]})",
         flush=True,
     )

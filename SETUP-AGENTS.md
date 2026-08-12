@@ -46,7 +46,7 @@ single symlink serves both.
 skills/lean-proof-check/
 ├── SKILL.md               # frontmatter + workflow (only the description is always loaded)
 ├── references/GUIDE.md    # failure catalogue, worked examples (loaded on demand)
-└── scripts/leanai         # wrapper; resolves the repo through the symlink, runs from any cwd
+└── scripts/nullius         # wrapper; resolves the repo through the symlink, runs from any cwd
 ```
 
 Only the `description` sits in the system prompt, which is why it enumerates concrete triggers
@@ -64,7 +64,7 @@ pi --print "/skill:lean-proof-check"
 Claude Code and Codex read their own directories:
 
 ```bash
-ln -s ~/sources/lean-ai/skills/lean-proof-check ~/.claude/skills/lean-proof-check
+ln -s ~/sources/nullius/skills/lean-proof-check ~/.claude/skills/lean-proof-check
 ```
 
 Or point pi's settings at them: `{ "skills": ["~/.claude/skills", "~/.codex/skills"] }`.
@@ -76,12 +76,12 @@ Or point pi's settings at them: `{ "skills": ["~/.claude/skills", "~/.codex/skil
 ```json
 {
   "mcpServers": {
-    "leanai": {
+    "nullius": {
       "type": "local",
       "command": "python3",
-      "args": ["-m", "leanai.mcp_server"],
-      "cwd": "/path/to/lean-ai",
-      "env": {"PYTHONPATH": "/path/to/lean-ai", "PYTHONUNBUFFERED": "1"},
+      "args": ["-m", "nullius.mcp_server"],
+      "cwd": "/path/to/nullius",
+      "env": {"PYTHONPATH": "/path/to/nullius", "PYTHONUNBUFFERED": "1"},
       "tools": ["*"]
     }
   }
@@ -96,8 +96,8 @@ Mathlib import and the rest are milliseconds — a real advantage over the skill
 which starts a fresh session per invocation.
 
 **pi deliberately has no MCP support** ("It intentionally does not include built-in MCP,
-sub-agents, permission popups..."). Under pi the skill's `scripts/leanai` wrapper is the
-transport. For heavy pi use, write a pi extension wrapping `leanai.Harness` to keep sessions
+sub-agents, permission popups..."). Under pi the skill's `scripts/nullius` wrapper is the
+transport. For heavy pi use, write a pi extension wrapping `nullius.Harness` to keep sessions
 warm.
 
 ## Verified working
@@ -105,7 +105,7 @@ warm.
 Copilot MCP, spawned exactly as configured, from an unrelated cwd:
 
 ```
-initialize: {'name': 'leanai', 'version': '0.1.0'} 2024-11-05
+initialize: {'name': 'nullius', 'version': '0.1.0'} 2024-11-05
 tools: ['lean_verify', 'lean_check_statement', 'lean_search_lemma', 'lean_find_proof', 'lean_ledger']
 verify -> VERIFIED: t | ∀ (n : ℕ), 5 < n → 25 < n * n
 preflight -> CONTRADICTORY
@@ -126,5 +126,5 @@ own work is checkable against a record it does not write.
 
 - **Copilot:** both. MCP for speed, skill for judgement about when to verify.
 - **pi:** skill only.
-- **Batch / CI / RL:** neither — import `leanai.Harness` directly and keep a warm pool. See
+- **Batch / CI / RL:** neither — import `nullius.Harness` directly and keep a warm pool. See
   `INTEGRATION.md`.

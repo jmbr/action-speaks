@@ -1,9 +1,9 @@
 ---
 name: lean-proof-check
 description: Verify a mathematical claim by proving it in Lean 4 with Mathlib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, or algorithm correctness. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib lemma name instead of guessing.
-compatibility: Requires the lean-ai verifier (Lean 4.33.0 + Mathlib, ~8GB built) installed via its install.sh. Linux/macOS with python3.
+compatibility: Requires the nullius verifier (Lean 4.33.0 + Mathlib, ~8GB built) installed via its install.sh. Linux/macOS with python3.
 metadata:
-  repository: lean-ai
+  repository: nullius
 ---
 
 # Backing mathematical claims with Lean
@@ -35,11 +35,11 @@ You will need it to check that the Lean statement actually says the same thing.
 ### 2. Check the statement before proving it
 
 ```bash
-~/.agents/skills/lean-proof-check/scripts/leanai statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+~/.agents/skills/lean-proof-check/scripts/nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
 ```
 
 (That path is a symlink into the verifier repository, so it works from any directory. The
-examples below shorten it to `scripts/leanai`.)
+examples below shorten it to `scripts/nullius`.)
 
 This elaborates without proving. It reports whether the statement type-checks, shows what
 Lean understood, and warns if the hypotheses are **contradictory** — in which case stop and
@@ -50,9 +50,9 @@ restate, because any proof would be vacuous.
 Invented lemma names are the most common cause of failed proofs.
 
 ```bash
-scripts/leanai search 'sum of two even numbers is even'        # by meaning
-scripts/leanai search '|- Irrational (Real.sqrt _)'            # by shape (Loogle)
-scripts/leanai goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean directly
+scripts/nullius search 'sum of two even numbers is even'        # by meaning
+scripts/nullius search '|- Irrational (Real.sqrt _)'            # by shape (Loogle)
+scripts/nullius goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean directly
 ```
 
 `goal` cannot hallucinate: it only reports lemmas that genuinely close the goal.
@@ -60,7 +60,7 @@ scripts/leanai goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean dire
 ### 4. Verify the proof
 
 ```bash
-scripts/leanai check "if n > 5 then n squared exceeds 25" <<'EOF'
+scripts/nullius check "if n > 5 then n squared exceeds 25" <<'EOF'
 theorem main (n : ℕ) (h : 5 < n) : 25 < n * n := by nlinarith
 EOF
 ```

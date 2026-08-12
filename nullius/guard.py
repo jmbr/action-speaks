@@ -1,12 +1,12 @@
 """Static guard: refuse dangerous source before Lean ever sees it.
 
-The axiom audit in `LeanAI.Audit` is the authoritative soundness check, and it defeats
+The axiom audit in `Nullius.Audit` is the authoritative soundness check, and it defeats
 almost everything — but it has two blind spots that only a source-level check can cover:
 
 * `set_option debug.skipKernelTC true` disables the kernel type-check that gives
   `#print axioms` its meaning. A proof admitted this way can have a clean axiom footprint
   and still be garbage.
-* Redefining the audit commands themselves (or `LeanAI.Audit.trustedAxioms`) would let the
+* Redefining the audit commands themselves (or `Nullius.Audit.trustedAxioms`) would let the
   submission forge its own verdict, since the audit output is just an info message.
 
 Everything here is a *refusal*, never a rewrite: we do not attempt to sanitise submitted
@@ -91,12 +91,12 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "audit_tampering",
         _rx(r"\b(?:trustedAxioms|elabAuditAxioms|elabAuditVacuity|elabAuditTriviality|"
-            r"elabAuditShape|probeTactics|LEANAI_AUDIT)\b"),
+            r"elabAuditShape|probeTactics|NULLIUS_AUDIT)\b"),
         "touches the audit machinery, which would let the submission forge its own verdict",
     ),
     Rule(
         "namespace_hijack",
-        _rx(r"^\s*(?:namespace|open)\s+LeanAI\b"),
+        _rx(r"^\s*(?:namespace|open)\s+Nullius\b"),
         "reopens the audit namespace",
     ),
     Rule(

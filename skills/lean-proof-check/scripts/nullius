@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Thin wrapper around the lean-ai verifier, callable from any working directory.
+# Thin wrapper around the nullius verifier, callable from any working directory.
 #
-#   leanai check "informal claim" < proof.lean      verify (stdin or -f FILE)
-#   leanai statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
-#   leanai search 'sum of two even numbers is even'
-#   leanai goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
-#   leanai log
-#   leanai doctor
+#   nullius check "informal claim" < proof.lean      verify (stdin or -f FILE)
+#   nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+#   nullius search 'sum of two even numbers is even'
+#   nullius goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
+#   nullius log
+#   nullius doctor
 #
 # Exit status for `check` is 0 when verified, 1 otherwise, so it composes with && / ||.
 
@@ -24,16 +24,16 @@ while [ -L "$self" ]; do
 done
 script_dir="$(cd -P "$(dirname "$self")" && pwd)"
 
-# <repo>/skills/lean-proof-check/scripts/leanai  ->  <repo>
+# <repo>/skills/lean-proof-check/scripts/nullius  ->  <repo>
 default_root="$(cd -P "$script_dir/../../.." && pwd)"
-ROOT="${LEANAI_ROOT:-$default_root}"
+ROOT="${NULLIUS_ROOT:-$default_root}"
 
-if [ ! -d "$ROOT/leanai" ]; then
+if [ ! -d "$ROOT/nullius" ]; then
   cat >&2 <<EOF
-lean-ai verifier not found at: $ROOT
+nullius verifier not found at: $ROOT
 
 This skill expects to live inside the verifier repository (as skills/lean-proof-check), or to
-be symlinked from it. Reinstall with the repository's install.sh, or set LEANAI_ROOT to the
+be symlinked from it. Reinstall with the repository's install.sh, or set NULLIUS_ROOT to the
 repository path.
 EOF
   exit 2
@@ -42,7 +42,7 @@ fi
 cmd="${1:-}"
 [ $# -gt 0 ] && shift
 
-run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m leanai.cli "$@"); }
+run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m nullius.cli "$@"); }
 
 case "$cmd" in
   check)
@@ -61,7 +61,7 @@ case "$cmd" in
       src_arg="$file"
     else
       # Read the proof from stdin into a temp file so the CLI can report line numbers.
-      tmp="$(mktemp -t leanai-XXXXXX.lean)"
+      tmp="$(mktemp -t nullius-XXXXXX.lean)"
       trap 'rm -f "$tmp"' EXIT
       cat > "$tmp"
       if [ ! -s "$tmp" ]; then

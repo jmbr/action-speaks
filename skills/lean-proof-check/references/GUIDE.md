@@ -56,11 +56,11 @@ or state it over `ℤ`/`ℝ`.
 Three routes, in increasing order of reliability and cost:
 
 ```bash
-scripts/leanai search 'every continuous function on a compact set attains its maximum'
-scripts/leanai search '|- Continuous (fun _ => _)'          # Loogle pattern
-scripts/leanai search 'Real.sqrt, |- _ ≤ _'                 # Loogle conjunction
-scripts/leanai goal 'Irrational (Real.sqrt 2)'              # ask Lean; authoritative
-scripts/leanai goal '0 ≤ x^2' -b '(x : ℝ)'
+scripts/nullius search 'every continuous function on a compact set attains its maximum'
+scripts/nullius search '|- Continuous (fun _ => _)'          # Loogle pattern
+scripts/nullius search 'Real.sqrt, |- _ ≤ _'                 # Loogle conjunction
+scripts/nullius goal 'Irrational (Real.sqrt 2)'              # ask Lean; authoritative
+scripts/nullius goal '0 ≤ x^2' -b '(x : ℝ)'
 ```
 
 Loogle patterns: `?a` is a named wildcard, `_` an anonymous one, `|-` restricts the match to
@@ -74,10 +74,10 @@ closes the goal — it cannot invent a name. When search and `goal` disagree, tr
 Claim: *the arithmetic mean of two nonnegative reals is at least their geometric mean.*
 
 ```bash
-scripts/leanai statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
+scripts/nullius statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
 # → ∀ (a b : ℝ), 0 ≤ a → 0 ≤ b → √(a * b) ≤ (a + b) / 2 ; hypotheses satisfiable
 
-scripts/leanai check "AM-GM for two nonnegative reals" <<'EOF'
+scripts/nullius check "AM-GM for two nonnegative reals" <<'EOF'
 theorem am_gm_two (a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) :
     Real.sqrt (a * b) ≤ (a + b) / 2 := by
   rw [show a * b = ((a+b)/2)^2 - ((a-b)/2)^2 by ring]
@@ -96,7 +96,7 @@ Then report: *"Machine-checked in Lean 4 / Mathlib: `∀ (a b : ℝ), 0 ≤ a �
 To refute something, prove its negation — equally checkable:
 
 ```bash
-scripts/leanai check "not every continuous function is differentiable" <<'EOF'
+scripts/nullius check "not every continuous function is differentiable" <<'EOF'
 theorem not_all_cont_diff : ¬ (∀ f : ℝ → ℝ, Continuous f → Differentiable ℝ f) := by
   intro h
   have : Differentiable ℝ (fun x : ℝ => |x|) := h _ continuous_abs
@@ -113,8 +113,8 @@ Each CLI invocation starts its own Lean session (~2.5 s to import Mathlib). For 
 handful of checks, drive the Python API, which keeps sessions warm:
 
 ```python
-import sys; sys.path.insert(0, "<verifier repo>")   # the directory containing leanai/
-from leanai import Harness
+import sys; sys.path.insert(0, "<verifier repo>")   # the directory containing nullius/
+from nullius import Harness
 
 with Harness(pool_size=4).warm() as h:
     verdicts = h.verify_many([{"source": s, "claim": c} for s, c in items])
@@ -126,14 +126,14 @@ feeds each failure back to the model. See `INTEGRATION.md` in the verifier repo.
 ## Setup and diagnosis
 
 ```bash
-scripts/leanai doctor    # provenance, startup time, three sanity checks
-scripts/leanai log       # what has been verified so far
+scripts/nullius doctor    # provenance, startup time, three sanity checks
+scripts/nullius log       # what has been verified so far
 ```
 
 `doctor` should end with "verifier is discriminating correctly", meaning it accepted a
 genuine proof and rejected both a `sorry` and a vacuous theorem. If it fails, the verifier
 needs rebuilding — see `README.md` in the verifier repo. The wrapper finds the repository by
-resolving its own symlink; set `LEANAI_ROOT` to override.
+resolving its own symlink; set `NULLIUS_ROOT` to override.
 
 ## Provenance
 

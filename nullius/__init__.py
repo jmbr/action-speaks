@@ -1,8 +1,8 @@
-"""lean-ai: machine-checked backing for an agent's mathematical claims.
+"""nullius: machine-checked backing for an agent's mathematical claims.
 
 Typical use from a harness:
 
-    from leanai import Harness
+    from nullius import Harness
 
     with Harness(pool_size=4).warm() as h:
         v = h.verify(source, claim="...")

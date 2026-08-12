@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from leanai import Harness  # noqa: E402
+from nullius import Harness  # noqa: E402
 
 CLAIM = "for every natural n, n - 1 is less than n"
 

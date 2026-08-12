@@ -13,14 +13,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from leanai import guard as G  # noqa: E402
-from leanai import verify as V  # noqa: E402
-from leanai.repl import Session  # noqa: E402
+from nullius import guard as G  # noqa: E402
+from nullius import verify as V  # noqa: E402
+from nullius.repl import Session  # noqa: E402
 
-# The audit machinery emits `LEANAI_AUDIT {...}`; inside a Lean interpolated string the
+# The audit machinery emits `NULLIUS_AUDIT {...}`; inside a Lean interpolated string the
 # opening brace must be escaped as `\{`, hence the awkward literal below.
 FORGED = (
-    r'logInfo m!"LEANAI_AUDIT \{\"check\":\"axioms\",\"decl\":\"t\",\"axioms\":[],'
+    r'logInfo m!"NULLIUS_AUDIT \{\"check\":\"axioms\",\"decl\":\"t\",\"axioms\":[],'
     r'\"untrusted\":[],\"uses_sorry\":false,\"trusted\":true}"'
 )
 
@@ -58,9 +58,9 @@ def fakeElab2 : CommandElab := fun _ => do
     (
         "trusted_axioms_shadow",
         # Try to widen the trusted set the audit compares against.
-        """namespace LeanAI.Audit
+        """namespace Nullius.Audit
 def trustedAxioms : List Lean.Name := [`propext, `Classical.choice, `Quot.sound, `evil]
-end LeanAI.Audit
+end Nullius.Audit
 axiom evil : False
 theorem t : 2 + 2 = 5 := absurd evil (by simp)
 """,

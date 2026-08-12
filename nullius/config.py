@@ -28,23 +28,23 @@ class Config:
 
     @classmethod
     def discover(cls) -> "Config":
-        root = Path(os.environ.get("LEANAI_ROOT", ROOT))
-        lean_dir = Path(os.environ.get("LEANAI_LEAN_DIR", root / "lean"))
-        repl_bin = Path(os.environ["LEANAI_REPL_BIN"]) if "LEANAI_REPL_BIN" in os.environ \
+        root = Path(os.environ.get("NULLIUS_ROOT", ROOT))
+        lean_dir = Path(os.environ.get("NULLIUS_LEAN_DIR", root / "lean"))
+        repl_bin = Path(os.environ["NULLIUS_REPL_BIN"]) if "NULLIUS_REPL_BIN" in os.environ \
             else cls._find_repl(root, lean_dir)
-        lake = os.environ.get("LEANAI_LAKE_BIN") or shutil.which("lake")
+        lake = os.environ.get("NULLIUS_LAKE_BIN") or shutil.which("lake")
         if not lake:
             raise ConfigError("`lake` not found on PATH; is elan installed?")
-        ledger = Path(os.environ.get("LEANAI_LEDGER", root / "ledger.sqlite3"))
+        ledger = Path(os.environ.get("NULLIUS_LEDGER", root / "ledger.sqlite3"))
         return cls(
             lean_dir=lean_dir,
             repl_bin=repl_bin,
             lake_bin=Path(lake),
             ledger_path=ledger,
-            command_timeout=float(os.environ.get("LEANAI_COMMAND_TIMEOUT", 120.0)),
-            startup_timeout=float(os.environ.get("LEANAI_STARTUP_TIMEOUT", 300.0)),
-            lean_threads=int(os.environ.get("LEANAI_LEAN_THREADS", 4)),
-            pool_size=int(os.environ.get("LEANAI_POOL_SIZE", 2)),
+            command_timeout=float(os.environ.get("NULLIUS_COMMAND_TIMEOUT", 120.0)),
+            startup_timeout=float(os.environ.get("NULLIUS_STARTUP_TIMEOUT", 300.0)),
+            lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", 4)),
+            pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", 2)),
         )
 
     @staticmethod

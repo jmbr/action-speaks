@@ -1,4 +1,4 @@
-# Using lean-ai from a harness
+# Using nullius from a harness
 
 Four integration paths, in rough order of how tightly coupled they are.
 
@@ -15,7 +15,7 @@ pays that once and then answers in milliseconds. Do not shell out to the CLI in 
 ## 1. Python
 
 ```python
-from leanai import Harness
+from nullius import Harness
 
 with Harness(pool_size=4).warm() as h:
     v = h.verify(
@@ -95,7 +95,7 @@ emitting easy-but-empty theorems. Keep `require_nontrivial=True` when the score 
 ## 2. HTTP
 
 ```bash
-python3 -m leanai.http_server --port 823 --pool 4
+python3 -m nullius.http_server --port 823 --pool 4
 ```
 
 ```bash
@@ -121,9 +121,9 @@ arbitrary elaboration in Lean, so keep it off untrusted networks.
 ## 3. MCP
 
 ```json
-{"mcpServers": {"leanai": {
-  "command": "python3", "args": ["-m", "leanai.mcp_server"],
-  "cwd": "/home/jmbr/sources/lean-ai"}}}
+{"mcpServers": {"nullius": {
+  "command": "python3", "args": ["-m", "nullius.mcp_server"],
+  "cwd": "/home/jmbr/sources/nullius"}}}
 ```
 
 Tools: `lean_verify`, `lean_check_statement`, `lean_search_lemma`, `lean_find_proof`,
@@ -133,8 +133,8 @@ rejection rules.
 ## 4. CLI
 
 ```bash
-python3 -m leanai.cli verify proof.lean -c "claim" --json --require-nontrivial
-echo "$SRC" | python3 -m leanai.cli verify - --json
+python3 -m nullius.cli verify proof.lean -c "claim" --json --require-nontrivial
+echo "$SRC" | python3 -m nullius.cli verify - --json
 ```
 
 Exit code is 0 when verified, 1 otherwise, so it drops into CI directly. Each invocation
@@ -149,7 +149,7 @@ starts its own Lean session.
   cannot leave definitions behind for the next. This is a soundness property, not just
   hygiene.
 - **Timeouts.** A wedged Lean process cannot be interrupted politely; on timeout the session
-  is killed and replaced. Set `LEANAI_COMMAND_TIMEOUT` (default 120 s).
+  is killed and replaced. Set `NULLIUS_COMMAND_TIMEOUT` (default 120 s).
 - **Ledger.** Every verdict is appended to `ledger.sqlite3` with the toolchain and Mathlib
   revision. Pass `log=False` to `Harness` for throwaway runs; keep it on when the verdicts
   are evidence you may need to defend later.
@@ -158,13 +158,13 @@ starts its own Lean session.
 
 | Variable | Default |
 |---|---|
-| `LEANAI_LEAN_DIR` | `<repo>/lean` |
-| `LEANAI_REPL_BIN` | `<repo>/repl/.lake/build/bin/repl` |
-| `LEANAI_LEDGER` | `<repo>/ledger.sqlite3` |
-| `LEANAI_POOL_SIZE` | 2 |
-| `LEANAI_COMMAND_TIMEOUT` | 120 |
-| `LEANAI_STARTUP_TIMEOUT` | 300 |
-| `LEANAI_LEAN_THREADS` | 4 |
+| `NULLIUS_LEAN_DIR` | `<repo>/lean` |
+| `NULLIUS_REPL_BIN` | `<repo>/repl/.lake/build/bin/repl` |
+| `NULLIUS_LEDGER` | `<repo>/ledger.sqlite3` |
+| `NULLIUS_POOL_SIZE` | 2 |
+| `NULLIUS_COMMAND_TIMEOUT` | 120 |
+| `NULLIUS_STARTUP_TIMEOUT` | 300 |
+| `NULLIUS_LEAN_THREADS` | 4 |
 
 ## What you still have to do yourself
 

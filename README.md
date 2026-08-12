@@ -1,7 +1,11 @@
-# lean-ai — making an agent back up its claims
+# nullius — making an agent back up its claims
 
 A verification harness that lets an LLM agent prove its mathematical assertions in Lean 4 +
 Mathlib, and that refuses to accept the proof unless it is actually worth something.
+
+*Nullius in verba* — "on the word of no one" — is the Royal Society's motto, adopted as a
+commitment to settle questions by evidence rather than by authority. An agent's word is
+exactly the kind of authority it refers to.
 
 ## The problem this solves
 
@@ -55,19 +59,19 @@ Anything outside `{propext, Classical.choice, Quot.sound}` is disqualifying.
 ## Layout
 
 ```
-lean/LeanAI/Audit.lean   the audit commands (#audit_axioms, #audit_replay, #audit_vacuity,
+lean/Nullius/Audit.lean   the audit commands (#audit_axioms, #audit_replay, #audit_vacuity,
                          #audit_triviality, #audit_shape), pinned to Lean v4.33.0
 lean/lakefile.toml       pins Mathlib and the Lean REPL; lake-manifest.json locks both
-leanai/config.py         locates the project, records toolchain + Mathlib + REPL revisions
-leanai/repl.py           persistent REPL session and pool
-leanai/guard.py          static ban-list, applied before Lean sees the source
-leanai/verify.py         the pipeline and the Verdict type
-leanai/ledger.py         append-only SQLite record of every verdict
-leanai/search.py         Loogle, LeanSearch, and local exact?/apply?
-leanai/cli.py            command-line interface
-leanai/harness.py        pooled, thread-safe entry point for programmatic use
-leanai/http_server.py    HTTP service for non-Python harnesses
-leanai/mcp_server.py     MCP server (stdio, standard library only)
+nullius/config.py         locates the project, records toolchain + Mathlib + REPL revisions
+nullius/repl.py           persistent REPL session and pool
+nullius/guard.py          static ban-list, applied before Lean sees the source
+nullius/verify.py         the pipeline and the Verdict type
+nullius/ledger.py         append-only SQLite record of every verdict
+nullius/search.py         Loogle, LeanSearch, and local exact?/apply?
+nullius/cli.py            command-line interface
+nullius/harness.py        pooled, thread-safe entry point for programmatic use
+nullius/http_server.py    HTTP service for non-Python harnesses
+nullius/mcp_server.py     MCP server (stdio, standard library only)
 skills/lean-proof-check/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 install.sh               symlinks the skill and merges the MCP entry into place
@@ -174,7 +178,7 @@ See **[SETUP-AGENTS.md](SETUP-AGENTS.md)** to enable this in pi or Copilot,
 MCP, CLI), and **[AGENTS.md](AGENTS.md)** for the contract handed to the agent.
 
 ```python
-from leanai import Harness
+from nullius import Harness
 
 with Harness(pool_size=4).warm() as h:
     v = h.verify("theorem t (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
@@ -183,14 +187,14 @@ with Harness(pool_size=4).warm() as h:
 ```
 
 ```bash
-python3 -m leanai.cli doctor                      # check the installation
-python3 -m leanai.cli verify proof.lean -c "..."  # verify a file
-python3 -m leanai.cli statement '(n : Nat) (h : 5 < n) : 25 < n * n'
-python3 -m leanai.cli search 'sum of two even numbers is even'
-python3 -m leanai.cli goal '25 < n * n' -b '(n : Nat) (h : 5 < n)'
-python3 -m leanai.cli log --stats
+python3 -m nullius.cli doctor                      # check the installation
+python3 -m nullius.cli verify proof.lean -c "..."  # verify a file
+python3 -m nullius.cli statement '(n : Nat) (h : 5 < n) : 25 < n * n'
+python3 -m nullius.cli search 'sum of two even numbers is even'
+python3 -m nullius.cli goal '25 < n * n' -b '(n : Nat) (h : 5 < n)'
+python3 -m nullius.cli log --stats
 
-python3 -m leanai.http_server --port 823 --pool 4  # HTTP service
+python3 -m nullius.http_server --port 823 --pool 4  # HTTP service
 ```
 
 ### As an MCP server
@@ -198,10 +202,10 @@ python3 -m leanai.http_server --port 823 --pool 4  # HTTP service
 ```json
 {
   "mcpServers": {
-    "leanai": {
+    "nullius": {
       "command": "python3",
-      "args": ["-m", "leanai.mcp_server"],
-      "cwd": "/home/jmbr/sources/lean-ai"
+      "args": ["-m", "nullius.mcp_server"],
+      "cwd": "/home/jmbr/sources/nullius"
     }
   }
 }
@@ -233,7 +237,7 @@ submission from leaving definitions behind for the next to exploit.
 - **Statement faithfulness is not automated.** Nothing here can confirm that the Lean
   statement means what the English claim meant. The verdict shows the elaborated statement
   precisely so a human (or a second agent) can compare. This is the residual trust.
-- **The trusted computing base** is Lean's kernel, Mathlib, and `LeanAI/Audit.lean`.
+- **The trusted computing base** is Lean's kernel, Mathlib, and `Nullius/Audit.lean`.
 - **Remote search backends** (Loogle, LeanSearch) are external services; `lean_find_proof`
   works offline and is authoritative.
 
@@ -252,7 +256,7 @@ mathlib     db584cd6d46c92f209a44c0f1c829460d327499d
 ```bash
 cd lean && lake exe cache get && lake build     # Mathlib (~3.6 GB cached) + the audit module
 lake build repl                                 # the REPL, pinned by lake-manifest.json
-cd .. && python3 -m leanai.cli doctor
+cd .. && python3 -m nullius.cli doctor
 python3 tests/test_adversarial.py
 ./install.sh                                    # enable the skill and MCP server
 ```

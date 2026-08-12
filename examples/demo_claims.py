@@ -4,9 +4,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from leanai.repl import Session
-from leanai.verify import Verifier
-from leanai import search as S
+from nullius.repl import Session
+from nullius.verify import Verifier
+from nullius import search as S
 
 s = Session(); s.start(); vf = Verifier(s)
 print(f"session ready {s.startup_seconds:.2f}s\n")
