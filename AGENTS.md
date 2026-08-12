@@ -19,7 +19,7 @@ write any Lean. You will need it to check that the formal statement matches.
 **2. Check the statement before proving it.**
 
 ```
-lean_check_statement { "statement": "(n : Nat) (h : 5 < n) : 25 < n * n" }
+statement { "statement": "(n : Nat) (h : 5 < n) : 25 < n * n" }
 ```
 
 This elaborates the statement without a proof. It tells you whether it type-checks, shows you
@@ -30,18 +30,18 @@ with contradictory hypotheses is vacuously true and supports nothing.
 **3. Find the lemmas you need. Do not guess names.**
 
 ```
-lean_search_lemma { "query": "sum of two even numbers is even" }       # by meaning
-lean_search_lemma { "query": "|- Irrational (Real.sqrt _)", "backend": "loogle" }  # by shape
-lean_find_proof   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }     # ask Lean
+search { "query": "sum of two even numbers is even" }       # by meaning
+search { "query": "|- Irrational (Real.sqrt _)", "backend": "loogle" }  # by shape
+close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }     # ask Lean
 ```
 
 Inventing a plausible-sounding lemma name is the single most common reason proofs fail.
-`lean_find_proof` cannot hallucinate: it reports only lemmas that genuinely close the goal.
+`close` cannot hallucinate: it reports only lemmas that genuinely close the goal.
 
 **4. Verify the proof.**
 
 ```
-lean_verify {
+verify {
   "source": "theorem main (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
   "claim":  "If n is greater than 5 then n squared exceeds 25"
 }
@@ -59,8 +59,8 @@ anything else, do not present the claim as proved.
   (`sorryAx`) and `@[pseudo]` (`Lean.ofReduceBool`). Citing one is not an error you will see
   in the proof — the audit catches it as an untrusted axiom, and the verdict is a rejection.
   If that happens, the physics result you leaned on is not actually proved yet.
-- `lean_search_lemma` indexes Mathlib only, so Physlib lemmas will not appear in its results.
-  `lean_find_proof` runs in the real environment and does see them.
+- `search` indexes Mathlib only, so Physlib lemmas will not appear in its results.
+  `close` runs in the real environment and does see them.
 - Put helper lemmas first and the claim you care about **last**; that last theorem is what
   gets audited by default.
 - Prefer `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,

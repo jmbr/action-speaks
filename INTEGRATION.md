@@ -127,8 +127,8 @@ arbitrary elaboration in Lean, so keep it off untrusted networks.
   "cwd": "/home/jmbr/sources/nullius"}}}
 ```
 
-Tools: `lean_verify`, `lean_check_statement`, `lean_search_lemma`, `lean_find_proof`,
-`lean_ledger`. Put `AGENTS.md` in the system prompt so the agent knows the workflow and the
+Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
+subcommands. Put `AGENTS.md` in the system prompt so the agent knows the workflow and the
 rejection rules.
 
 ## 4. CLI

@@ -59,8 +59,8 @@ Three routes, in increasing order of reliability and cost:
 scripts/nullius search 'every continuous function on a compact set attains its maximum'
 scripts/nullius search '|- Continuous (fun _ => _)'          # Loogle pattern
 scripts/nullius search 'Real.sqrt, |- _ ≤ _'                 # Loogle conjunction
-scripts/nullius goal 'Irrational (Real.sqrt 2)'              # ask Lean; authoritative
-scripts/nullius goal '0 ≤ x^2' -b '(x : ℝ)'
+scripts/nullius close 'Irrational (Real.sqrt 2)'              # ask Lean; authoritative
+scripts/nullius close '0 ≤ x^2' -b '(x : ℝ)'
 ```
 
 Loogle patterns: `?a` is a named wildcard, `_` an anonymous one, `|-` restricts the match to

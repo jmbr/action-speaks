@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # Thin wrapper around the nullius verifier, callable from any working directory.
 #
-#   nullius check "informal claim" < proof.lean      verify (stdin or -f FILE)
+#   nullius verify "informal claim" < proof.lean     check a proof (stdin or -f FILE)
 #   nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
 #   nullius search 'sum of two even numbers is even'
-#   nullius goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
+#   nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
 #   nullius log
 #   nullius doctor
 #
-# Exit status for `check` is 0 when verified, 1 otherwise, so it composes with && / ||.
+# `check` is accepted as an alias for `verify`. These names are also the MCP tool names, so
+# the same workflow applies whether you are at a shell or driving this from an agent.
+#
+# Exit status for `verify` is 0 when verified, 1 otherwise, so it composes with && / ||.
 
 set -uo pipefail
 
@@ -45,7 +48,7 @@ cmd="${1:-}"
 run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m nullius.cli "$@"); }
 
 case "$cmd" in
-  check)
+  check|verify)
     claim=""
     file=""
     extra=()
@@ -78,16 +81,16 @@ case "$cmd" in
     fi
     ;;
 
-  statement|search|goal|log|doctor|verify)
+  statement|search|close|log|doctor)
     run "$cmd" "$@"
     ;;
 
   ""|-h|--help|help)
-    sed -n '3,11p' "$self" | sed 's/^# \{0,1\}//'
+    sed -n '3,13p' "$self" | sed 's/^# \{0,1\}//'
     ;;
 
   *)
-    echo "unknown command: $cmd (try: check, statement, search, goal, log, doctor)" >&2
+    echo "unknown command: $cmd (try: verify, statement, search, close, log, doctor)" >&2
     exit 2
     ;;
 esac

@@ -11,23 +11,23 @@ must return; blocks marked `rejected` are there because failing usefully is half
 
 ## Two interfaces, same verifier
 
-The shell commands in this document (`nullius check`, `nullius goal`, …) are the CLI. Inside
-an agent — Copilot, pi, Claude Code — the same operations arrive as MCP tools instead, and
-the shell commands are not available there. They correspond one to one:
+This document uses shell commands (`nullius verify`, `nullius close`, …). Inside an agent —
+Copilot, pi, Claude Code — the same operations arrive as MCP tools, where the shell is not
+available. **The names are identical**, so every recipe here transfers directly:
 
-| Task | CLI | MCP tool |
+| Operation | CLI | MCP tool |
 |---|---|---|
-| Verify a proof | `nullius check "claim" < f.lean` | `lean_verify` |
-| Elaborate a statement, test for vacuity | `nullius statement '(n : ℕ) …'` | `lean_check_statement` |
-| Find a lemma by meaning or shape | `nullius search '…'` | `lean_search_lemma` |
-| Ask Lean to close a goal | `nullius goal '…' -b '…'` | `lean_find_proof` |
-| Look up past verdicts | `nullius log` | `lean_ledger` |
+| Check a proof | `nullius verify` | `verify` |
+| Elaborate a statement, test for vacuity | `nullius statement` | `statement` |
+| Find a lemma by meaning or shape | `nullius search` | `search` |
+| Find what closes a goal | `nullius close` | `close` |
+| Look up past verdicts | `nullius log` | `log` |
 
-The flags map to arguments of the same name: `--require-nontrivial` is `require_nontrivial`,
+Flags map to arguments of the same name: `--require-nontrivial` is `require_nontrivial`,
 `--tag` is `tag`, `-t` is `target`, `-c` is `claim`, `-b` is `binders`. So
 
 ```bash
-nullius check "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
+nullius verify "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
 ```
 
 is, from an agent:
@@ -37,8 +37,9 @@ is, from an agent:
  "tag": "paper-draft", "require_nontrivial": true}
 ```
 
-Both write to the same ledger, so a result checked from the shell is visible to the agent and
-the other way round.
+(`nullius check` is accepted as an alias for `verify`, for muscle memory.) Both interfaces
+write to the same ledger, so a result checked from the shell is visible to the agent and the
+other way round.
 
 ## The shape of a useful check
 
@@ -85,7 +86,7 @@ is also precisely how one fakes a result. Two rules keep it defensible:
 
 ## Pattern: check a hypothesis set before building on it
 
-The cheapest useful call is `lean_check_statement` (`nullius statement`) on a lemma you are
+The cheapest useful call is `statement` (`nullius statement`) on a lemma you are
 *about* to assume. It elaborates without proving and reports whether the hypotheses are
 contradictory. Applied work stacks conditions — a decay rate, a step-size restriction, a
 parameter range — and it is easy to write down a set that is quietly empty. A theorem with
@@ -185,17 +186,18 @@ theorem euler_growth_guessed (h L : ℝ) (n : ℕ) (hh : 0 ≤ h) (hL : 0 ≤ L)
         rw [← Real.exp_nat_mul]; ring_nf
 ```
 
-The fix is to ask instead of guess — `nullius goal`, or `lean_find_proof` from an agent:
+The fix is to ask instead of guess — `close`, at the shell or from an agent:
 
 ```
-nullius goal 'a ^ n ≤ b ^ n' -b '(a b : ℝ) (n : ℕ) (ha : 0 ≤ a) (hab : a ≤ b)'
+nullius close 'a ^ n ≤ b ^ n' -b '(a b : ℝ) (n : ℕ) (ha : 0 ≤ a) (hab : a ≤ b)'
 ```
 
 which answers `exact pow_le_pow_left₀ ha hab n` — the `₀` suffix being exactly the kind of
-detail nobody recalls correctly. `goal` / `lean_find_proof` cannot hallucinate: it reports
-only lemmas that actually close the goal. `search` / `lean_search_lemma` is the complement,
-by meaning or by shape, and is worth using even if you never formalise anything, to answer
-"does Mathlib already have my bound, and what is it called?"
+detail nobody recalls correctly. `close` runs in the real environment, so it cannot
+hallucinate: it reports only lemmas that genuinely close the goal. `search` is the
+complement — by meaning or by shape, against remote indexes — and is worth using even if you
+never formalise anything, to answer "does Mathlib already have my bound, and what is it
+called?" Search may return a name that does not exist; `close` cannot.
 
 ## Pattern: make unused hypotheses fatal
 
@@ -236,8 +238,8 @@ nullius check "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivia
 nullius log --tag paper-draft
 ```
 
-From an agent, the same two steps are `lean_verify` with `tag: "paper-draft"` and
-`lean_ledger` with `tag: "paper-draft"`.
+From an agent, the same two steps are `verify` with `tag: "paper-draft"` and
+`log` with `tag: "paper-draft"`.
 
 The ledger keeps rejections as well as successes, so the history of a claim — including a
 step that stopped verifying after a dependency bump — stays visible.

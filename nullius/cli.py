@@ -1,11 +1,14 @@
 """Command-line interface.
 
-    nullius doctor                     check the installation
-    nullius verify FILE                verify a Lean file (or - for stdin)
-    nullius statement 'STMT'           elaborate a statement without proving it
-    nullius search QUERY               find Mathlib lemmas
-    nullius goal 'GOAL' -b '(n : Nat)' ask Lean what closes a goal
-    nullius log                        show recent verifications
+    nullius doctor                      check the installation
+    nullius verify FILE                 verify a Lean file (or - for stdin)
+    nullius statement 'STMT'            elaborate a statement without proving it
+    nullius search QUERY                find Mathlib lemmas
+    nullius close 'GOAL' -b '(n : Nat)' ask Lean which lemma closes a goal
+    nullius log                         show recent verifications
+
+Subcommand names match the MCP tool names exactly, so a workflow written against one
+interface transfers unchanged to the other.
 """
 
 from __future__ import annotations
@@ -133,7 +136,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_goal(args: argparse.Namespace) -> int:
+def cmd_close(args: argparse.Namespace) -> int:
     cfg = Config.discover()
     s = _session(cfg)
     res = S.local_search(
@@ -202,12 +205,12 @@ def build_parser() -> argparse.ArgumentParser:
     se.add_argument("--json", action="store_true")
     se.set_defaults(func=cmd_search)
 
-    g = sub.add_parser("goal", help="ask Lean what closes a goal")
+    g = sub.add_parser("close", help="ask Lean which lemma or tactic closes a goal")
     g.add_argument("goal")
     g.add_argument("-b", "--binders", default="", help="e.g. '(n : Nat) (h : 0 < n)'")
     g.add_argument("--tactics", default="exact?,apply?")
     g.add_argument("--json", action="store_true")
-    g.set_defaults(func=cmd_goal)
+    g.set_defaults(func=cmd_close)
 
     lg = sub.add_parser("log", help="show recent verifications")
     lg.add_argument("-n", "--limit", type=int, default=20)

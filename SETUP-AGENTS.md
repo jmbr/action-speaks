@@ -88,8 +88,8 @@ Or point pi's settings at them: `{ "skills": ["~/.claude/skills", "~/.codex/skil
 }
 ```
 
-Tools: `lean_verify`, `lean_check_statement`, `lean_search_lemma`, `lean_find_proof`,
-`lean_ledger`. Restart Copilot after installing.
+Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
+subcommands. Restart Copilot after installing.
 
 The server keeps one warm Lean session per process, so the first call pays ~2.5 s for the
 Mathlib import and the rest are milliseconds — a real advantage over the skill's shell path,
@@ -106,7 +106,7 @@ Copilot MCP, spawned exactly as configured, from an unrelated cwd:
 
 ```
 initialize: {'name': 'nullius', 'version': '0.1.0'} 2024-11-05
-tools: ['lean_verify', 'lean_check_statement', 'lean_search_lemma', 'lean_find_proof', 'lean_ledger']
+tools: ['verify', 'statement', 'search', 'close', 'log']
 verify -> VERIFIED: t | ∀ (n : ℕ), 5 < n → 25 < n * n
 preflight -> CONTRADICTORY
 ```

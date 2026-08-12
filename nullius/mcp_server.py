@@ -5,12 +5,15 @@ can be dropped into any MCP-capable client without installing a framework.
 
 Tools offered, in the order an agent normally needs them:
 
-  lean_search_lemma    find the Mathlib lemma you need (by meaning or by shape)
-  lean_find_proof      ask Lean what closes a specific goal
-  lean_check_statement elaborate a statement *before* proving it, and find out whether its
-                       hypotheses are contradictory (in which case any proof is worthless)
-  lean_verify          the main event: check a proof and return a verdict
-  lean_ledger          look up past verdicts
+  search     find the Mathlib lemma you need (by meaning or by shape)
+  close      ask Lean which lemma or tactic closes a specific goal
+  statement  elaborate a statement *before* proving it, and find out whether its hypotheses
+             are contradictory (in which case any proof is worthless)
+  verify     the main event: check a proof and return a verdict
+  log        look up past verdicts
+
+The names match the CLI subcommands exactly, so `nullius search` and the `search` tool are
+the same operation, and a workflow written for one transfers to the other.
 
 Design note: the server keeps one warm Lean session per process. The first call pays the
 Mathlib import (a few seconds); everything after that is milliseconds.
@@ -73,7 +76,7 @@ def verifier() -> Verifier:
 
 TOOLS: list[dict[str, Any]] = [
     {
-        "name": "lean_verify",
+        "name": "verify",
         "description": (
             "Verify a Lean 4 + Mathlib proof and return a trustworthy verdict. Use this "
             "whenever you assert a mathematical fact you want to be believed. The proof is "
@@ -117,7 +120,7 @@ TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Optional label recorded with this verdict, so a group of related "
-                        "checks can be retrieved later with `lean_ledger`. Useful for "
+                        "checks can be retrieved later with `log`. Useful for "
                         "collecting every result belonging to one paper or project."
                     ),
                 },
@@ -126,7 +129,7 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "lean_check_statement",
+        "name": "statement",
         "description": (
             "Elaborate a Lean statement WITHOUT proving it, to confirm it type-checks and "
             "says what you intend. Also reports whether its hypotheses are contradictory. "
@@ -148,7 +151,7 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "lean_search_lemma",
+        "name": "search",
         "description": (
             "Search Mathlib for a lemma. Two backends: 'leansearch' takes natural language "
             "('sum of two even numbers is even'); 'loogle' takes a shape ('|- Irrational "
@@ -171,11 +174,14 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "lean_find_proof",
+        "name": "close",
         "description": (
-            "Ask Lean itself what closes a goal, using `exact?`/`apply?`. Slower than "
-            "searching, but authoritative: anything it returns genuinely applies to the "
-            "goal, so it cannot hallucinate a lemma name."
+            "Find a lemma or single tactic that closes a Lean goal, by running "
+            "`exact?`/`apply?` in the real environment. Slower than `search`, but "
+            "authoritative: anything it returns genuinely closes the goal, so unlike a "
+            "name-based search it cannot hallucinate. Use it whenever you would otherwise "
+            "guess a lemma name. It finishes a goal in one step; it is not a general "
+            "prover, so decompose a hard goal first."
         ),
         "inputSchema": {
             "type": "object",
@@ -196,7 +202,7 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "lean_ledger",
+        "name": "log",
         "description": "List past verification results recorded by this verifier.",
         "inputSchema": {
             "type": "object",
@@ -205,7 +211,7 @@ TOOLS: list[dict[str, Any]] = [
                 "status": {"type": "string", "enum": ["verified", "rejected", "error"]},
                 "tag": {
                     "type": "string",
-                    "description": "Only entries recorded with this tag by `lean_verify`.",
+                    "description": "Only entries recorded with this tag by `verify`.",
                 },
                 "stats": {"type": "boolean", "default": False},
             },
@@ -214,7 +220,7 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def tool_lean_verify(args: dict[str, Any]) -> str:
+def tool_verify(args: dict[str, Any]) -> str:
     source = args.get("source", "")
     if not source.strip():
         return "error: `source` is empty"
@@ -239,7 +245,7 @@ def tool_lean_verify(args: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
-def tool_lean_check_statement(args: dict[str, Any]) -> str:
+def tool_statement(args: dict[str, Any]) -> str:
     res = verifier().check_statement(args.get("statement", ""))
     if not res.get("ok"):
         return (
@@ -260,7 +266,7 @@ def tool_lean_check_statement(args: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def tool_lean_search_lemma(args: dict[str, Any]) -> str:
+def tool_search(args: dict[str, Any]) -> str:
     query = args.get("query", "")
     backend = args.get("backend", "both")
     limit = int(args.get("limit", 8))
@@ -272,7 +278,7 @@ def tool_lean_search_lemma(args: dict[str, Any]) -> str:
     return "\n\n".join(out) or "no results"
 
 
-def tool_lean_find_proof(args: dict[str, Any]) -> str:
+def tool_close(args: dict[str, Any]) -> str:
     tactics = tuple(args.get("tactics") or ("exact?", "apply?"))
     res = S.local_search(
         session(), args.get("goal", ""), tactics=tactics, binders=args.get("binders", "")
@@ -280,7 +286,7 @@ def tool_lean_find_proof(args: dict[str, Any]) -> str:
     return res.render()
 
 
-def tool_lean_ledger(args: dict[str, Any]) -> str:
+def tool_log(args: dict[str, Any]) -> str:
     lg = ledger()
     if args.get("stats"):
         return json.dumps(lg.stats(), indent=2)
@@ -302,11 +308,11 @@ def tool_lean_ledger(args: dict[str, Any]) -> str:
 
 
 HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
-    "lean_verify": tool_lean_verify,
-    "lean_check_statement": tool_lean_check_statement,
-    "lean_search_lemma": tool_lean_search_lemma,
-    "lean_find_proof": tool_lean_find_proof,
-    "lean_ledger": tool_lean_ledger,
+    "verify": tool_verify,
+    "statement": tool_statement,
+    "search": tool_search,
+    "close": tool_close,
+    "log": tool_log,
 }
 
 

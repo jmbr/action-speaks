@@ -215,8 +215,8 @@ python3 -m nullius.http_server --port 823 --pool 4  # HTTP service
 }
 ```
 
-Tools: `lean_verify`, `lean_check_statement`, `lean_search_lemma`, `lean_find_proof`,
-`lean_ledger`. Point the agent at `AGENTS.md` for the workflow it should follow.
+Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
+subcommands. Point the agent at `AGENTS.md` for the workflow it should follow.
 
 ## Performance
 
@@ -252,7 +252,7 @@ submission from leaving definitions behind for the next to exploit.
 - **The toolchain is pinned by Physlib, not by us.** Physlib tracks Mathlib about one release
   behind, so the whole graph sits at whatever it supports (currently v4.32.0). Bump both pins
   in `lean/lakefile.toml` together, or not at all; a mismatch fails to resolve.
-- **Remote search backends** (Loogle, LeanSearch) are external services; `lean_find_proof`
+- **Remote search backends** (Loogle, LeanSearch) are external services; `close`
   works offline and is authoritative.
 
 ## Reproducing a verdict

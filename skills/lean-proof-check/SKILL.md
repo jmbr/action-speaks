@@ -52,7 +52,7 @@ Invented lemma names are the most common cause of failed proofs.
 ```bash
 scripts/nullius search 'sum of two even numbers is even'        # by meaning
 scripts/nullius search '|- Irrational (Real.sqrt _)'            # by shape (Loogle)
-scripts/nullius goal '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean directly
+scripts/nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean directly
 ```
 
 `goal` cannot hallucinate: it only reports lemmas that genuinely close the goal.

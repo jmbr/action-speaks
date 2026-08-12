@@ -149,7 +149,7 @@ class Verdict:
             elif c.name == "elaboration":
                 advice.append(
                     "The proof does not compile. Fix the errors below. If a tactic failed, "
-                    "try `lean_find_proof` on the failing goal instead of guessing a lemma "
+                    "try `close` on the failing goal instead of guessing a lemma "
                     f"name.\n{_indent(self.lean_messages, 2)}"
                 )
             elif c.name == "no_sorry":
