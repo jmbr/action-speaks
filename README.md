@@ -86,10 +86,10 @@ tests/test_search.py     local shape search reaches Mathlib and Physlib
 tests/test_entrypoints.py  entry points work from an agent's stripped environment
 tests/check_names.py     catches renamed tools and superseded revisions in prose
 .pre-commit-config.yaml  runs all five before a commit lands (via prek)
-AGENTS.md                the contract handed to the agent
-COOKBOOK.md              worked patterns for applied mathematics
-INTEGRATION.md           how to drive this from a harness
-SETUP-AGENTS.md          enabling it in pi / Copilot (skill + MCP)
+AGENTS.md                the contract handed to the agent; harnesses read it from the root
+docs/COOKBOOK.md         worked patterns for applied mathematics
+docs/INTEGRATION.md      how to drive this from a harness
+docs/SETUP-AGENTS.md     enabling it in pi / Copilot (skill + MCP)
 ```
 
 The Lean REPL is a pinned `require` in `lean/lakefile.toml`, so `lake build` fetches it, locks
@@ -184,10 +184,10 @@ checks, and pays for it with the guard and the tripwire.
 
 ## Usage
 
-See **[SETUP-AGENTS.md](SETUP-AGENTS.md)** to enable this in pi or Copilot,
-**[INTEGRATION.md](INTEGRATION.md)** for driving it from a harness (Python API, HTTP service,
+See **[SETUP-AGENTS.md](docs/SETUP-AGENTS.md)** to enable this in pi or Copilot,
+**[INTEGRATION.md](docs/INTEGRATION.md)** for driving it from a harness (Python API, HTTP service,
 MCP, CLI), and **[AGENTS.md](AGENTS.md)** for the contract handed to the agent.
-**[COOKBOOK.md](COOKBOOK.md)** works through what to check in applied mathematics, and what
+**[COOKBOOK.md](docs/COOKBOOK.md)** works through what to check in applied mathematics, and what
 not to bother with; every example in it is re-run by `tests/test_docs.py`.
 
 ```python

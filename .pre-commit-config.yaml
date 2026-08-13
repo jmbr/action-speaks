@@ -39,7 +39,7 @@ repos:
         language: system
         pass_filenames: false
         files: >-
-          ^(COOKBOOK\.md
+          ^(docs/COOKBOOK\.md
           |skills/nullius/(SKILL\.md|references/GUIDE\.md)
           |nullius/.*\.py
           |lean/.*\.lean

@@ -142,7 +142,7 @@ with Harness(pool_size=4).warm() as h:
 ```
 
 A warm pool verifies in 10–200 ms per claim, and `h.prove(propose)` runs a repair loop that
-feeds each failure back to the model. See `INTEGRATION.md` in the verifier repo.
+feeds each failure back to the model. See `docs/INTEGRATION.md` in the verifier repo.
 
 ## Setup and diagnosis
 

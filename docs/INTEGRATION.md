@@ -13,7 +13,7 @@ The Mathlib and Physlib imports cost ~2.6 s per Lean session. Everything below e
 pays that once and then answers in milliseconds. Do not shell out to the CLI in a loop.
 
 All four paths need the package installed from a checkout, which is one line and pulls in
-nothing — see [Setup from scratch](README.md#setup-from-scratch):
+nothing — see [Setup from scratch](../README.md#setup-from-scratch):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e .

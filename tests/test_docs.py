@@ -30,7 +30,7 @@ from nullius.repl import Session  # noqa: E402
 from nullius.verify import Verifier  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-COOKBOOK = ROOT / "COOKBOOK.md"
+COOKBOOK = ROOT / "docs" / "COOKBOOK.md"
 HEREDOC_DOCS = [
     ROOT / "skills" / "nullius" / "SKILL.md",
     ROOT / "skills" / "nullius" / "references" / "GUIDE.md",
