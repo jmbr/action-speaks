@@ -81,8 +81,9 @@ install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
 tests/test_docs.py       re-runs every Lean example in the documentation
 tests/test_search.py     local shape search reaches Mathlib and Physlib
+tests/test_entrypoints.py  entry points work from an agent's stripped environment
 tests/check_names.py     catches renamed tools and superseded revisions in prose
-.pre-commit-config.yaml  runs all four before a commit lands (via prek)
+.pre-commit-config.yaml  runs all five before a commit lands (via prek)
 AGENTS.md                the contract handed to the agent
 COOKBOOK.md              worked patterns for applied mathematics
 INTEGRATION.md           how to drive this from a harness
@@ -298,8 +299,12 @@ right Lean version by itself, driven by `lean/lean-toolchain`.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e .   # the driver; no dependencies
-source .venv/bin/activate                             # or call .venv/bin/nullius directly
 ```
+
+You never have to activate that virtualenv. `./install.sh` below symlinks the console script
+into `~/.local/bin`, and wires the skill and the MCP server to the interpreter inside it by
+absolute path — so `nullius` works from any shell, and an agent that launches the server with
+a stripped environment gets a working verifier rather than an import error.
 
 An editable install from a checkout is the supported arrangement, and the only one that
 works: this package is a driver for a Lean project of several gigabytes that has to be built
@@ -326,8 +331,8 @@ cd .. && ./scripts/build-loogle.sh   # shape search, offline (~15 s)
 ### Check it, and enable it
 
 ```bash
-nullius doctor              # or .venv/bin/nullius doctor
-./install.sh                # enable the skill and MCP server in your agents
+./install.sh                # `nullius` on PATH, plus the skill and MCP server
+nullius doctor              # before install.sh: .venv/bin/nullius doctor
 ```
 
 `doctor` verifies a genuine proof, a `sorry` proof and a vacuous one, so it fails loudly if

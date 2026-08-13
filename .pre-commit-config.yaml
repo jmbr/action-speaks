@@ -72,3 +72,18 @@ repos:
           |lean/lakefile\.toml
           |scripts/build-loogle\.sh
           |tests/test_search\.py)$
+
+      # The entry points must work from an agent's stripped environment — no activated
+      # virtualenv, no PATH to lake. That failure is invisible when testing by hand.
+      - id: nullius-entrypoints
+        name: entry points work without an activated virtualenv
+        entry: python3 tests/test_entrypoints.py
+        language: system
+        pass_filenames: false
+        files: >-
+          ^(nullius/config\.py
+          |install\.sh
+          |pyproject\.toml
+          |mcp/copilot-mcp-config\.json
+          |skills/nullius/scripts/nullius
+          |tests/test_entrypoints\.py)$

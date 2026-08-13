@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Install the nullius skill and MCP server into the agent harnesses on this machine.
+# Install the nullius skill, CLI and MCP server into the agent harnesses on this machine.
 #
-#   ./install.sh              install skill + MCP config
+#   ./install.sh              install skill + CLI symlink + MCP config
 #   ./install.sh --skill      skill only
 #   ./install.sh --mcp        MCP config only
+#   ./install.sh --cli        `nullius` on PATH only
 #   ./install.sh --uninstall  remove what this script installed
 #   ./install.sh --dry-run    show what would change
+#
+# Everything is wired with absolute paths, so no virtualenv ever has to be activated: the
+# MCP server names the interpreter the package was installed into, the skill wrapper finds
+# it through its own symlink, and the CLI symlink points at a wrapper that hard-codes it.
 #
 # The skill is symlinked rather than copied, so editing it in the repository takes effect
 # immediately and there is only ever one copy to maintain.
@@ -17,19 +22,23 @@ SKILL_SRC="$ROOT/skills/nullius"
 SKILL_DST="$HOME/.agents/skills/nullius"
 MCP_TEMPLATE="$ROOT/mcp/copilot-mcp-config.json"
 MCP_DST="$HOME/.copilot/mcp-config.json"
+CLI_SRC="$ROOT/.venv/bin/nullius"
+CLI_DST="${NULLIUS_BIN_DIR:-$HOME/.local/bin}/nullius"
 
 do_skill=1
 do_mcp=1
+do_cli=1
 uninstall=0
 dry=0
 
 for arg in "$@"; do
   case "$arg" in
-    --skill)     do_mcp=0 ;;
-    --mcp)       do_skill=0 ;;
+    --skill)     do_mcp=0; do_cli=0 ;;
+    --mcp)       do_skill=0; do_cli=0 ;;
+    --cli)       do_skill=0; do_mcp=0 ;;
     --uninstall) uninstall=1 ;;
     --dry-run|-n) dry=1 ;;
-    -h|--help)   sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)           echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -74,6 +83,40 @@ uninstall_skill() {
     act "rm '$SKILL_DST'"
   else
     say "skill: nothing to remove at $SKILL_DST"
+  fi
+}
+
+# --- CLI on PATH ---------------------------------------------------------
+
+# The console script lives inside the virtualenv, which would otherwise have to be activated
+# before every `nullius` call. A symlink from a directory already on PATH removes that step;
+# the script is a generated wrapper that hard-codes the venv's interpreter, so it works
+# through the symlink without activation.
+install_cli() {
+  if [ ! -x "$CLI_SRC" ]; then
+    say "cli: no console script at $CLI_SRC"
+    say "     (create it with: python3 -m venv .venv && .venv/bin/pip install -e .)"
+    return 0
+  fi
+  say "cli: $CLI_DST -> $CLI_SRC"
+  if [ -e "$CLI_DST" ] && [ ! -L "$CLI_DST" ]; then
+    say "  ERROR: $CLI_DST exists and is not a symlink; leaving it alone."
+    return 1
+  fi
+  act "mkdir -p '$(dirname "$CLI_DST")'"
+  act "ln -sfn '$CLI_SRC' '$CLI_DST'"
+  case ":$PATH:" in
+    *":$(dirname "$CLI_DST"):"*) say "  ok ('nullius' is on PATH)" ;;
+    *) say "  ok, but $(dirname "$CLI_DST") is not on PATH; add it to use 'nullius' directly" ;;
+  esac
+}
+
+uninstall_cli() {
+  if [ -L "$CLI_DST" ]; then
+    say "removing cli symlink $CLI_DST"
+    act "rm '$CLI_DST'"
+  else
+    say "cli: nothing to remove at $CLI_DST"
   fi
 }
 
@@ -155,11 +198,13 @@ say "verifier root: $ROOT"
 
 if [ "$uninstall" -eq 1 ]; then
   [ "$do_skill" -eq 1 ] && uninstall_skill
+  [ "$do_cli" -eq 1 ] && uninstall_cli
   [ "$do_mcp" -eq 1 ] && remove_mcp
   exit 0
 fi
 
 [ "$do_skill" -eq 1 ] && install_skill
+[ "$do_cli" -eq 1 ] && install_cli
 if [ "$do_mcp" -eq 1 ]; then
   say "mcp: $MCP_DST"
   merge_mcp

@@ -55,9 +55,13 @@ class Config:
         lean_dir = Path(os.environ.get("NULLIUS_LEAN_DIR", root / "lean"))
         repl_bin = Path(os.environ["NULLIUS_REPL_BIN"]) if "NULLIUS_REPL_BIN" in os.environ \
             else cls._find_repl(root, lean_dir)
-        lake = os.environ.get("NULLIUS_LAKE_BIN") or shutil.which("lake")
+        lake = os.environ.get("NULLIUS_LAKE_BIN") or cls._find_lake()
         if not lake:
-            raise ConfigError("`lake` not found on PATH; is elan installed?")
+            raise ConfigError(
+                "`lake` not found. Install elan (https://github.com/leanprover/elan), or set "
+                "NULLIUS_LAKE_BIN to the binary. Note that agents often launch tools with a "
+                "minimal PATH that omits ~/.elan/bin."
+            )
         ledger = Path(os.environ.get("NULLIUS_LEDGER", root / "ledger.sqlite3"))
         return cls(
             lean_dir=lean_dir,
@@ -71,6 +75,27 @@ class Config:
             lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", 4)),
             pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", 2)),
         )
+
+    @staticmethod
+    def _find_lake() -> str | None:
+        """Locate `lake`, without insisting on a useful PATH.
+
+        Agents launch tools as subprocesses, sometimes with a stripped environment: an MCP
+        server started that way inherits neither the shell profile that puts `~/.elan/bin` on
+        PATH nor any virtualenv. Falling back to elan's standard location means the verifier
+        works when launched from an agent, a cron job or a bare `sh -c`, not only from an
+        interactive shell.
+        """
+        found = shutil.which("lake")
+        if found:
+            return found
+        for candidate in (
+            Path(os.environ.get("ELAN_HOME", Path.home() / ".elan")) / "bin" / "lake",
+            Path.home() / ".local" / "share" / "elan" / "bin" / "lake",
+        ):
+            if candidate.exists():
+                return str(candidate)
+        return None
 
     @staticmethod
     def _find_loogle(root: Path) -> Path | None:

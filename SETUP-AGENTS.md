@@ -3,17 +3,24 @@
 Everything needed lives in this repository:
 
 ```
-skills/nullius/     the skill (SKILL.md, references/, scripts/)
+skills/nullius/              the skill (SKILL.md, references/, scripts/)
 mcp/copilot-mcp-config.json  MCP server entry, with the repo path templated
-install.sh                   symlinks the skill and merges the MCP entry into place
+install.sh                   symlinks the skill and the CLI, merges the MCP entry
 ```
 
 ```bash
-./install.sh              # skill + MCP
+./install.sh              # skill + `nullius` on PATH + MCP
 ./install.sh --dry-run    # show what would change
 ./install.sh --skill      # skill only (e.g. for pi, which has no MCP)
+./install.sh --cli        # just put `nullius` on PATH
 ./install.sh --uninstall  # remove exactly what it installed
 ```
+
+Nothing here requires activating a virtualenv. Every path installed is absolute: the MCP
+entry names the interpreter the package was installed into, the skill wrapper resolves the
+repository through its own symlink, and `~/.local/bin/nullius` is a generated wrapper that
+hard-codes the interpreter. Agents commonly launch tools with a stripped environment — no
+profile, no PATH to `~/.elan/bin`, no virtualenv — and that case is tested.
 
 The skill is **symlinked, not copied**, so editing it here takes effect immediately and there
 is only ever one copy. The MCP entry is **merged** into any existing `mcp-config.json`
