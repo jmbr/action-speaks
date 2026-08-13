@@ -55,8 +55,38 @@ def cookbook_cases() -> list[Case]:
             raise SystemExit(f"{COOKBOOK.name}:{line}: lean block has no `-- expect:` line")
         if exp.group(1) not in VALID:
             raise SystemExit(f"{COOKBOOK.name}:{line}: unknown expectation {exp.group(1)!r}")
+        _check_narrative(text, m.end(), exp.group(1), line)
         out.append((COOKBOOK.name, line, exp.group(1), EXPECT.sub("", body).strip() + "\n"))
     return out
+
+
+def _check_narrative(text: str, block_end: int, expect: str, line: int) -> None:
+    """Reject prose that contradicts the verdict its block is checked against.
+
+    Written for a document that reads as a session: the Lean is checked, but the sentences
+    around it — the quoted verdicts, the interpretation — are not, and a reader believes
+    those just as readily. This does not verify the narrative, which would mean parsing
+    English; it only catches the one inconsistency that matters, where the text announces the
+    opposite of what the block is required to do.
+    """
+    # Only the prose interpreting *this* block: up to the next block or heading.
+    rest = text[block_end:]
+    stop = min(
+        (i for i in (rest.find("\n## "), rest.find("```lean")) if i != -1),
+        default=len(rest),
+    )
+    following = rest[:stop]
+    want_ok = expect.startswith("verified")
+    if want_ok and "**REJECTED" in following:
+        raise SystemExit(
+            f"{COOKBOOK.name}:{line}: block is expected to be {expect}, but the text after it "
+            "announces REJECTED"
+        )
+    if not want_ok and "**VERIFIED" in following:
+        raise SystemExit(
+            f"{COOKBOOK.name}:{line}: block is expected to be {expect}, but the text after it "
+            "announces VERIFIED"
+        )
 
 
 def heredoc_cases() -> list[Case]:

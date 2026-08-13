@@ -225,6 +225,62 @@ against Physlib it does real work.
 When it fires, the fix is not to your proof. The physics result you leaned on is not
 available yet; say so.
 
+## Pattern: let a computer algebra system find the certificate
+
+Some claims are easy to believe and horrible to derive. The two-link robot arm is the
+standard example: the distance from shoulder to hand depends only on the *elbow* angle,
+because everything involving the shoulder cancels. Physically obvious, and an afternoon of
+error-prone expansion by hand across eight quantities.
+
+`polyrith'` (see `contrib/polyrith-local/`) asks Singular for a certificate and turns it into
+a `linear_combination` that Lean checks. Written as a session:
+
+> **Confirm the squared reach of a two-link arm is `L1² + L2² + 2·L1·L2·cos(elbow)`,
+> independent of the shoulder angle.**
+>
+> Replacing the trigonometry with algebra — `c1, s1` for the shoulder's cosine and sine,
+> `c2, s2` for the elbow — makes it polynomial, so it can be checked exactly. Each
+> Pythagorean identity becomes an explicit hypothesis. First, is the setup consistent?
+>
+> `statement '(x y L1 L2 c1 s1 c2 s2 : ℚ) (hx : ...) (p1 : c1^2+s1^2 = 1) ... '`
+> → *elaborates; hypotheses satisfiable*
+>
+> Now ask for a proof rather than guess one: `polyrith'`
+>
+> → `linear_combination (L2*c2*c1 + x*c1^2 + ... ) * hx + ... `
+>
+> Each hypothesis is multiplied by a polynomial and the four sum to the claim. Note the
+> third coefficient has seven terms including an `x²` — there is no half-remembered identity
+> to reach for here. Checking it:
+
+```lean
+-- expect: verified-nontrivial
+/-- Two-link planar arm: the squared reach depends only on the elbow angle. -/
+theorem arm_reach (x y L1 L2 c1 s1 c2 s2 : ℚ)
+    (hx : x = L1*c1 + L2*(c1*c2 - s1*s2))
+    (hy : y = L1*s1 + L2*(s1*c2 + c1*s2))
+    (p1 : c1^2 + s1^2 = 1)
+    (p2 : c2^2 + s2^2 = 1) :
+    x^2 + y^2 = L1^2 + L2^2 + 2*L1*L2*c2 := by
+  linear_combination
+    (L2 * c2 * c1 + x * c1 ^ 2 + x * s1 ^ 2 - 1 * L2 * s1 * s2 + L1 * c1) * hx +
+          (L2 * c2 * s1 + L2 * c1 * s2 + L1 * s1 + y) * hy +
+        (x * L2 * c2 * c1 - 1 * x * L2 * s1 * s2 + 2 * L1 * L2 * c2 + x * L1 * c1 - 1 * x ^ 2
+          + L1 ^ 2 + L2 ^ 2) * p1 +
+      (L2 ^ 2 * c1 ^ 2 + L2 ^ 2 * s1 ^ 2) * p2
+```
+
+> **VERIFIED**, with `hypotheses_used` — so all four assumptions are load-bearing rather
+> than along for the ride. Two honest limits: this is exact arithmetic over `ℚ`, and a
+> controller will use floating point, which is a separate question; and `c1, s1` are only
+> *constrained* by the Pythagorean identity, not proved to be an angle's cosine and sine,
+> which is all this claim needs.
+
+The division of labour is the point. Singular is a large, fast, unverified program, and it is
+trusted with nothing: it proposes a certificate, and Lean re-derives the arithmetic itself. A
+mistake there produces a failed tactic, never a theorem. That is what lets a heavyweight
+algebra engine sit underneath a tool whose premise is taking nobody's word for anything.
+
 ## Pattern: do not guess lemma names
 
 Inventing a plausible-sounding name is the most common way an attempt dies. This is a real
