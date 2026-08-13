@@ -33,6 +33,7 @@ FORBIDDEN = {
     "lean-ai": "the project is called nullius",
     "lean-proof-check": "the skill is named after the project: `nullius`",
     "indexes Mathlib only": "shape search covers Physlib too when loogle is built locally",
+    "test_cookbook.py": "renamed to tests/test_docs.py, which also checks the skill docs",
 }
 
 # Where a documented revision is expected to match what lake actually pins.

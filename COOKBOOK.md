@@ -3,9 +3,10 @@
 Full formalisation of an applied paper is rarely worth the effort. The wins are narrower and
 much cheaper than that, and they cluster in a few places: the load-bearing inequality you
 derived by hand, the hypothesis set you never checked was non-empty, and the `ℕ` index
-expression that does not mean what it reads.
+expression that does not mean what it reads — and, if you work with Physlib, the physics
+result you built on that turns out to be a placeholder.
 
-Every Lean block below is verified on each run of `tests/test_cookbook.py`, against the
+Every Lean block below is verified on each run of `tests/test_docs.py`, against the
 toolchain and revisions this repository pins. The `-- expect:` line says what the verifier
 must return; blocks marked `rejected` are there because failing usefully is half the point.
 
@@ -168,6 +169,61 @@ theorem nat_halving_loses_a_point : ∃ n : ℕ, n / 2 + n / 2 ≠ n := ⟨3, by
 
 Worth internalising that this is a *theorem*, not a quirk. Use `ℝ` or `ℤ` unless you
 genuinely mean the truncating operation.
+
+## Pattern: physics, and the placeholder trap
+
+Physlib is imported alongside Mathlib, so a claim about a physical system is checkable the
+same way an inequality is. The workflow is the same too — find the library's own lemmas
+rather than restate them:
+
+```
+nullius search 'ClassicalMechanics.HarmonicOscillator.ω, |- _ = _'
+  → ω_sq : S.ω ^ 2 = S.k / S.m
+nullius search 'ClassicalMechanics.HarmonicOscillator.m, |- 0 < _'
+  → m_pos : 0 < self.m
+```
+
+That second query is the shape worth learning: *a declaration mentioning this quantity whose
+conclusion is a positivity*. It found the side condition the algebra needs, which is the part
+one forgets. With both in hand the proof is three lines:
+
+```lean
+-- expect: verified-nontrivial
+open ClassicalMechanics in
+/-- The stiffness of a harmonic oscillator is its mass times its angular frequency squared. -/
+theorem k_eq_m_mul_omega_sq (S : HarmonicOscillator) : S.k = S.m * S.ω ^ 2 := by
+  have hm : S.m ≠ 0 := ne_of_gt S.m_pos
+  rw [S.ω_sq]
+  field_simp
+```
+
+**Now the trap, which is specific to physics and has no analogue in Mathlib.** Physlib ships
+results that are deliberately unfinished — a statement with no proof behind it, marking work
+nobody has done yet, attributed `@[sorryful]` or `@[pseudo]`. Building on one looks *exactly*
+like building on a theorem:
+
+```lean
+-- expect: rejected
+theorem uses_placeholder :
+    ClassicalMechanics.CoplanarDoublePendulum.ConfigurationSpace =
+      ClassicalMechanics.CoplanarDoublePendulum.ConfigurationSpace := rfl
+```
+
+There is no `sorry` in that submission, the proof really is `rfl`, and nothing in the source
+looks wrong. It is caught only by asking what the theorem ultimately rests on:
+
+```
+[FAIL] trusted_axioms - untrusted: sorryAx
+  axioms: sorryAx
+```
+
+`sorryAx` is Lean's marker for "this rests on something nobody has proved". A placeholder
+cannot hide from that question, which is why the axiom footprint is checked rather than the
+text. Against Mathlib that check is near-ceremonial — Mathlib has no such placeholders — and
+against Physlib it does real work.
+
+When it fires, the fix is not to your proof. The physics result you leaned on is not
+available yet; say so.
 
 ## Pattern: do not guess lemma names
 
