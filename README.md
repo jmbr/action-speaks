@@ -69,6 +69,7 @@ nullius/verify.py         the pipeline and the Verdict type
 nullius/ledger.py         append-only SQLite record of every verdict
 nullius/search.py         Loogle (local or hosted), LeanSearch, and local exact?/apply?
 scripts/build-loogle.sh  builds Loogle against our toolchain, for offline shape search
+contrib/                 finished work that belongs elsewhere; not built, not maintained here
 lean/NulliusAll.lean     import-only root whose Loogle index covers Mathlib + Physlib
 nullius/cli.py            command-line interface
 nullius/harness.py        pooled, thread-safe entry point for programmatic use
