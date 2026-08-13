@@ -77,6 +77,7 @@ nullius/mcp_server.py     MCP server (stdio, standard library only)
 skills/nullius/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 pyproject.toml           packaging; `pip install -e .` gives the `nullius` command
+LICENSE                  Apache 2.0, matching Lean, Mathlib, Physlib and Loogle
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
 tests/test_docs.py       re-runs every Lean example in the documentation
@@ -365,3 +366,16 @@ superseded revisions on every commit (72 ms, no Lean), and the two Lean suites r
 something they cover actually changes — about 12 s for a commit that touches everything. Use
 `prek run --all-files` to check the whole tree, and `SKIP=nullius-docs git commit` to bypass
 a hook deliberately. `pre-commit` reads the same config if you prefer it to `prek`.
+
+## Licence and provenance
+
+Apache 2.0 — see [LICENSE](LICENSE). That matches every component this sits on: Lean 4,
+Mathlib, Physlib and Loogle are all Apache 2.0, so there is no licence seam anywhere in the
+dependency graph, and a result proved here can go upstream to Mathlib without relicensing.
+
+Much of this repository was written by coding agents working under human direction and
+review; the `Co-authored-by` trailers in the git history record which commits, and the
+session that produced them. Saying so is not a disclaimer, it is the same principle the tool
+applies to mathematics: a claim about provenance should be checkable rather than taken on
+trust. Judge the code by the audit it survives — `tests/test_adversarial.py` is the argument,
+not the authorship.
