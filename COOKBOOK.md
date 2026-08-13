@@ -16,13 +16,13 @@ This document uses shell commands (`nullius verify`, `nullius close`, …). Insi
 Copilot, pi, Claude Code — the same operations arrive as MCP tools, where the shell is not
 available. **The names are identical**, so every recipe here transfers directly:
 
-| Operation | CLI | MCP tool |
-|---|---|---|
-| Check a proof | `nullius verify` | `verify` |
+| Operation                               | CLI                 | MCP tool    |
+|-----------------------------------------|---------------------|-------------|
+| Check a proof                           | `nullius verify`    | `verify`    |
 | Elaborate a statement, test for vacuity | `nullius statement` | `statement` |
-| Find a lemma by meaning or shape | `nullius search` | `search` |
-| Find what closes a goal | `nullius close` | `close` |
-| Look up past verdicts | `nullius log` | `log` |
+| Find a lemma by meaning or shape        | `nullius search`    | `search`    |
+| Find what closes a goal                 | `nullius close`     | `close`     |
+| Look up past verdicts                   | `nullius log`       | `log`       |
 
 Flags map to arguments of the same name: `--require-nontrivial` is `require_nontrivial`,
 `--tag` is `tag`, `-t` is `target`, `-c` is `claim`, `-b` is `binders`. So

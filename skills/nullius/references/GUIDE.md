@@ -168,3 +168,8 @@ axioms: propext, Classical.choice, Quot.sound
 
 A proof that verifies against one Mathlib revision may not even elaborate against another,
 so the revision is part of the claim.
+
+Group related checks with `--tag`, and retrieve them with `nullius log --tag NAME`. The
+ledger keeps rejections as well as successes, so a claim's history stays visible — including
+a step that stopped verifying after a dependency changed, which is exactly what you want to
+find out about.

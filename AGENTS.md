@@ -53,9 +53,20 @@ so on, which is what distinguishes this `search` from any other tool of that nam
 ```
 verify {
   "source": "theorem main (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
-  "claim":  "If n is greater than 5 then n squared exceeds 25"
+  "claim":  "If n is greater than 5 then n squared exceeds 25",
+  "require_nontrivial": true
 }
 ```
+
+`require_nontrivial` rejects a proof whose hypotheses turn out to be unnecessary. Leave it on.
+It sounds like tidiness and is not: if a claim about a *free particle* holds without the
+hypothesis that the particle is free, you have stated something other than what you meant.
+It is the cheapest available warning for the trap described at the end of this document.
+
+Pass a `tag` to file related checks together — one paper, one investigation — and retrieve
+them later with `log { "tag": "..." }`. Rejections are kept as well as successes, so the
+history of a claim stays visible, including a step that stopped verifying after a dependency
+changed.
 
 **5. Report honestly.** If the verdict is `VERIFIED`, say the claim is machine-checked and
 state the **elaborated statement** from the result, not a looser paraphrase. If the verdict is
@@ -92,7 +103,7 @@ than admitting you cannot prove the claim:
 | `#exit` | hides everything after it |
 | redefining the audit commands | detected by a tripwire; treated as tampering |
 | contradictory hypotheses | vacuously true, supports no claim |
-| unused hypotheses | the statement is weaker than it looks (warning, or fatal on request) |
+| unused hypotheses | the statement is weaker than it looks (fatal under `require_nontrivial`) |
 
 ## The trap that matters most
 
@@ -110,3 +121,8 @@ Concretely, always read the elaborated statement in the result and ask:
 
 If the elaborated statement does not match your English claim, the verification is worthless
 no matter how green the verdict is. Fix the statement and verify again.
+
+One mechanical check helps here, though it cannot replace reading the statement: with
+`require_nontrivial` set, a proof is rejected when its hypotheses turn out to be unnecessary.
+A claim that does not need its own hypotheses is usually a claim about something other than
+what you meant, so this catches a useful share of the trap by a different route.
