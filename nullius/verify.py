@@ -166,9 +166,7 @@ class Verdict:
                     "checked, and put it last."
                 )
             elif c.name == "audit_integrity":
-                advice.append(
-                    "The submission interfered with the verifier. Submit a plain proof."
-                )
+                advice.append("The submission interfered with the verifier. Submit a plain proof.")
             elif c.name == "kernel_replay":
                 advice.append(
                     "Lean's kernel rejected declarations that the elaborator accepted, which "
@@ -201,9 +199,7 @@ class Verdict:
 
         if self.status == Status.ERROR:
             advice.append("The verifier itself failed; retry, or simplify the submission.")
-        return "NOT VERIFIED. Do not claim this is proved.\n" + "\n".join(
-            f"- {a}" for a in advice
-        )
+        return "NOT VERIFIED. Do not claim this is proved.\n" + "\n".join(f"- {a}" for a in advice)
 
 
 def _indent(text: str, n: int) -> str:
@@ -297,8 +293,9 @@ class Verifier:
             Check(
                 "no_sorry",
                 not sorry_warns and not resp.sorries,
-                "; ".join(sorry_warns) if sorry_warns else
-                (f"{len(resp.sorries)} open goal(s)" if resp.sorries else ""),
+                "; ".join(sorry_warns)
+                if sorry_warns
+                else (f"{len(resp.sorries)} open goal(s)" if resp.sorries else ""),
             )
         )
         v.warnings = [w for w in resp.warnings if w not in sorry_warns]
@@ -324,9 +321,7 @@ class Verifier:
         audit_resp, records, alias, canary = audits
 
         if audit_resp.errors:
-            v.checks.append(
-                Check("target_declared", False, "; ".join(audit_resp.errors)[:400])
-            )
+            v.checks.append(Check("target_declared", False, "; ".join(audit_resp.errors)[:400]))
             v.elapsed = time.time() - t0
             return v
         v.checks.append(Check("target_declared", True, f"`{target}`"))
@@ -368,8 +363,10 @@ class Verifier:
         # `sorryAx`; honest audit machinery must report it as untrusted. If it comes back
         # clean, the machinery has been subverted.
         canary_rec = by_decl.get(("axioms", canary))
-        canary_ok = bool(canary_rec) and not canary_rec.get("trusted", True) and bool(
-            canary_rec.get("uses_sorry")
+        canary_ok = (
+            bool(canary_rec)
+            and not canary_rec.get("trusted", True)
+            and bool(canary_rec.get("uses_sorry"))
         )
         v.checks.append(
             Check(

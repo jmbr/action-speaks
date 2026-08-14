@@ -28,8 +28,9 @@ dynamic = ["version"]
 dependencies = []
 
 [project.optional-dependencies]
-# `prek` runs the commit hooks in `.pre-commit-config.yaml`. Only contributors need it.
-dev = ["prek>=0.2"]
+# `prek` runs the commit hooks in `.pre-commit-config.yaml`; `nox` runs the wider sessions in
+# noxfile.py, each in its own environment. Only contributors need either.
+dev = ["prek>=0.2", "nox>=2025.5"]
 
 [project.scripts]
 nullius = "nullius.cli:main"
@@ -42,3 +43,50 @@ include = ["nullius*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "nullius.__version__" }
+
+[tool.ruff]
+# 100 rather than the usual 80. This codebase is unusually comment-heavy on purpose — the
+# reasoning behind a check is the part worth keeping — and of the lines over 80 columns, 89%
+# are comments and docstrings. `ruff format` does not reflow prose, so an 80-column limit
+# would leave 335 violations that only hand-rewrapping could fix. Change this line to 80 and
+# reflow if that trade ever looks worthwhile; nothing else depends on it.
+line-length = 100
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "N", "I", "NPY", "PL"]
+ignore = [
+    # Carried over as standing preferences.
+    "PLC2401", "N802", "N806", "N813", "N818", "F722", "PLR0912", "PLR0915",
+
+    # `from nullius import search as S`, `guard as G`, `verify as V`. Used consistently in
+    # the CLI, the servers and the tests, where a one-letter module alias keeps call sites
+    # readable.
+    "N812",
+    # Module-level singletons behind lazy initialisers (`_config`, `_ledger`, `_session`,
+    # `_harness`, `_local_loogle`). A Lean session costs ~3 s and half a gigabyte, so it is
+    # created once per process and reused; that is the design, not an oversight.
+    "PLW0603",
+    # The same judgement as the PLR0912/PLR0915 exclusions above, applied to the rest of the
+    # family: the verification pipeline and the MCP dispatcher are wide by nature, and
+    # splitting them to satisfy a counter would obscure the sequence of checks.
+    "PLR0911", "PLR0913", "PLR0917",
+    # `import` inside a function, used in exactly one place to break a config/search import
+    # cycle.
+    "PLC0415",
+    # `line = line.strip()` and similar. Rebinding the loop variable is the clearest way to
+    # write it.
+    "PLW2901",
+    # `subprocess.run` without `check=`: both sites inspect `returncode` immediately, which
+    # is the point — a failed `git rev-parse` means "no revision", not an exception.
+    "PLW1510",
+    # Comparing against a small literal in a test assertion.
+    "PLR2004",
+]
+
+[tool.mypy]
+# Underscores, not hyphens. mypy silently rejects `ignore-missing-imports` in pyproject.toml
+# ("Unrecognized option") and carries on with the setting unapplied.
+ignore_missing_imports = true
+
+[tool.pyright]
+typeCheckingMode = "standard"

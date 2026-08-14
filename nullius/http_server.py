@@ -34,9 +34,11 @@ MAX_BODY = 4 * 1024 * 1024
 class Handler(BaseHTTPRequestHandler):
     server_version = "nullius/0.1"
 
-    def log_message(self, fmt: str, *args: Any) -> None:  # quieter default logging
+    # `format` shadows the builtin, but the name is fixed by the base class: callers in
+    # http.server pass it positionally, and a rename breaks anyone who passes it by keyword.
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         if self.server.verbose:  # type: ignore[attr-defined]
-            super().log_message(fmt, *args)
+            super().log_message(format, *args)
 
     # -- helpers -----------------------------------------------------------
 
@@ -77,8 +79,10 @@ class Handler(BaseHTTPRequestHandler):
             lg = _harness.ledger
             self._send(
                 200,
-                {"rows": lg.recent(limit=limit, status=status) if lg else [], "stats":
-                 lg.stats() if lg else None},
+                {
+                    "rows": lg.recent(limit=limit, status=status) if lg else [],
+                    "stats": lg.stats() if lg else None,
+                },
             )
         else:
             self._send(404, {"error": f"no such endpoint: {url.path}"})
@@ -116,11 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                 verdicts = _harness.verify_many(items)
                 self._send(
                     200,
-                    {
-                        "results": [
-                            {**v.to_dict(), "feedback": v.feedback()} for v in verdicts
-                        ]
-                    },
+                    {"results": [{**v.to_dict(), "feedback": v.feedback()} for v in verdicts]},
                 )
 
             elif path == "/statement":
@@ -150,8 +150,11 @@ class Handler(BaseHTTPRequestHandler):
 
 def main(argv: list[str] | None = None) -> int:
     global _harness
-    p = argparse.ArgumentParser(prog="nullius.http_server", description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        prog="nullius.http_server",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=823)
     p.add_argument("--pool", type=int, default=2, help="concurrent Lean sessions")

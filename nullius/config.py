@@ -53,8 +53,11 @@ class Config:
     def discover(cls) -> "Config":
         root = Path(os.environ.get("NULLIUS_ROOT", ROOT))
         lean_dir = Path(os.environ.get("NULLIUS_LEAN_DIR", root / "lean"))
-        repl_bin = Path(os.environ["NULLIUS_REPL_BIN"]) if "NULLIUS_REPL_BIN" in os.environ \
+        repl_bin = (
+            Path(os.environ["NULLIUS_REPL_BIN"])
+            if "NULLIUS_REPL_BIN" in os.environ
             else cls._find_repl(root, lean_dir)
+        )
         lake = os.environ.get("NULLIUS_LAKE_BIN") or cls._find_lake()
         if not lake:
             raise ConfigError(
@@ -70,10 +73,10 @@ class Config:
             ledger_path=ledger,
             loogle_bin=cls._find_loogle(root),
             loogle_module=os.environ.get("NULLIUS_LOOGLE_MODULE", "NulliusAll"),
-            command_timeout=float(os.environ.get("NULLIUS_COMMAND_TIMEOUT", 120.0)),
-            startup_timeout=float(os.environ.get("NULLIUS_STARTUP_TIMEOUT", 300.0)),
-            lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", 4)),
-            pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", 2)),
+            command_timeout=float(os.environ.get("NULLIUS_COMMAND_TIMEOUT", "120")),
+            startup_timeout=float(os.environ.get("NULLIUS_STARTUP_TIMEOUT", "300")),
+            lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", "4")),
+            pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", "2")),
         )
 
     @staticmethod
@@ -172,7 +175,9 @@ class Config:
         try:
             out = subprocess.run(
                 ["git", "-C", str(repo), "rev-parse", "HEAD"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             return out.stdout.strip() if out.returncode == 0 else ""
         except Exception:

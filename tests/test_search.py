@@ -92,7 +92,9 @@ def main() -> int:
         for f in failures:
             print("  -", f)
         return 1
-    print("Local shape search covers Mathlib, Physlib and Cslib; the hosted index is never implicit.")
+    print(
+        "Local shape search covers Mathlib, Physlib and Cslib; the hosted index is never implicit."
+    )
     return 0
 
 

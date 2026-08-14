@@ -23,7 +23,7 @@ from . import search as S
 from .config import Config, ConfigError
 from .ledger import Ledger
 from .repl import ReplError, Session
-from .verify import Verifier, infer_target
+from .verify import Verifier
 
 
 def _session(cfg: Config) -> Session:
@@ -141,9 +141,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 def cmd_close(args: argparse.Namespace) -> int:
     cfg = Config.discover()
     s = _session(cfg)
-    res = S.local_search(
-        s, args.goal, binders=args.binders, tactics=tuple(args.tactics.split(","))
-    )
+    res = S.local_search(s, args.goal, binders=args.binders, tactics=tuple(args.tactics.split(",")))
     s.close()
     print(json.dumps(res.to_dict(), indent=2, ensure_ascii=False) if args.json else res.render())
     return 0 if res.hits else 1
@@ -174,8 +172,9 @@ def cmd_log(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="nullius", description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        prog="nullius", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser("doctor", help="check the installation end to end")
@@ -185,8 +184,11 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("file", help="path to a .lean file, or - for stdin")
     v.add_argument("-t", "--target", help="declaration to audit (default: last theorem)")
     v.add_argument("-c", "--claim", help="the informal claim this proof is meant to support")
-    v.add_argument("--require-nontrivial", action="store_true",
-                   help="reject proofs whose hypotheses are unused")
+    v.add_argument(
+        "--require-nontrivial",
+        action="store_true",
+        help="reject proofs whose hypotheses are unused",
+    )
     v.add_argument("--no-vacuity", action="store_true", help="skip vacuity/triviality probes")
     v.add_argument("--timeout", type=float, default=None)
     v.add_argument("--tag", help="label this entry in the ledger")
@@ -203,7 +205,10 @@ def build_parser() -> argparse.ArgumentParser:
     se = sub.add_parser("search", help="find Mathlib lemmas")
     se.add_argument("query", nargs="+")
     se.add_argument(
-        "-b", "--backend", choices=S.BACKENDS, default="both",
+        "-b",
+        "--backend",
+        choices=S.BACKENDS,
+        default="both",
         help="'loogle' is the local index; 'loogle-remote' is the hosted service",
     )
     se.add_argument("-n", "--limit", type=int, default=8)

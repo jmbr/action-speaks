@@ -90,8 +90,10 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "audit_tampering",
-        _rx(r"\b(?:trustedAxioms|elabAuditAxioms|elabAuditVacuity|elabAuditTriviality|"
-            r"elabAuditShape|probeTactics|NULLIUS_AUDIT)\b"),
+        _rx(
+            r"\b(?:trustedAxioms|elabAuditAxioms|elabAuditVacuity|elabAuditTriviality|"
+            r"elabAuditShape|probeTactics|NULLIUS_AUDIT)\b"
+        ),
         "touches the audit machinery, which would let the submission forge its own verdict",
     ),
     Rule(
@@ -116,8 +118,10 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "environment_manipulation",
-        _rx(r"\b(?:addDeclCore|addDeclWithoutChecking|modifyEnv|setEnv|replaceEnv|"
-            r"addConstAsync|toKernelEnv|Environment\.add|MonadEnv)\b"),
+        _rx(
+            r"\b(?:addDeclCore|addDeclWithoutChecking|modifyEnv|setEnv|replaceEnv|"
+            r"addConstAsync|toKernelEnv|Environment\.add|MonadEnv)\b"
+        ),
         "writes to the environment directly, which can install declarations the kernel "
         "never checked",
     ),

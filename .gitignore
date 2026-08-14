@@ -8,6 +8,11 @@ build/
 dist/
 .venv/
 
+# Tool caches and the per-session virtualenvs nox creates.
+.nox/
+.ruff_cache/
+.mypy_cache/
+
 # Loogle is cloned and built here by scripts/build-loogle.sh, pinned to a revision recorded
 # in that script rather than vendored into this repository.
 vendor/

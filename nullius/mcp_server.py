@@ -352,7 +352,9 @@ def handle(req: dict[str, Any]) -> dict[str, Any] | None:
     if method == "tools/list":
         return _result(req_id, {"tools": TOOLS})
     if method == "tools/call":
-        name = params.get("name")
+        # `or ""` rather than the bare `.get`: a request with no tool name should take the
+        # unknown-tool path below, not hand `None` to a lookup typed for `str`.
+        name = params.get("name") or ""
         args = params.get("arguments") or {}
         fn = HANDLERS.get(name)
         if fn is None:
@@ -366,9 +368,7 @@ def handle(req: dict[str, Any]) -> dict[str, Any] | None:
         except Exception:
             text = f"tool failed:\n{traceback.format_exc(limit=3)}"
             is_error = True
-        return _result(
-            req_id, {"content": [{"type": "text", "text": text}], "isError": is_error}
-        )
+        return _result(req_id, {"content": [{"type": "text", "text": text}], "isError": is_error})
     if method == "shutdown":
         return _result(req_id, {})
     return _error(req_id, -32601, f"unknown method: {method}")

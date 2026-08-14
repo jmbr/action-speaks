@@ -79,6 +79,7 @@ nullius/mcp_server.py     MCP server (stdio, standard library only)
 skills/nullius/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 pyproject.toml           packaging; `pip install -e .` gives the `nullius` command
+noxfile.py               lint, format, type-check and test sessions, each in its own venv
 LICENSE                  Apache 2.0, matching Lean, Mathlib, Physlib, Cslib and Loogle
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
@@ -353,11 +354,21 @@ the verifier has stopped discriminating.
 ### Contributing
 
 ```bash
-.venv/bin/pip install -e ".[dev]"    # adds prek
+.venv/bin/pip install -e ".[dev]"    # adds prek and nox
 prek install                         # run the checks before each commit
 python3 tests/test_adversarial.py    # or run them directly
 python3 tests/test_docs.py
 ```
+
+`noxfile.py` holds the wider sessions, each in its own environment: `nox -s lint format` for
+ruff, `nox -s types` for basedpyright, `nox -s tests` for the whole suite, `nox -s fix` to
+apply what `format` asks for. Rules live in `[tool.ruff.lint]` in `pyproject.toml`.
+
+Two things there are deliberate and easy to undo by accident. Sessions install the package
+with `-e`, because a copied install looks for the multi-gigabyte Lean tree beside itself in
+`site-packages` and fails at startup. And the tests are invoked as scripts rather than
+through pytest, which collects nothing from them and would exit 0 having run nothing —
+they are written as standalone `main()` scripts so that they can double as commit hooks.
 
 `lake exe cache get` only serves Mathlib, so Physlib and Cslib compile locally the first time.
 Physlib dominates that cost; Cslib is about a minute of wall time on a many-core machine.

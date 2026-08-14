@@ -124,8 +124,7 @@ def main() -> int:
         name = v.target or "?"
         print(
             f"  {'ok  ' if ok else 'FAIL'}  {doc}:{line:<4} {expect:20s} "
-            f"{name:32s} {v.status}"
-            + (f" caught_by={caught}" if caught else "")
+            f"{name:32s} {v.status}" + (f" caught_by={caught}" if caught else "")
         )
         if not ok:
             failures.append(f"{doc}:{line} expected {expect}, got {v.status}\n{v.render()}")

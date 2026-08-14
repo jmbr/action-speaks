@@ -28,8 +28,13 @@ STRIPPED = {"HOME": str(Path.home()), "PATH": "/usr/bin:/bin"}
 
 def run(cmd: list[str], stdin: str | None = None, timeout: int = 300):
     return subprocess.run(
-        cmd, cwd="/tmp", env=STRIPPED, input=stdin,
-        capture_output=True, text=True, timeout=timeout,
+        cmd,
+        cwd="/tmp",
+        env=STRIPPED,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
 
 
@@ -50,11 +55,22 @@ def main() -> int:
     if venv_python.exists():
         checked += 1
         reqs = [
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-             "params": {"protocolVersion": "2024-11-05", "capabilities": {},
-                        "clientInfo": {"name": "t", "version": "0"}}},
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-             "params": {"name": "log", "arguments": {"limit": 1}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "t", "version": "0"},
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "log", "arguments": {"limit": 1}},
+            },
         ]
         p = run(
             [str(venv_python), "-m", "nullius.mcp_server"],

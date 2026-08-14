@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,8 +31,12 @@ FORBIDDEN = {
     "LEANAI": "the project is called nullius",
     "lean-ai": "the project is called nullius",
     "lean-proof-check": "the skill is named after the project: `nullius`",
-    "indexes Mathlib only": "shape search covers Physlib and Cslib too when loogle is built locally",
-    "Mathlib and Physlib are already imported": "Cslib is imported as well; naming two of the three misleads",
+    "indexes Mathlib only": (
+        "shape search covers Physlib and Cslib too when loogle is built locally"
+    ),
+    "Mathlib and Physlib are already imported": (
+        "Cslib is imported as well; naming two of the three misleads"
+    ),
     "test_cookbook.py": "renamed to tests/test_docs.py, which also checks the skill docs",
 }
 
@@ -67,9 +70,7 @@ def pinned() -> tuple[str, dict[str, str]]:
     version = LEAN_VERSION.search(toolchain)
     manifest = json.loads((ROOT / "lean" / "lake-manifest.json").read_text())
     revs = {
-        p["name"].lower(): p.get("rev", "")
-        for p in manifest.get("packages", [])
-        if p.get("rev")
+        p["name"].lower(): p.get("rev", "") for p in manifest.get("packages", []) if p.get("rev")
     }
     return (version.group(1) if version else ""), revs
 
@@ -101,9 +102,7 @@ def main() -> int:
             for pkg, rev in REV_CITATION.findall(line):
                 want = revs.get(pkg.lower(), "")
                 if want and not want.startswith(rev.lower()):
-                    problems.append(
-                        f"{rel}:{lineno}: cites {pkg} {rev}, but lake pins {want[:12]}"
-                    )
+                    problems.append(f"{rel}:{lineno}: cites {pkg} {rev}, but lake pins {want[:12]}")
 
     if problems:
         print(f"stale references ({len(problems)}):")

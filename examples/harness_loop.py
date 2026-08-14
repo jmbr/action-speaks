@@ -3,6 +3,7 @@
 `propose` here is a canned list standing in for a model call. Swap it for your generation
 function and the rest of the loop is unchanged.
 """
+
 import sys
 from pathlib import Path
 
@@ -30,8 +31,7 @@ def propose(feedback: str | None, round_no: int) -> str:
 
 def main() -> int:
     with Harness(pool_size=1, tag="example").warm() as h:
-        verdict, history = h.prove(propose, claim=CLAIM, max_rounds=3,
-                                   require_nontrivial=True)
+        verdict, history = h.prove(propose, claim=CLAIM, max_rounds=3, require_nontrivial=True)
 
         print(f"\n{len(history)} round(s), final: {verdict.status}")
         if verdict.verified:
@@ -40,11 +40,15 @@ def main() -> int:
             print("Claim, as Lean actually checked it:")
             print(f"  {verdict.statement}")
             print(f"Axioms: {', '.join(verdict.axioms)}")
-            print(f"Checked against {verdict.provenance['toolchain']}, "
-                  f"mathlib {verdict.provenance['mathlib_rev'][:12]}")
-            print("\nNote the difference between the two statements above: the informal "
-                  "claim was FALSE\nfor n = 0, and the verifier is what forced the "
-                  "hypothesis `0 < n` to appear.")
+            print(
+                f"Checked against {verdict.provenance['toolchain']}, "
+                f"mathlib {verdict.provenance['mathlib_rev'][:12]}"
+            )
+            print(
+                "\nNote the difference between the two statements above: the informal "
+                "claim was FALSE\nfor n = 0, and the verifier is what forced the "
+                "hypothesis `0 < n` to appear."
+            )
         else:
             print(verdict.feedback())
         return 0 if verdict.verified else 1

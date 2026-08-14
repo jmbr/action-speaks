@@ -106,8 +106,11 @@ class SearchResult:
 
 
 def _http_json(
-    url: str, *, data: dict[str, Any] | None = None, params: dict[str, str] | None = None,
-    timeout: float = 20.0
+    url: str,
+    *,
+    data: dict[str, Any] | None = None,
+    params: dict[str, str] | None = None,
+    timeout: float = 20.0,
 ) -> Any:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
@@ -205,8 +208,13 @@ class LoogleSession:
             t0 = time.time()
             self.proc = subprocess.Popen(
                 [
-                    str(self.lake_bin), "env", str(self.binary),
-                    "--module", self.module, "-i", "--json",
+                    str(self.lake_bin),
+                    "env",
+                    str(self.binary),
+                    "--module",
+                    self.module,
+                    "-i",
+                    "--json",
                 ],
                 cwd=str(self.lean_dir),
                 stdin=subprocess.PIPE,
