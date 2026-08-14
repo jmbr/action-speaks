@@ -53,11 +53,11 @@ or state it over `ℤ`/`ℝ`.
 
 ### Physlib: the result you cited may not be proved yet
 
-Mathlib and Physlib are both imported, but they hold themselves to different standards.
-Physlib deliberately ships unfinished results, marked `@[sorryful]` (resting on `sorryAx`) or
-`@[pseudo]` (resting on `Lean.ofReduceBool`). Nothing in your submission looks wrong when you
-cite one — there is no `sorry` to see, and the proof can be a bare `rfl` — but the axiom
-footprint gives it away:
+Mathlib, Physlib and Cslib are all imported, but they do not hold themselves to the same
+standard. Physlib deliberately ships unfinished results, marked `@[sorryful]` (resting on
+`sorryAx`) or `@[pseudo]` (resting on `Lean.ofReduceBool`). Nothing in your submission looks
+wrong when you cite one — there is no `sorry` to see, and the proof can be a bare `rfl` — but
+the axiom footprint gives it away:
 
 ```
 [FAIL] trusted_axioms - untrusted: sorryAx
@@ -85,12 +85,13 @@ the conclusion, commas conjoin constraints, `"foo"` matches names containing `fo
 `close` runs `exact?`/`apply?` inside Lean. Slower (seconds), but whatever it returns actually
 closes the goal — it cannot invent a name. When `search` and `close` disagree, trust `close`.
 
-Shape search runs against a **local** Loogle index covering Mathlib and Physlib at exactly
-the revisions this verifier pins, so what it finds is what you can cite. If that index has
-not been built the search says so rather than answering from somewhere else; the public
+Shape search runs against a **local** Loogle index covering Mathlib, Physlib and Cslib at
+exactly the revisions this verifier pins, so what it finds is what you can cite. If that index
+has not been built the search says so rather than answering from somewhere else; the public
 service is one explicit request away (`--backend loogle-remote`), but its index is a
-different Mathlib revision with no Physlib, so a miss there means little. The result names
-which answered: `loogle-local` or `loogle`. Natural-language search is remote either way.
+different Mathlib revision with neither Physlib nor Cslib, so a miss there means little. The
+result names which answered: `loogle-local` or `loogle`. Natural-language search is remote
+either way.
 
 ## Worked example: claim to verdict
 
@@ -158,11 +159,11 @@ resolving its own symlink; set `NULLIUS_ROOT` to override.
 
 ## Provenance
 
-Every verdict records the toolchain and the Mathlib and Physlib revisions, and each check is
-appended to a SQLite ledger. When a verification matters, cite it:
+Every verdict records the toolchain and the Mathlib, Physlib and Cslib revisions, and each
+check is appended to a SQLite ledger. When a verification matters, cite it:
 
 ```
-Lean 4.32.0, Mathlib 81a5d257c8e4, Physlib cf1d86d1fbba,
+Lean 4.32.0, Mathlib 81a5d257c8e4, Physlib cf1d86d1fbba, Cslib 197a7be62126,
 axioms: propext, Classical.choice, Quot.sound
 ```
 

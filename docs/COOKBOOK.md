@@ -4,7 +4,8 @@ Full formalisation of an applied paper is rarely worth the effort. The wins are 
 much cheaper than that, and they cluster in a few places: the load-bearing inequality you
 derived by hand, the hypothesis set you never checked was non-empty, and the `ℕ` index
 expression that does not mean what it reads — and, if you work with Physlib, the physics
-result you built on that turns out to be a placeholder.
+result you built on that turns out to be a placeholder. Cslib brings the same treatment to
+claims about computation, where the classic omission is a termination hypothesis.
 
 Every Lean block below is verified on each run of `tests/test_docs.py`, against the
 toolchain and revisions this repository pins. The `-- expect:` line says what the verifier
@@ -172,7 +173,7 @@ genuinely mean the truncating operation.
 
 ## Pattern: physics, and the placeholder trap
 
-Physlib is imported alongside Mathlib, so a claim about a physical system is checkable the
+Physlib is imported alongside Mathlib and Cslib, so a claim about a physical system is checkable the
 same way an inequality is. The workflow is the same too — find the library's own lemmas
 rather than restate them:
 
@@ -224,6 +225,52 @@ against Physlib it does real work.
 
 When it fires, the fix is not to your proof. The physics result you leaned on is not
 available yet; say so.
+
+## Pattern: claims about computation, where the missing hypothesis is termination
+
+Cslib is imported alongside Mathlib and Physlib, so a claim about a program or a model of
+computation is checkable the same way: lambda calculi, automata, process calculi, type
+systems, rewriting.
+
+Rewriting is where the characteristic error lives. "My rewrite rules are locally confluent,
+so the normal form is unique" is a thing people write in papers, and it is **false** — local
+confluence does not imply confluence. The missing hypothesis is termination, and the result
+that needs it is Newman's lemma. Lean will not let the gap pass:
+
+```lean
+-- expect: rejected
+theorem locally_confluent_suffices {α : Type} (r : α → α → Prop)
+    (hlc : Relation.LocallyConfluent r) : Relation.Confluent r :=
+  hlc.Terminating_toConfluent
+```
+
+The error names precisely what is absent:
+
+```
+has type
+  Relation.Terminating r → Relation.Confluent r
+but is expected to have type
+  ... Relation.Join (Relation.ReflTransGen r) b c
+```
+
+Supply the hypothesis and it goes through — and `--require-nontrivial` confirms both
+hypotheses are load-bearing rather than decoration:
+
+```lean
+-- expect: verified-nontrivial
+theorem newman {α : Type} (r : α → α → Prop)
+    (hlc : Relation.LocallyConfluent r) (ht : Relation.Terminating r) :
+    Relation.Confluent r :=
+  hlc.Terminating_toConfluent ht
+```
+
+This is the same lesson as the vacuity probes, arriving from the other direction: there the
+danger was a hypothesis that could not hold, here it is a hypothesis you forgot you needed.
+Both are failures of the *statement*, which no amount of proof checking would catch if the
+statement were never written down.
+
+Unlike Physlib, Cslib ships no placeholder results, so the axiom-footprint trap above has no
+analogue here.
 
 ## Pattern: let a computer algebra system find the certificate
 

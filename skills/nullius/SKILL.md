@@ -1,7 +1,7 @@
 ---
 name: nullius
-description: Verify a mathematical claim by proving it in Lean 4 with Mathlib and Physlib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, algorithm correctness, or physics. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib lemma name instead of guessing.
-compatibility: Requires the nullius verifier (Lean 4.32.0 + Mathlib + Physlib, ~9GB built) installed via its install.sh. Linux/macOS with python3.
+description: Verify a mathematical or computational claim by proving it in Lean 4 with Mathlib, Physlib and Cslib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, algorithm correctness, semantics, or physics. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib or Cslib lemma name instead of guessing.
+compatibility: Requires the nullius verifier (Lean 4.32.0 + Mathlib + Physlib + Cslib, ~9GB built) installed via its install.sh. Linux/macOS with python3.
 metadata:
   repository: nullius
 ---
@@ -78,9 +78,13 @@ whose hypotheses turn out to be unnecessary.
 
 ## Writing the Lean
 
-- **No `import` lines.** Mathlib and Physlib are already imported; an `import` is rejected.
+- **No `import` lines.** Mathlib, Physlib and Cslib are already imported; an `import` is
+  rejected.
 - **Physlib ships incomplete results** marked `@[sorryful]` / `@[pseudo]`. Citing one gets
-  rejected on its axiom footprint, which means that physics result is not proved yet.
+  rejected on its axiom footprint, which means that physics result is not proved yet. Cslib
+  has no such placeholders.
+- **Cslib covers computation** — lambda calculi, automata, process calculi, type systems,
+  verified algorithms. Search it before hand-rolling a model of computation.
 - Helper lemmas first, the claim you care about **last** (that one is audited by default).
 - Workhorse tactics: `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
   `aesop`, `simp`, `decide`, `grind`.

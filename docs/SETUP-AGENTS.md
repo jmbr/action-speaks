@@ -103,7 +103,7 @@ Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the
 subcommands. Restart Copilot after installing.
 
 The server keeps one warm Lean session per process, so the first call pays ~2.6 s for the
-Mathlib and Physlib imports and the rest are milliseconds — a real advantage over the skill's shell path,
+Mathlib, Physlib and Cslib imports and the rest are milliseconds — a real advantage over the skill's shell path,
 which starts a fresh session per invocation.
 
 **pi deliberately has no MCP support** ("It intentionally does not include built-in MCP,

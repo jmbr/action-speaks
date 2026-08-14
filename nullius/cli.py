@@ -40,6 +40,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"toolchain    : {cfg.toolchain()}")
     print(f"mathlib rev  : {cfg.mathlib_rev()}")
     print(f"physlib rev  : {cfg.package_rev('Physlib')}")
+    print(f"cslib rev    : {cfg.package_rev('cslib')}")
     print(f"repl rev     : {cfg.package_rev('repl')}")
     if cfg.loogle_bin:
         print(f"loogle       : {cfg.loogle_bin} ({cfg.loogle_rev()[:12] or 'unknown rev'})")
@@ -51,7 +52,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         print(f"\nFAIL: {exc}")
         return 1
-    print("\nstarting REPL (first run imports Mathlib and Physlib) ...")
+    print("\nstarting REPL (first run imports Mathlib, Physlib and Cslib) ...")
     t0 = time.time()
     try:
         s = _session(cfg)

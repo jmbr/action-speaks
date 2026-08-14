@@ -1,7 +1,8 @@
 # nullius — making an agent back up its claims
 
 A verification harness that lets an LLM agent prove its mathematical assertions in Lean 4 +
-Mathlib, and that refuses to accept the proof unless it is actually worth something.
+Mathlib — with Physlib for physics and Cslib for computation — and that refuses to accept the
+proof unless it is actually worth something.
 
 *Nullius in verba* — "on the word of no one" — is the Royal Society's motto, adopted as a
 commitment to settle questions by evidence rather than by authority. An agent's word is
@@ -61,8 +62,8 @@ Anything outside `{propext, Classical.choice, Quot.sound}` is disqualifying.
 ```
 lean/Nullius/Audit.lean   the audit commands (#audit_axioms, #audit_replay, #audit_vacuity,
                          #audit_triviality, #audit_shape), pinned to Lean v4.32.0
-lean/lakefile.toml       pins Mathlib, Physlib and the Lean REPL; lake-manifest.json locks all
-nullius/config.py         locates the project, records toolchain + Mathlib + Physlib + REPL revs
+lean/lakefile.toml       pins Mathlib, Physlib, Cslib and the Lean REPL; lake-manifest.json locks all
+nullius/config.py         locates the project, records toolchain + Mathlib + Physlib + Cslib + REPL revs
 nullius/repl.py           persistent REPL session and pool
 nullius/guard.py          static ban-list, applied before Lean sees the source
 nullius/verify.py         the pipeline and the Verdict type
@@ -70,7 +71,7 @@ nullius/ledger.py         append-only SQLite record of every verdict
 nullius/search.py         Loogle (local or hosted), LeanSearch, and local exact?/apply?
 scripts/build-loogle.sh  builds Loogle against our toolchain, for offline shape search
 contrib/                 finished work that belongs elsewhere; not built, not maintained here
-lean/NulliusAll.lean     import-only root whose Loogle index covers Mathlib + Physlib
+lean/NulliusAll.lean     import-only root whose Loogle index covers Mathlib + Physlib + Cslib
 nullius/cli.py            command-line interface
 nullius/harness.py        pooled, thread-safe entry point for programmatic use
 nullius/http_server.py    HTTP service for non-Python harnesses
@@ -78,11 +79,11 @@ nullius/mcp_server.py     MCP server (stdio, standard library only)
 skills/nullius/ the agent skill (pi, Copilot, Claude Code, Codex)
 mcp/                     MCP server entry, templated on the repo path
 pyproject.toml           packaging; `pip install -e .` gives the `nullius` command
-LICENSE                  Apache 2.0, matching Lean, Mathlib, Physlib and Loogle
+LICENSE                  Apache 2.0, matching Lean, Mathlib, Physlib, Cslib and Loogle
 install.sh               symlinks the skill and merges the MCP entry into place
 tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
 tests/test_docs.py       re-runs every Lean example in the documentation
-tests/test_search.py     local shape search reaches Mathlib and Physlib
+tests/test_search.py     local shape search reaches Mathlib, Physlib and Cslib
 tests/test_entrypoints.py  entry points work from an agent's stripped environment
 tests/check_names.py     catches renamed tools and superseded revisions in prose
 .pre-commit-config.yaml  runs all five before a commit lands (via prek)
@@ -233,14 +234,16 @@ Measured on this machine (24 cores, 62 GB):
 
 | Operation | Time |
 |---|---|
-| Session start (`import Mathlib` + `import Physlib`) | ~2.6 s, ~0.8 GB resident / ~5.2 GB mapped |
+| Session start (`import Mathlib` + `import Physlib` + `import Cslib`) | ~2.9 s, ~0.8 GB resident / ~5.2 GB mapped |
 | Verify a simple theorem | 10–20 ms |
 | Verify with vacuity + triviality probes | 60–200 ms |
 | Rejection by static guard | < 1 ms (no Lean involved) |
 
-Adding Physlib costs almost nothing at startup: oleans are memory-mapped, so pages are only
-faulted in as they are used, and a session that never touches physics never pays for it.
-Budget by mapped size rather than resident when setting `pool_size`.
+Adding libraries to the prelude costs almost nothing at startup: oleans are memory-mapped, so
+pages are only faulted in as they are used, and a session that never touches physics or
+computation never pays for it. Measured either side of the Cslib import on the same machine,
+startup moved 2.83 s → 2.87 s and both resident and mapped size were unchanged. Budget by
+mapped size rather than resident when setting `pool_size`.
 
 The import cost is paid once per process. Every check then branches off that same pristine
 environment — which is also a soundness property, not just a speed one: it stops one
@@ -257,29 +260,35 @@ submission from leaving definitions behind for the next to exploit.
 - **The trusted computing base** is Lean's kernel, Mathlib, and `Nullius/Audit.lean`.
   Physlib is *not* in it: its incomplete results rest on `sorryAx` or `Lean.ofReduceBool`,
   and the axiom audit rejects anything that reaches them, so importing it cannot weaken a
-  verdict — it can only make more things provable.
+  verdict — it can only make more things provable. Cslib ships no such placeholders, and in
+  any case the audit trusts a fixed list of axioms rather than a list of libraries, which is
+  what makes adding a library a safe operation.
 - **The toolchain is pinned by Physlib, not by us.** Physlib tracks Mathlib about one release
-  behind, so the whole graph sits at whatever it supports (currently v4.32.0). Bump both pins
-  in `lean/lakefile.toml` together, or not at all; a mismatch fails to resolve.
+  behind, so the whole graph sits at whatever it supports (currently v4.32.0). Cslib tags a
+  release per toolchain and the v4.32.0 tag requires the same Mathlib revision, which is the
+  only reason all three coexist. Bump the pins in `lean/lakefile.toml` together, or not at
+  all; a mismatch fails to resolve.
 - **Search backends vary in reach.** Shape search (Loogle) runs against a local index
-  covering Mathlib *and* Physlib at the pinned revisions. It is never silently replaced by
-  the public service, whose index is a different Mathlib revision without Physlib — that has
-  to be requested by name (`--backend loogle-remote`), because a miss against the wrong
-  library is indistinguishable from a lemma that does not exist. Natural-language search
-  (LeanSearch) is remote either way. `close` works offline and is authoritative.
+  covering Mathlib, Physlib *and* Cslib at the pinned revisions. It is never silently
+  replaced by the public service, whose index is a different Mathlib revision with neither of
+  the other two — that has to be requested by name (`--backend loogle-remote`), because a
+  miss against the wrong library is indistinguishable from a lemma that does not exist.
+  Natural-language search (LeanSearch) is remote either way. `close` works offline and is
+  authoritative.
 
 ## Reproducing a verdict
 
-Every ledger row stores the toolchain, Mathlib and Physlib revisions, so a third party can
-rebuild the exact environment:
+Every ledger row stores the toolchain and the Mathlib, Physlib and Cslib revisions, so a
+third party can rebuild the exact environment:
 
 ```
 toolchain   leanprover/lean4:v4.32.0
 mathlib     81a5d257c8e410db227a6665ed08f64fea08e997
 physlib     cf1d86d1fbba4fe42ce52577bab8b9df40d83a28
+cslib       197a7be621263b84c67ca4f803f69205b36d06df
 ```
 
-The Physlib revision matters more than the other two. Physlib ships results that are
+The Physlib revision matters more than the others. Physlib ships results that are
 deliberately incomplete, and which ones are complete changes between commits, so "this was
 accepted" is only meaningful against a known revision.
 
@@ -291,7 +300,7 @@ accepted" is only meaningful against a known revision.
 |---|---|---|
 | **elan** | provides `lake` and the pinned Lean toolchain | `lake --version` |
 | **Python 3.10+** | the driver | `python3 --version` |
-| **git** | fetches Mathlib, Physlib, the REPL and Loogle | `git --version` |
+| **git** | fetches Mathlib, Physlib, Cslib, the REPL and Loogle | `git --version` |
 | **~12 GB free** | ~10 GB of built oleans and indexes here, ~2 GB for the toolchain under `~/.elan` | `df -h .` |
 
 Install elan if `lake` is missing (<https://github.com/leanprover/elan>); it downloads the
@@ -327,6 +336,7 @@ cd lean
 lake exe cache get && lake build     # Mathlib (~3.6 GB, cached) + the audit module
 lake build repl                      # the REPL, pinned by lake-manifest.json
 lake build Physlib                   # physics; builds from source, ~15 min
+lake build Cslib                     # computer science; from source, ~1 min
 cd .. && ./scripts/build-loogle.sh   # shape search, offline (~15 s)
 ```
 
@@ -349,18 +359,19 @@ python3 tests/test_adversarial.py    # or run them directly
 python3 tests/test_docs.py
 ```
 
-`lake exe cache get` only serves Mathlib, so Physlib compiles locally the first time.
+`lake exe cache get` only serves Mathlib, so Physlib and Cslib compile locally the first time.
+Physlib dominates that cost; Cslib is about a minute of wall time on a many-core machine.
 
 `scripts/build-loogle.sh` is what makes shape search work. Loogle has no dependencies and does
 not need to be one of ours: the binary reads the `.olean` files of any Lake project built
 with the same toolchain, so the script clones it into `vendor/`, copies our `lean-toolchain`
 over its own, and builds — about 15 seconds, with nothing of Mathlib rebuilt. Shape search
-then runs offline, covers Physlib as well as Mathlib, and answers from the exact revisions
-pinned here rather than whatever the hosted service last deployed. The first query builds a
-374 MB index (~2 min, cached beside the oleans and rebuilt automatically when they change);
-pass `--index` to pay that cost up front instead. Skip the script and shape search reports
-that it has no index, rather than quietly answering from the public service — that one is
-still there, but you have to ask for it: `nullius search --backend loogle-remote`.
+then runs offline, covers Physlib and Cslib as well as Mathlib, and answers from the exact
+revisions pinned here rather than whatever the hosted service last deployed. The first query
+builds a 377 MB index (~2 min, cached beside the oleans and rebuilt automatically when they
+change); pass `--index` to pay that cost up front instead. Skip the script and shape search
+reports that it has no index, rather than quietly answering from the public service — that
+one is still there, but you have to ask for it: `nullius search --backend loogle-remote`.
 
 `prek install` wires the checks into `git commit`: prose is scanned for renamed tools and
 superseded revisions on every commit (72 ms, no Lean), and the two Lean suites run only when
@@ -371,7 +382,7 @@ a hook deliberately. `pre-commit` reads the same config if you prefer it to `pre
 ## Licence and provenance
 
 Apache 2.0 — see [LICENSE](LICENSE). That matches every component this sits on: Lean 4,
-Mathlib, Physlib and Loogle are all Apache 2.0, so there is no licence seam anywhere in the
+Mathlib, Physlib, Cslib and Loogle are all Apache 2.0, so there is no licence seam anywhere in the
 dependency graph, and a result proved here can go upstream to Mathlib without relicensing.
 
 Much of this repository was written by coding agents working under human direction and

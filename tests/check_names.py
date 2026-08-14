@@ -32,12 +32,13 @@ FORBIDDEN = {
     "LEANAI": "the project is called nullius",
     "lean-ai": "the project is called nullius",
     "lean-proof-check": "the skill is named after the project: `nullius`",
-    "indexes Mathlib only": "shape search covers Physlib too when loogle is built locally",
+    "indexes Mathlib only": "shape search covers Physlib and Cslib too when loogle is built locally",
+    "Mathlib and Physlib are already imported": "Cslib is imported as well; naming two of the three misleads",
     "test_cookbook.py": "renamed to tests/test_docs.py, which also checks the skill docs",
 }
 
 # Where a documented revision is expected to match what lake actually pins.
-REV_CITATION = re.compile(r"\b(mathlib|physlib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40})\b", re.I)
+REV_CITATION = re.compile(r"\b(mathlib|physlib|cslib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40})\b", re.I)
 LEAN_VERSION = re.compile(r"\b(?:leanprover/lean4:)?v?(4\.\d+\.\d+)\b")
 
 SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/check_names.py")
@@ -96,7 +97,7 @@ def main() -> int:
                         f"{rel}:{lineno}: cites Lean {found}, but lean-toolchain pins {version}"
                     )
 
-            # A cited Mathlib/Physlib revision must be a prefix of the pinned one.
+            # A cited Mathlib/Physlib/Cslib revision must be a prefix of the pinned one.
             for pkg, rev in REV_CITATION.findall(line):
                 want = revs.get(pkg.lower(), "")
                 if want and not want.startswith(rev.lower()):

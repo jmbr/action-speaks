@@ -6,9 +6,9 @@ the whole tool exists to prevent.
 
 Two properties matter and neither is covered elsewhere:
 
-* the local index reaches Physlib, which is the reason for running Loogle locally at all —
-  the hosted service has no Physlib in its index, and a search that cannot see a library the
-  verifier can is worse than useless, because its silence looks like an answer;
+* the local index reaches Physlib and Cslib, which is the reason for running Loogle locally
+  at all — the hosted service has neither in its index, and a search that cannot see a library
+  the verifier can is worse than useless, because its silence looks like an answer;
 * an absent binary is *reported* rather than quietly answered from the hosted index, whose
   contents describe a different Mathlib. The hosted service stays reachable, but only when
   asked for by name.
@@ -27,11 +27,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from nullius import search as S  # noqa: E402
 from nullius.config import Config  # noqa: E402
 
-# A Physlib declaration and a Mathlib one, to prove a single index spans both. Physlib's
-# root module does not import all of Mathlib, so indexing either library alone leaves a hole;
-# `lean/NulliusAll.lean` exists precisely to close it.
+# One declaration from each library in the prelude, to prove a single index spans all three.
+# Neither Physlib's nor Cslib's root module imports all of Mathlib, so indexing any one of
+# them alone leaves a hole; `lean/NulliusAll.lean` exists precisely to close it.
 PHYSLIB_QUERY = "ClassicalMechanics.FreeParticle.linearMomentum"
 MATHLIB_QUERY = "|- Irrational (Real.sqrt _)"
+CSLIB_QUERY = "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluence_beta"
 
 
 def main() -> int:
@@ -51,6 +52,7 @@ def main() -> int:
     for label, query, expect_module in (
         ("physlib", PHYSLIB_QUERY, "Physlib."),
         ("mathlib", MATHLIB_QUERY, "Mathlib."),
+        ("cslib", CSLIB_QUERY, "Cslib."),
     ):
         res = session.query(query, limit=5)
         modules = [h.module for h in res.hits]
@@ -90,7 +92,7 @@ def main() -> int:
         for f in failures:
             print("  -", f)
         return 1
-    print("Local shape search covers Mathlib and Physlib; the hosted index is never implicit.")
+    print("Local shape search covers Mathlib, Physlib and Cslib; the hosted index is never implicit.")
     return 0
 
 

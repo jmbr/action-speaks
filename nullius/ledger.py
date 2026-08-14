@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS verifications (
     toolchain     TEXT,
     mathlib_rev   TEXT,
     physlib_rev   TEXT,
+    cslib_rev     TEXT,
     elapsed       REAL,
     tag           TEXT
 );
@@ -69,7 +70,7 @@ class Ledger:
         record it.
         """
         have = {r[1] for r in c.execute("PRAGMA table_info(verifications)")}
-        for col, decl in (("physlib_rev", "TEXT"),):
+        for col, decl in (("physlib_rev", "TEXT"), ("cslib_rev", "TEXT")):
             if col not in have:
                 c.execute(f"ALTER TABLE verifications ADD COLUMN {col} {decl}")
 
@@ -87,8 +88,8 @@ class Ledger:
                 """INSERT INTO verifications
                    (created_at, created_iso, status, verified, target, claim, statement,
                     source, source_sha256, axioms, checks, failures, toolchain, mathlib_rev,
-                    physlib_rev, elapsed, tag)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    physlib_rev, cslib_rev, elapsed, tag)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
@@ -115,6 +116,7 @@ class Ledger:
                     verdict.provenance.get("toolchain"),
                     verdict.provenance.get("mathlib_rev"),
                     verdict.provenance.get("physlib_rev"),
+                    verdict.provenance.get("cslib_rev"),
                     verdict.elapsed,
                     tag,
                 ),

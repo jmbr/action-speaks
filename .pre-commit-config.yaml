@@ -59,10 +59,10 @@ repos:
           |lean/(lakefile\.toml|lean-toolchain|lake-manifest\.json)
           |tests/test_adversarial\.py)$
 
-      # Shape search must keep reaching Physlib, and must keep degrading to the hosted
-      # service when no local Loogle is built. Skips itself if there is no local binary.
+      # Shape search must keep reaching Physlib and Cslib, and must keep degrading to the
+      # hosted service when no local Loogle is built. Skips itself if there is no local binary.
       - id: nullius-search
-        name: local shape search reaches Mathlib and Physlib
+        name: local shape search reaches Mathlib, Physlib and Cslib
         entry: python3 tests/test_search.py
         language: system
         pass_filenames: false

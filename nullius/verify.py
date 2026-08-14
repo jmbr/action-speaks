@@ -119,6 +119,9 @@ class Verdict:
             physlib = self.provenance.get("physlib_rev") or ""
             if physlib:
                 prov += f" physlib: {physlib[:12]}"
+            cslib = self.provenance.get("cslib_rev") or ""
+            if cslib:
+                prov += f" cslib: {cslib[:12]}"
             lines.append(prov)
         lines.append(f"  elapsed: {self.elapsed:.2f}s")
         return "\n".join(lines)

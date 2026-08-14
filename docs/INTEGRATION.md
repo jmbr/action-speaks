@@ -9,7 +9,7 @@ Four integration paths, in rough order of how tightly coupled they are.
 | MCP server | the agent should call it as a tool, mid-conversation | once per server |
 | CLI | one-off checks, shell scripts, CI | **once per invocation** |
 
-The Mathlib and Physlib imports cost ~2.6 s per Lean session. Everything below except the CLI
+The Mathlib, Physlib and Cslib imports cost ~2.9 s per Lean session. Everything below except the CLI
 pays that once and then answers in milliseconds. Do not shell out to the CLI in a loop.
 
 All four paths need the package installed from a checkout, which is one line and pulls in

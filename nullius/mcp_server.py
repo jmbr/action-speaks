@@ -154,15 +154,15 @@ TOOLS: list[dict[str, Any]] = [
         "name": "search",
         "description": (
             "Search for a lemma by name, shape or meaning. Backends: 'loogle' (default, "
-            "with 'leansearch') searches a local index built from the very Mathlib and "
-            "Physlib this verifier checks against, so its answers agree with what you can "
-            "actually cite; 'leansearch' takes natural language ('sum of two even numbers "
-            "is even'); 'loogle' takes a shape ('|- Irrational (Real.sqrt _)', "
+            "with 'leansearch') searches a local index built from the very Mathlib, "
+            "Physlib and Cslib this verifier checks against, so its answers agree with what "
+            "you can actually cite; 'leansearch' takes natural language ('sum of two even "
+            "numbers is even'); 'loogle' takes a shape ('|- Irrational (Real.sqrt _)', "
             "'(?a + ?b) * ?c', 'Nat.succ_le_succ'). Use this instead of guessing lemma "
             "names - invented names are the most common cause of failed proofs. "
             "'loogle-remote' queries the public loogle.lean-lang.org instead; ask for it "
             "only if the local index is unavailable, and treat its results with care, since "
-            "it indexes a different Mathlib revision and no Physlib at all."
+            "it indexes a different Mathlib revision and neither Physlib nor Cslib."
         ),
         "inputSchema": {
             "type": "object",

@@ -163,8 +163,8 @@ class Config:
         """The revision of the local Loogle checkout, if there is one.
 
         Recorded because a lemma search is part of how a proof was arrived at, and because
-        the local index reflects *these* Mathlib and Physlib revisions rather than whatever
-        the hosted service last deployed.
+        the local index reflects *these* Mathlib, Physlib and Cslib revisions rather than
+        whatever the hosted service last deployed.
         """
         if not self.loogle_bin:
             return ""
@@ -188,6 +188,9 @@ class Config:
             # ones are complete changes between revisions. A verdict citing it is only
             # reproducible against the exact revision it was checked at.
             "physlib_rev": self.package_rev("Physlib"),
+            # Recorded for the same reason as any other library in the prelude: a proof that
+            # cites Cslib is only reproducible against the revision it was checked at.
+            "cslib_rev": self.package_rev("cslib"),
             "lean_dir": str(self.lean_dir),
             "repl_bin": str(self.repl_bin),
         }

@@ -38,11 +38,11 @@ close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }     # ask L
 Inventing a plausible-sounding lemma name is the single most common reason proofs fail.
 `close` cannot hallucinate: it reports only lemmas that genuinely close the goal.
 
-`search`'s shape backend queries a local index of the same Mathlib and Physlib you are
+`search`'s shape backend queries a local index of the same Mathlib, Physlib and Cslib you are
 checked against, so what it finds is what you can cite. If it reports that no local index
 exists, say so rather than guessing a name; `backend: "loogle-remote"` will reach the public
-service, but it indexes a different Mathlib revision and no Physlib, so a miss there is not
-evidence that a lemma is absent here.
+service, but it indexes a different Mathlib revision and neither Physlib nor Cslib, so a miss
+there is not evidence that a lemma is absent here.
 
 (The five tools are named `verify`, `statement`, `search`, `close`, `log` — the same names as
 the CLI subcommands. Your client namespaces them by server, typically as `nullius-search` and
@@ -74,13 +74,16 @@ anything else, do not present the claim as proved.
 
 ## Writing the Lean source
 
-- **No `import` lines.** Mathlib and Physlib are already imported. An `import` in your
+- **No `import` lines.** Mathlib, Physlib and Cslib are already imported. An `import` in your
   submission is rejected.
 - **Physlib results are not all complete.** It ships placeholders marked `@[sorryful]`
   (`sorryAx`) and `@[pseudo]` (`Lean.ofReduceBool`). Citing one is not an error you will see
   in the proof — the audit catches it as an untrusted axiom, and the verdict is a rejection.
-  If that happens, the physics result you leaned on is not actually proved yet.
-- `search` and `close` both see Mathlib and Physlib.
+  If that happens, the physics result you leaned on is not actually proved yet. Cslib carries
+  no such placeholders, so this caveat is Physlib's alone.
+- `search` and `close` see all three. Cslib is where computation lives — lambda calculi,
+  automata, process calculi, type systems, verified algorithms — so reach for it when the
+  claim is about a program or a model of computation rather than about numbers.
 - Put helper lemmas first and the claim you care about **last**; that last theorem is what
   gets audited by default.
 - Prefer `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,
