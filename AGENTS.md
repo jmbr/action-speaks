@@ -27,6 +27,19 @@ the statement Lean actually understood, and — critically — whether the hypot
 **contradictory**. If they are, stop: any proof you write will be rejected, because a theorem
 with contradictory hypotheses is vacuously true and supports nothing.
 
+It also reports **related earlier work** from the ledger, matched on the elaborated statement
+rather than on your wording, so the same theorem is found however it was previously phrased.
+Read such a hit as a pointer, never as proof: re-verify the recorded source (it takes
+milliseconds) and cite the fresh verdict. A hit labelled *similar wording* is weaker still —
+it may be an entirely different theorem.
+
+If the hit is a **rejection**, check which part failed before drawing any conclusion. Almost
+all rejections are attempt-level — a tactic that did not work, a name that did not resolve —
+and say nothing whatever about whether the claim is provable; try a different approach. Only
+`not_vacuous`, `hypotheses_used`, `statement_sorry_free` and `is_theorem` are properties of
+the *statement*, and those call for restating it rather than for giving up. A rejection
+recorded against older library revisions may simply succeed now.
+
 **3. Find the lemmas you need. Do not guess names.**
 
 ```

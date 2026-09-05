@@ -208,7 +208,11 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "log",
-        "description": "List past verification results recorded by this verifier.",
+        "description": (
+            "List past verification results recorded by this verifier, or search them with "
+            "`recall` to find work already done on a claim. A hit is a pointer to re-verify, "
+            "never proof in itself."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -217,6 +221,13 @@ TOOLS: list[dict[str, Any]] = [
                 "tag": {
                     "type": "string",
                     "description": "Only entries recorded with this tag by `verify`.",
+                },
+                "recall": {
+                    "type": "string",
+                    "description": (
+                        "Find earlier verified work resembling this text, instead of "
+                        "listing recent entries."
+                    ),
                 },
                 "stats": {"type": "boolean", "default": False},
             },
@@ -229,6 +240,8 @@ def tool_verify(args: dict[str, Any]) -> str:
     source = args.get("source", "")
     if not source.strip():
         return "error: `source` is empty"
+    # Cheap, and a rejected twin carries a reason that is actionable before the retry.
+    prior = ledger().recall(source=source, current=config().provenance())
     verdict = verifier().verify(
         source,
         target=args.get("target"),
@@ -237,6 +250,8 @@ def tool_verify(args: dict[str, Any]) -> str:
     )
     row = ledger().record(verdict, source, tag=args.get("tag") or "mcp")
     out = [verdict.render(), f"\nledger entry: #{row}"]
+    if prior:
+        out.append("\nseen before:\n" + "\n".join(h.render() for h in prior))
     if verdict.verified:
         out.append(
             "\nThis proof is machine-checked. You may cite it, but state the ELABORATED "
@@ -251,7 +266,8 @@ def tool_verify(args: dict[str, Any]) -> str:
 
 
 def tool_statement(args: dict[str, Any]) -> str:
-    res = verifier().check_statement(args.get("statement", ""))
+    statement = args.get("statement", "")
+    res = verifier().check_statement(statement)
     if not res.get("ok"):
         return (
             f"statement does not elaborate ({res.get('error')}):\n"
@@ -268,6 +284,13 @@ def tool_statement(args: dict[str, Any]) -> str:
         lines.append("\nhypotheses are satisfiable as far as the prover can tell.")
     for g in res.get("open_goals") or []:
         lines.append(f"\ngoal to prove:\n{g}")
+    # The elaborated statement is in hand here, which matches the same theorem however it
+    # was previously phrased.
+    hits = ledger().recall(
+        statement=res.get("statement"), text=statement, current=config().provenance()
+    )
+    if hits:
+        lines.append("\nrelated earlier work:\n" + "\n".join(h.render() for h in hits))
     return "\n".join(lines)
 
 
@@ -294,6 +317,15 @@ def tool_log(args: dict[str, Any]) -> str:
     lg = ledger()
     if args.get("stats"):
         return json.dumps(lg.stats(), indent=2)
+    if args.get("recall"):
+        hits = lg.recall(
+            text=str(args["recall"]),
+            limit=int(args.get("limit", 10)),
+            current=config().provenance(),
+        )
+        if not hits:
+            return f"nothing recorded resembling {args['recall']!r}"
+        return "\n".join(h.render() for h in hits)
     rows = lg.recent(
         limit=int(args.get("limit", 10)), status=args.get("status"), tag=args.get("tag")
     )

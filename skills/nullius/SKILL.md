@@ -45,6 +45,13 @@ This elaborates without proving. It reports whether the statement type-checks, s
 Lean understood, and warns if the hypotheses are **contradictory** — in which case stop and
 restate, because any proof would be vacuous.
 
+It also surfaces **earlier work on the same statement**, matched on what Lean elaborated
+rather than on your phrasing. Treat a hit as a pointer: re-verify the recorded source and
+cite the fresh verdict, rather than citing the old row. If the hit is a rejection, look at
+which check failed — a failed *tactic* says nothing about whether the claim is provable and
+is not a reason to stop, whereas `not_vacuous` or `hypotheses_used` means the statement
+itself needs restating. Search the ledger directly with `scripts/nullius log --recall TEXT`.
+
 ### 3. Find lemmas; do not guess names
 
 Invented lemma names are the most common cause of failed proofs.

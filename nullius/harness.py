@@ -153,9 +153,40 @@ class Harness:
     # -- pre-flight and search --------------------------------------------
 
     def check_statement(self, statement: str, timeout: float | None = None) -> dict[str, Any]:
-        """Elaborate a statement without proving it; reports contradictory hypotheses."""
+        """Elaborate a statement without proving it; reports contradictory hypotheses.
+
+        Also consults the ledger: by this point Lean has produced the elaborated statement,
+        which finds the same theorem however it was previously written. Hooking the step the
+        agent already takes beats adding one it must remember.
+        """
         with borrow(self.pool) as session:
-            return Verifier(session, self.config).check_statement(statement, timeout=timeout)
+            res = Verifier(session, self.config).check_statement(statement, timeout=timeout)
+        if self.ledger is not None and res.get("ok"):
+            hits = self.ledger.recall(
+                statement=res.get("statement"),
+                text=statement,
+                current=self.config.provenance(),
+            )
+            res["recall"] = [h.render() for h in hits]
+        return res
+
+    def recall(
+        self,
+        source: str | None = None,
+        statement: str | None = None,
+        text: str | None = None,
+        limit: int = 4,
+    ) -> list[Any]:
+        """Prior verifications bearing on a claim. Pointers to re-check, never evidence."""
+        if self.ledger is None:
+            return []
+        return self.ledger.recall(
+            source=source,
+            statement=statement,
+            text=text,
+            limit=limit,
+            current=self.config.provenance(),
+        )
 
     def search(self, query: str, backend: str = "both", limit: int = 8) -> list[S.SearchResult]:
         """Find a lemma. `loogle` is the local index; `loogle-remote` the hosted service."""

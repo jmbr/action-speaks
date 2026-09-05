@@ -67,7 +67,7 @@ nullius/config.py         locates the project, records toolchain + Mathlib + Phy
 nullius/repl.py           persistent REPL session and pool
 nullius/guard.py          static ban-list, applied before Lean sees the source
 nullius/verify.py         the pipeline and the Verdict type
-nullius/ledger.py         append-only SQLite record of every verdict
+nullius/ledger.py         append-only SQLite record of every verdict, and recall of earlier ones
 nullius/search.py         Loogle (local or hosted), LeanSearch, and local exact?/apply?
 scripts/build-loogle.sh  builds Loogle against our toolchain, for offline shape search
 contrib/                 finished work that belongs elsewhere; not built, not maintained here
@@ -292,6 +292,34 @@ cslib       197a7be621263b84c67ca4f803f69205b36d06df
 The Physlib revision matters more than the others. Physlib ships results that are
 deliberately incomplete, and which ones are complete changes between commits, so "this was
 accepted" is only meaningful against a known revision.
+
+## Recalling earlier work
+
+An agent working across sessions re-derives the same lemma more often than it should, and a
+source hash misses the cases that matter: the same theorem proved twice from different
+sources. Those are also the expensive ones, since the cost is not Lean re-checking (10–200 ms)
+but the agent rediscovering a lemma name it already knew.
+
+So `statement` and `verify` consult the ledger automatically, on three keys of decreasing
+confidence: the source hash, the **elaborated statement** (Lean's own normal form, so one
+theorem matches however it was written), and a full-text search over claims. The third tier is
+restricted to verified rows, and is labelled a candidate rather than a result.
+
+A hit is a pointer, never evidence. Every verdict is revision-stamped, so a match is reported
+with whether the pins have moved — and the two verdicts read that drift in opposite
+directions. For a verification, drift *weakens* the row: it may no longer elaborate, so
+re-verify. For a rejection it *strengthens* the case for trying again, since Mathlib gains
+lemmas and Physlib completes results that were placeholders when the rejection was recorded.
+
+Rejections are deliberately not shown as discouragement. Most are attempt-level — a tactic
+that did not work — which says nothing about whether the claim is provable. Only
+`not_vacuous`, `hypotheses_used`, `statement_sorry_free` and `is_theorem` are defects of the
+statement itself, and those are reported as "restate this", which is actionable. Nothing in
+the ledger can support the claim that something is unprovable, so nothing here says it.
+
+```bash
+nullius log --recall 'gradient descent step size'   # ask directly
+```
 
 ## Setup from scratch
 

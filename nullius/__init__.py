@@ -12,7 +12,7 @@ Typical use from a harness:
 
 from .config import Config, ConfigError
 from .harness import Attempt, Harness, verify_once
-from .ledger import Ledger
+from .ledger import Ledger, Recollection
 from .repl import ReplError, ReplTimeout, Session, SessionPool
 from .search import (
     LoogleSession,
@@ -42,6 +42,7 @@ __all__ = [
     "Config",
     "ConfigError",
     "Ledger",
+    "Recollection",
     "SearchResult",
     "loogle",
     "loogle_remote",

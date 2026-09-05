@@ -11,7 +11,9 @@ row, so a claim's history (including any regression) stays visible.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -48,6 +50,157 @@ CREATE INDEX IF NOT EXISTS idx_ver_target ON verifications(target);
 CREATE INDEX IF NOT EXISTS idx_ver_time   ON verifications(created_at);
 """
 
+# Checks whose failure is a property of the *statement* rather than of the attempt made on
+# it. Everything else - a tactic that did not work, a banned construct, a citation of an
+# incomplete result - says nothing about whether the claim is provable, and must not be
+# reported as if it did. Attempt-level failures dominate in practice.
+STATEMENT_LEVEL_CHECKS = frozenset(
+    {"not_vacuous", "hypotheses_used", "statement_sorry_free", "is_theorem"}
+)
+
+_UNIVERSE = re.compile(r"\bu_\d+\b")
+_INST_NAME = re.compile(r"\binst(?:✝[\u00b9\u00b2\u00b3\u2070-\u2079]*|_\d+)")
+_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_']{2,}")
+
+
+def normalize_statement(statement: str | None) -> str:
+    """A canonical key for "the same theorem, however it was proved".
+
+    The elaborated statement is Lean's normal form for a declaration's type, so two
+    different proofs of one theorem agree here where their sources do not. Only
+    presentational noise is stripped: universe metavariable indices and generated instance
+    binder names.
+
+    Deliberately conservative, since a false "you already proved this" is the failure mode
+    this tool exists to prevent. It is not alpha-equivalence: renaming a bound variable
+    defeats it, which costs a missed match rather than a wrong one.
+    """
+    if not statement:
+        return ""
+    s = _UNIVERSE.sub("u", statement)
+    s = _INST_NAME.sub("inst", s)
+    return " ".join(s.split())
+
+
+def _drift(row: dict[str, Any], current: dict[str, str] | None) -> list[str]:
+    """Which pinned revisions have moved since this row was written.
+
+    Returns the names only; what the drift *means* depends on the verdict, and that
+    judgement belongs to `Recollection.advice`.
+    """
+    if not current:
+        return []
+    moved = []
+    for col in ("toolchain", "mathlib_rev", "physlib_rev", "cslib_rev"):
+        was, now = row.get(col), current.get(col)
+        if was and now and was != now:
+            moved.append(col.removesuffix("_rev"))
+    return moved
+
+
+@dataclass
+class Recollection:
+    """One prior verification that bears on what is about to be attempted.
+
+    A recollection is a *pointer*, never a verdict. It says that some source was submitted
+    before and what happened to it; it does not say that the claim in hand is proved, and
+    the rendered text is written so that it cannot be read that way.
+    """
+
+    row: dict[str, Any]
+    kind: str  # "source" | "statement" | "text"
+    drift: list[str]
+
+    KIND_LABEL = {
+        "source": "identical source",
+        "statement": "identical elaborated statement",
+        "text": "similar wording (candidate only)",
+    }
+
+    @property
+    def verified(self) -> bool:
+        return bool(self.row.get("verified"))
+
+    @property
+    def stale(self) -> bool:
+        return bool(self.drift)
+
+    @property
+    def failures(self) -> list[str]:
+        try:
+            return list(json.loads(self.row.get("failures") or "[]"))
+        except json.JSONDecodeError:
+            return []
+
+    @property
+    def statement_level(self) -> bool:
+        """True when the recorded failure was a defect of the statement itself."""
+        return any(f in STATEMENT_LEVEL_CHECKS for f in self.failures)
+
+    def advice(self) -> str:
+        """What this row means for the attempt about to be made.
+
+        The asymmetry is deliberate. For a verification, revision drift *weakens* the row -
+        a proof accepted against one Mathlib may not elaborate against another. For a
+        rejection it *strengthens* the case for trying again: libraries gain lemmas, and
+        Physlib completes results that were placeholders when the rejection was recorded.
+        """
+        if self.kind == "text":
+            # Matched on wording, so this may be a different theorem entirely. Saying
+            # "proved before" here would be the very error the verifier exists to catch.
+            return (
+                "Related earlier work, matched on wording alone - it may be a different "
+                "theorem. Compare the statement above against your claim; it is not "
+                "evidence for it."
+            )
+        if self.verified:
+            if self.stale:
+                return (
+                    "Proved here before, but the libraries have moved since "
+                    f"({', '.join(self.drift)}). It may no longer elaborate: re-verify the "
+                    "recorded source rather than citing this row."
+                )
+            return (
+                "Proved here before, at these exact revisions. This is a pointer, not "
+                "standing proof: re-verify the recorded source (milliseconds) and cite the "
+                "fresh verdict."
+            )
+        if self.statement_level:
+            fails = ", ".join(f for f in self.failures if f in STATEMENT_LEVEL_CHECKS)
+            return (
+                f"The STATEMENT itself was rejected ({fails}) - not the proof of it. "
+                "Restate the claim so its hypotheses can be satisfied and do real work; "
+                "a better proof of the same statement will fail the same way."
+            )
+        fails = ", ".join(self.failures) or self.row.get("status", "not verified")
+        tail = (
+            " The libraries have moved since then "
+            f"({', '.join(self.drift)}), so it may well succeed now."
+            if self.stale
+            else ""
+        )
+        return (
+            f"A previous ATTEMPT failed ({fails}). That is a fact about that proof, not "
+            "about the claim: nothing here says it is unprovable, and it is not a reason "
+            f"to give up. Try a different approach.{tail}"
+        )
+
+    def render(self, width: int = 110) -> str:
+        r = self.row
+        mark = "verified" if self.verified else (r.get("status") or "rejected")
+        head = f"#{r['id']} [{mark}] {r.get('created_iso', '')} {r.get('target') or '-'}"
+        if r.get("tag"):
+            head += f"  tag: {r['tag']}"
+        lines = [head, f"    matched: {self.KIND_LABEL.get(self.kind, self.kind)}"]
+        if r.get("claim"):
+            claim = str(r["claim"])
+            lines.append(f"    claim: {claim[:width]}{'...' if len(claim) > width else ''}")
+        if r.get("statement"):
+            stmt = str(r["statement"])
+            lines.append(f"    statement: {stmt[:width]}{'...' if len(stmt) > width else ''}")
+        lines.append(f"    -> {self.advice()}")
+        return "\n".join(lines)
+
 
 @dataclass
 class Ledger:
@@ -70,9 +223,61 @@ class Ledger:
         record it.
         """
         have = {r[1] for r in c.execute("PRAGMA table_info(verifications)")}
-        for col, decl in (("physlib_rev", "TEXT"), ("cslib_rev", "TEXT")):
+        for col, decl in (
+            ("physlib_rev", "TEXT"),
+            ("cslib_rev", "TEXT"),
+            ("statement_norm", "TEXT"),
+        ):
             if col not in have:
                 c.execute(f"ALTER TABLE verifications ADD COLUMN {col} {decl}")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_ver_stmt ON verifications(statement_norm)")
+        # Backfill the normalised statement for rows written before the column existed,
+        # so recall works on existing history rather than only on new entries.
+        pending = c.execute(
+            "SELECT id, statement FROM verifications "
+            "WHERE statement_norm IS NULL AND statement IS NOT NULL"
+        ).fetchall()
+        for row in pending:
+            c.execute(
+                "UPDATE verifications SET statement_norm = ? WHERE id = ?",
+                (normalize_statement(row[1]), row[0]),
+            )
+
+    @staticmethod
+    def _fts_ready(c: sqlite3.Connection) -> bool:
+        """Create and populate the full-text index, reporting whether it is usable.
+
+        The index keeps its own copy of the text columns rather than using FTS5's
+        external-content mode, where `COUNT(*)` is answered from the content table: an empty
+        index then reports the right row count and never rebuilds itself.
+
+        FTS5 is compiled into most SQLite builds but not guaranteed, and only the fuzziest
+        tier of recall needs it, so a missing one degrades to a LIKE scan rather than
+        failing.
+        """
+        try:
+            row = c.execute(
+                "SELECT sql FROM sqlite_master WHERE name = 'verifications_fts'"
+            ).fetchone()
+            if row and "content=" in (row[0] or ""):
+                c.execute("DROP TABLE verifications_fts")  # the broken external-content layout
+                row = None
+            if not row:
+                c.execute(
+                    "CREATE VIRTUAL TABLE verifications_fts USING fts5(claim, statement, target)"
+                )
+            indexed = c.execute("SELECT COUNT(*) FROM verifications_fts").fetchone()[0]
+            total = c.execute("SELECT COUNT(*) FROM verifications").fetchone()[0]
+            if indexed != total:
+                c.execute("DELETE FROM verifications_fts")
+                c.execute(
+                    "INSERT INTO verifications_fts(rowid, claim, statement, target) "
+                    "SELECT id, COALESCE(claim, ''), COALESCE(statement, ''), "
+                    "COALESCE(target, '') FROM verifications"
+                )
+            return True
+        except sqlite3.Error:
+            return False
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.path), timeout=30)
@@ -88,8 +293,8 @@ class Ledger:
                 """INSERT INTO verifications
                    (created_at, created_iso, status, verified, target, claim, statement,
                     source, source_sha256, axioms, checks, failures, toolchain, mathlib_rev,
-                    physlib_rev, cslib_rev, elapsed, tag)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    physlib_rev, cslib_rev, elapsed, tag, statement_norm)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
@@ -119,9 +324,20 @@ class Ledger:
                     verdict.provenance.get("cslib_rev"),
                     verdict.elapsed,
                     tag,
+                    normalize_statement(verdict.statement),
                 ),
             )
-            return int(cur.lastrowid or 0)
+            row_id = int(cur.lastrowid or 0)
+            try:
+                c.execute(
+                    "INSERT INTO verifications_fts(rowid, claim, statement, target) "
+                    "VALUES (?,?,?,?)",
+                    (row_id, verdict.claim or "", verdict.statement or "", verdict.target or ""),
+                )
+            except sqlite3.Error:
+                # No FTS5 here, or no index yet; `_fts_ready` rebuilds when it next runs.
+                pass
+            return row_id
 
     def get(self, row_id: int) -> dict[str, Any] | None:
         with self._conn() as c:
@@ -156,6 +372,95 @@ class Ledger:
                     (sha256,),
                 ).fetchall()
             ]
+
+    def recall(
+        self,
+        source: str | None = None,
+        statement: str | None = None,
+        text: str | None = None,
+        limit: int = 4,
+        current: dict[str, str] | None = None,
+    ) -> list[Recollection]:
+        """Prior verifications bearing on what is about to be attempted.
+
+        Three tiers, in decreasing confidence: the identical `source` by hash; the same
+        elaborated `statement`, which matches one theorem however it was written; and a
+        loose full-text match on `text`, restricted to verified rows so that a fuzzy hit on
+        a failed attempt cannot discourage work for no reason.
+
+        Results are pointers to re-verify, never evidence in themselves.
+        """
+        seen: set[int] = set()
+        out: list[Recollection] = []
+        with self._conn() as c:
+            self._fts_ready(c)
+
+            def take(rows: Iterable[sqlite3.Row], kind: str) -> None:
+                for r in rows:
+                    d = dict(r)
+                    if d["id"] in seen or len(out) >= limit:
+                        continue
+                    seen.add(d["id"])
+                    out.append(Recollection(d, kind, _drift(d, current)))
+
+            if source:
+                sha = hashlib.sha256(source.encode()).hexdigest()
+                take(
+                    c.execute(
+                        "SELECT * FROM verifications WHERE source_sha256 = ? "
+                        "ORDER BY verified DESC, id DESC LIMIT ?",
+                        (sha, limit),
+                    ),
+                    "source",
+                )
+
+            norm = normalize_statement(statement)
+            if norm:
+                take(
+                    c.execute(
+                        "SELECT * FROM verifications WHERE statement_norm = ? "
+                        "ORDER BY verified DESC, id DESC LIMIT ?",
+                        (norm, limit),
+                    ),
+                    "statement",
+                )
+
+            if text and len(out) < limit:
+                take(self._text_search(c, text, limit), "text")
+        return out[:limit]
+
+    @staticmethod
+    def _text_search(c: sqlite3.Connection, text: str, limit: int) -> list[sqlite3.Row]:
+        """Verified rows whose claim or statement reads like `text`.
+
+        The query is rebuilt from word characters only, because an unescaped `-` or `*` is
+        FTS5 syntax and would raise on ordinary prose.
+        """
+        words = [w.lower() for w in _WORD.findall(text)][:12]
+        if not words:
+            return []
+        try:
+            return list(
+                c.execute(
+                    "SELECT v.* FROM verifications_fts f JOIN verifications v ON v.id = f.rowid "
+                    "WHERE verifications_fts MATCH ? AND v.verified = 1 "
+                    "ORDER BY rank LIMIT ?",
+                    (" OR ".join(words), limit),
+                ).fetchall()
+            )
+        except sqlite3.Error:
+            longest = sorted(words, key=len, reverse=True)[:3]
+            clause = " OR ".join(["claim LIKE ? OR statement LIKE ?"] * len(longest))
+            args: list[Any] = []
+            for w in longest:
+                args += [f"%{w}%", f"%{w}%"]
+            return list(
+                c.execute(
+                    f"SELECT * FROM verifications WHERE verified = 1 AND ({clause}) "
+                    "ORDER BY id DESC LIMIT ?",
+                    (*args, limit),
+                ).fetchall()
+            )
 
     def stats(self) -> dict[str, Any]:
         with self._conn() as c:

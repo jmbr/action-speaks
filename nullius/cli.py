@@ -78,9 +78,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _print_recall(hits: list, header: str) -> None:
+    if not hits:
+        return
+    print(f"\n{header}")
+    for h in hits:
+        print("  " + h.render().replace("\n", "\n  "))
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     cfg = Config.discover()
     src = sys.stdin.read() if args.file == "-" else Path(args.file).read_text()
+    # Constructed only when logging is on: `Ledger` creates the database file, and
+    # `--no-log` promises to leave it alone.
+    ledger = None if args.no_log else Ledger(cfg.ledger_path)
+    # Cheap, and a rejected twin carries a reason that is actionable before the retry.
+    prior = ledger.recall(source=src, current=cfg.provenance()) if ledger else []
     s = _session(cfg)
     verdict = Verifier(s).verify(
         src,
@@ -92,11 +105,17 @@ def cmd_verify(args: argparse.Namespace) -> int:
     )
     s.close()
 
-    if not args.no_log:
-        row = Ledger(cfg.ledger_path).record(verdict, src, tag=args.tag)
+    if ledger is not None:
+        row = ledger.record(verdict, src, tag=args.tag)
         if not args.json:
             print(f"(ledger #{row})")
-    print(verdict.to_json() if args.json else verdict.render())
+    if args.json:
+        out = verdict.to_dict()
+        out["recall"] = [h.render() for h in prior]
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    else:
+        print(verdict.render())
+        _print_recall(prior, "seen before:")
     return 0 if verdict.verified else 1
 
 
@@ -105,7 +124,13 @@ def cmd_statement(args: argparse.Namespace) -> int:
     s = _session(cfg)
     res = Verifier(s).check_statement(args.statement, timeout=args.timeout)
     s.close()
+    hits = []
+    if res.get("ok"):
+        hits = Ledger(cfg.ledger_path).recall(
+            statement=res.get("statement"), text=args.statement, current=cfg.provenance()
+        )
     if args.json:
+        res["recall"] = [h.render() for h in hits]
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0 if res.get("ok") else 1
     if not res.get("ok"):
@@ -119,9 +144,11 @@ def cmd_statement(args: argparse.Namespace) -> int:
             "\nWARNING: the hypotheses are contradictory. Any proof of this statement would\n"
             f"be vacuous and support no claim (witness: {res['vacuity_witness']})."
         )
+        _print_recall(hits, "related earlier work:")
         return 1
     for g in res.get("open_goals") or []:
         print(f"\ngoal:\n{g}")
+    _print_recall(hits, "related earlier work:")
     return 0
 
 
@@ -152,6 +179,14 @@ def cmd_log(args: argparse.Namespace) -> int:
     ledger = Ledger(cfg.ledger_path)
     if args.stats:
         print(json.dumps(ledger.stats(), indent=2))
+        return 0
+    if args.recall:
+        hits = ledger.recall(text=args.recall, limit=args.limit, current=cfg.provenance())
+        if not hits:
+            print(f"nothing recorded resembling {args.recall!r}")
+            return 1
+        for h in hits:
+            print(h.render())
         return 0
     rows = ledger.recent(limit=args.limit, status=args.status, tag=args.tag)
     if args.json:
@@ -226,6 +261,11 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("-n", "--limit", type=int, default=20)
     lg.add_argument("--status", choices=("verified", "rejected", "error"))
     lg.add_argument("--tag", help="only entries recorded with this --tag")
+    lg.add_argument(
+        "--recall",
+        metavar="TEXT",
+        help="find earlier work resembling TEXT (verified entries only)",
+    )
     lg.add_argument("--stats", action="store_true")
     lg.add_argument("--json", action="store_true")
     lg.set_defaults(func=cmd_log)
