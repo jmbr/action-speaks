@@ -1,121 +1,98 @@
 ---
 name: nullius
-description: Verify a mathematical or computational claim by proving it in Lean 4 with Mathlib, Physlib and Cslib, so the claim is machine-checked rather than asserted. Use whenever stating a non-obvious mathematical fact - an inequality, identity, bound, closed form, convergence or termination argument, correctness property, or counterexample - especially in analysis, algebra, number theory, combinatorics, probability, algorithm correctness, semantics, or physics. Also use to check whether a conjecture is even consistent before trying to prove it, and to find the right Mathlib or Cslib lemma name instead of guessing.
-compatibility: Requires the nullius verifier (Lean 4.32.0 + Mathlib + Physlib + Cslib, ~9GB built) installed via its install.sh. Linux/macOS with python3.
+description: Check mathematical or computational claims by proving them in Lean 4 with Mathlib, Physlib and Cslib. Use for non-obvious inequalities, identities, bounds, closed forms, convergence, termination, correctness arguments, and counterexamples in mathematics, physics, or computer science. Also use to check statements for contradictory assumptions and to find library lemmas instead of guessing names.
+compatibility: Requires a built nullius checkout (Lean 4.32.0 + Mathlib + Physlib + Cslib) and its install.sh setup. Linux/macOS with python3.
 metadata:
   repository: nullius
 ---
 
-# Backing mathematical claims with Lean
+# Check mathematical claims with Lean
 
-Use this when you are about to assert something mathematical that a careful reader would want
-checked. Instead of asserting it, prove it in Lean and let the kernel decide.
+Use nullius for mathematical facts that need more than inspection to justify. It checks Lean
+proofs, rejects unfinished proofs and untrusted axioms, and looks for problems in assumptions.
+It cannot check that a formal statement matches an English claim; you must compare them.
 
-## Why this exists
+## Workflow
 
-"It compiled" is not evidence. All of these compile with no errors:
+### 1. Write the claim in English
 
-```lean
-theorem a : 2 + 2 = 5 := by sorry          -- incomplete
-axiom evil : False                          -- smuggled assumption
-theorem b : 2 + 2 = 5 := absurd evil (by simp)
-theorem c (n : ℕ) (h₁ : n > 5) (h₂ : n < 3) : n = 42 := by omega   -- vacuous
-```
+State what you intend to prove before writing Lean.
 
-The last is the dangerous one: it is a *genuine theorem*, but no such `n` exists, so it
-supports no claim at all. Careless formalisation produces these constantly and they look like
-success. The verifier rejects all four.
-
-## The workflow
-
-### 1. Write the claim in English first
-
-You will need it to check that the Lean statement actually says the same thing.
-
-### 2. Check the statement before proving it
+### 2. Check the statement
 
 ```bash
 ~/.agents/skills/nullius/scripts/nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
 ```
 
-(That path is a symlink into the verifier repository, so it works from any directory. The
-examples below shorten it to `scripts/nullius`.)
+This returns the *elaborated statement*: what Lean interpreted after resolving notation
+and types. It also tries to detect contradictory assumptions. If it finds a contradiction,
+review the statement. A clean report does not prove that the assumptions are consistent.
 
-This elaborates without proving. It reports whether the statement type-checks, shows what
-Lean understood, and warns if the hypotheses are **contradictory** — in which case stop and
-restate, because any proof would be vacuous.
+The response may include earlier work from the ledger. Compare the recorded statement with
+your claim, then re-verify any source you reuse. Similar wording is not evidence of an
+equivalent theorem. A previous tactic failure is a reason to try another approach, not to
+give up. A detected contradiction or unnecessary assumption calls for reviewing the
+statement.
 
-It also surfaces **earlier work on the same statement**, matched on what Lean elaborated
-rather than on your phrasing. Treat a hit as a pointer: re-verify the recorded source and
-cite the fresh verdict, rather than citing the old row. If the hit is a rejection, look at
-which check failed — a failed *tactic* says nothing about whether the claim is provable and
-is not a reason to stop, whereas `not_vacuous` or `hypotheses_used` means the statement
-itself needs restating. Search the ledger directly with `scripts/nullius log --recall TEXT`.
+The commands below use `scripts/nullius` relative to this skill directory. Use the full path
+above when working elsewhere. For a direct ledger search, run
+`scripts/nullius log --recall TEXT`.
 
-### 3. Find lemmas; do not guess names
-
-Invented lemma names are the most common cause of failed proofs.
+### 3. Find lemmas
 
 ```bash
-scripts/nullius search 'sum of two even numbers is even'        # by meaning
-scripts/nullius search '|- Irrational (Real.sqrt _)'            # by shape (Loogle)
-scripts/nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'      # ask Lean directly
+scripts/nullius search 'sum of two even numbers is even'
+scripts/nullius search '|- Irrational (Real.sqrt _)' --backend loogle
+scripts/nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
 ```
 
-`close` cannot hallucinate: it only reports lemmas that genuinely close the goal. `search`
-consults remote indexes and can hand back a name that does not exist; `close` cannot.
+Local Loogle searches the installed Mathlib, Physlib, and Cslib. `close` asks the installed
+Lean environment for tactic suggestions. Use these instead of guessing lemma names, and
+verify the resulting proof.
+
+LeanSearch is remote. Hosted Loogle is available only through `--backend loogle-remote`;
+it uses a different Mathlib revision and does not cover Physlib or Cslib.
 
 ### 4. Verify the proof
 
 ```bash
-scripts/nullius verify "if n > 5 then n squared exceeds 25" <<'EOF'
+scripts/nullius verify "if n > 5 then n squared exceeds 25" --require-nontrivial <<'EOF'
 theorem main (n : ℕ) (h : 5 < n) : 25 < n * n := by nlinarith
 EOF
 ```
 
-Exit code 0 means verified, 1 means not. Add `--require-nontrivial` to also reject proofs
-whose hypotheses turn out to be unnecessary.
+For `verify`, exit code 0 means verified, 1 means not verified, and 2 indicates a command or
+configuration error. Keep `--require-nontrivial` enabled: it rejects the proof if a probe
+can establish the conclusion after removing propositional assumptions. It does not prove
+that each assumption is necessary.
 
-### 5. Report honestly
+The wrapper takes a claim and reads source from stdin or `-f FILE`. The installed CLI uses
+`nullius verify FILE -c "claim"` instead.
 
-- **Verified:** say it is machine-checked, and quote the **elaborated statement** the tool
-  prints — not a looser paraphrase of it.
-- **Not verified:** do not present the claim as proved. Say what failed, or say plainly that
-  you could not prove it. Never dress up a failure.
+### 5. Report the result
 
-## Writing the Lean
+For `VERIFIED`, quote the elaborated statement and say it is machine-checked. Check its
+types, quantifiers, assumptions, and conclusion against the English claim. If they differ,
+revise the statement and verify again.
 
-- **No `import` lines.** Mathlib, Physlib and Cslib are already imported; an `import` is
-  rejected.
-- **Physlib ships incomplete results** marked `@[sorryful]` / `@[pseudo]`. Citing one gets
-  rejected on its axiom footprint, which means that physics result is not proved yet. Cslib
-  has no such placeholders.
-- **Cslib covers computation** — lambda calculi, automata, process calculi, type systems,
-  verified algorithms. Search it before hand-rolling a model of computation.
-- Helper lemmas first, the claim you care about **last** (that one is audited by default).
-- Workhorse tactics: `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
-  `aesop`, `simp`, `decide`, `grind`.
-- Prefer `ℝ`/`ℤ` when the claim is about ordinary arithmetic. **`ℕ` subtraction truncates**
-  (`0 - 1 = 0`) and `ℕ` division floors — a large share of "obvious" claims are false in `ℕ`
-  for exactly this reason.
+For any other verdict, explain what failed. Do not present the claim as proved.
 
-## What gets rejected
+## Lean source rules
 
-`sorry` · new `axiom`s · `native_decide` · `debug.skipKernelTC` · `unsafe` · `partial def` ·
-`@[implemented_by]` · `@[extern]` · `#exit` · `maxHeartbeats 0` · tampering with the audit
-commands · contradictory hypotheses · (optionally) unused hypotheses.
+- No `import` lines: Mathlib, Physlib, Cslib, and the audit module are preloaded.
+- Put helpers first and the target theorem last, or select the theorem explicitly.
+- Physlib includes unfinished results marked `@[sorryful]` or `@[pseudo]`. Citing one can
+  fail the axiom check even if your source contains no `sorry`.
+- Cslib covers computation topics such as automata, type systems, and verified algorithms.
+  Search it before writing your own definitions.
+- Try `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,
+  `simp`, `decide`, or `grind` for routine goals.
+- Choose types carefully: subtraction on `ℕ` stops at zero, and division discards the
+  remainder. Use `ℤ` or `ℝ` when the claim needs different arithmetic.
 
-Attempting any of these is worse than admitting you could not prove the claim. The verifier
-checks the proof's kernel-level axiom footprint, so tactic and macro trickery does not help.
+The verifier rejects `sorry`, new axioms, `native_decide`, kernel bypasses, `unsafe`,
+`partial def`, `@[implemented_by]`, `@[extern]`, `#exit`, `maxHeartbeats 0`, and changes to
+the audit commands. Submit a complete proof rather than trying to bypass these checks.
 
-See [references/GUIDE.md](references/GUIDE.md) for the failure catalogue, worked repair
-examples, batch/harness use, and setup.
-
-## The part the tool cannot do
-
-Lean checks the proof. It cannot check that your Lean statement means what your English
-sentence meant. Always read the elaborated statement and ask: are the quantifiers right? did
-I add a hypothesis that makes it easy? is the conclusion the full claim? are the types right?
-
-If the elaborated statement does not match the claim, a green verdict is worthless. That
-comparison is yours to make, and it is the reason the tool always prints the statement.
+See [the reference guide](references/GUIDE.md) for error explanations, worked examples,
+and batch use.

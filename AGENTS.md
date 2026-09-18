@@ -1,144 +1,111 @@
-# Instructions for agents using the Lean verifier
+# Instructions for agents using nullius
 
-You have access to a Lean 4 + Mathlib proof checker. Use it to turn assertions into evidence.
+Use nullius to check mathematical claims with Lean 4, Mathlib, Physlib, and Cslib.
+Verify substantial inequalities, identities, bounds, convergence or correctness arguments,
+and counterexamples. Skip trivial arithmetic and non-mathematical claims.
 
-## When to verify
+## Workflow
 
-Verify whenever you state a mathematical fact that matters and that you cannot expect the
-reader to check by inspection: an inequality, a closed form, a bound, a convergence claim, a
-termination or correctness argument, a counterexample.
+### 1. State the claim in English
 
-Do not verify trivial arithmetic, definitional restatements, or claims that are not
-mathematical.
+Write the intended claim before writing Lean. You will compare it with the statement Lean
+actually checks.
 
-## The workflow
+### 2. Check the statement
 
-**1. State the claim in English first.** Write the claim you intend to support before you
-write any Lean. You will need it to check that the formal statement matches.
-
-**2. Check the statement before proving it.**
-
-```
+```text
 statement { "statement": "(n : Nat) (h : 5 < n) : 25 < n * n" }
 ```
 
-This elaborates the statement without a proof. It tells you whether it type-checks, shows you
-the statement Lean actually understood, and — critically — whether the hypotheses are
-**contradictory**. If they are, stop: any proof you write will be rejected, because a theorem
-with contradictory hypotheses is vacuously true and supports nothing.
+`statement` checks the types without requiring a proof. It returns the **elaborated
+statement**: the statement Lean interpreted after resolving notation and implicit arguments.
+It also tries to find contradictory assumptions. If it finds a contradiction, review the
+statement before proving it. If it finds none, consistency is still not established.
 
-It also reports **related earlier work** from the ledger, matched on the elaborated statement
-rather than on your wording, so the same theorem is found however it was previously phrased.
-Read such a hit as a pointer, never as proof: re-verify the recorded source (it takes
-milliseconds) and cite the fresh verdict. A hit labelled *similar wording* is weaker still —
-it may be an entirely different theorem.
+The response may include earlier ledger entries. Matches use statement text or similar
+wording, not a proof that the claims are equivalent. Compare each result with your claim,
+then re-verify any stored source you reuse. Do not cite an old ledger entry as a fresh proof.
 
-If the hit is a **rejection**, check which part failed before drawing any conclusion. Almost
-all rejections are attempt-level — a tactic that did not work, a name that did not resolve —
-and say nothing whatever about whether the claim is provable; try a different approach. Only
-`not_vacuous`, `hypotheses_used`, `statement_sorry_free` and `is_theorem` are properties of
-the *statement*, and those call for restating it rather than for giving up. A rejection
-recorded against older library revisions may simply succeed now.
+A rejected attempt is not evidence that the claim is unprovable. Tactic and name-resolution
+errors call for another attempt. Failures of `not_vacuous`, `hypotheses_used`,
+`statement_sorry_free`, or `is_theorem` call for reviewing the statement or selected target.
+The result may also change after a library update.
 
-**3. Find the lemmas you need. Do not guess names.**
+### 3. Find lemmas instead of guessing names
 
-```
-search { "query": "sum of two even numbers is even" }       # by meaning
-search { "query": "|- Irrational (Real.sqrt _)", "backend": "loogle" }  # by shape
-close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }     # ask Lean
+```text
+search { "query": "sum of two even numbers is even" }
+search { "query": "|- Irrational (Real.sqrt _)", "backend": "loogle" }
+close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }
 ```
 
-Inventing a plausible-sounding lemma name is the single most common reason proofs fail.
-`close` cannot hallucinate: it reports only lemmas that genuinely close the goal.
+Local Loogle searches the installed Mathlib, Physlib, and Cslib. `close` asks the installed
+Lean environment for tactic suggestions for a goal. Verify the resulting proof before
+citing it.
 
-`search`'s shape backend queries a local index of the same Mathlib, Physlib and Cslib you are
-checked against, so what it finds is what you can cite. If it reports that no local index
-exists, say so rather than guessing a name; `backend: "loogle-remote"` will reach the public
-service, but it indexes a different Mathlib revision and neither Physlib nor Cslib, so a miss
-there is not evidence that a lemma is absent here.
+If local Loogle is unavailable, report that. Use `backend: "loogle-remote"` only explicitly:
+the public index uses a different Mathlib revision and does not include Physlib or Cslib.
+A missing result there does not establish that a lemma is absent locally.
 
-(The five tools are named `verify`, `statement`, `search`, `close`, `log` — the same names as
-the CLI subcommands. Your client namespaces them by server, typically as `nullius-search` and
-so on, which is what distinguishes this `search` from any other tool of that name.)
+The tools are `verify`, `statement`, `search`, `close`, and `log`. Clients may prefix their
+names with the server name, for example `nullius-search`.
 
-**4. Verify the proof.**
+### 4. Verify the proof
 
-```
+```text
 verify {
   "source": "theorem main (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
-  "claim":  "If n is greater than 5 then n squared exceeds 25",
+  "claim": "If n is greater than 5 then n squared exceeds 25",
   "require_nontrivial": true
 }
 ```
 
-`require_nontrivial` rejects a proof whose hypotheses turn out to be unnecessary. Leave it on.
-It sounds like tidiness and is not: if a claim about a *free particle* holds without the
-hypothesis that the particle is free, you have stated something other than what you meant.
-It is the cheapest available warning for the trap described at the end of this document.
+Keep `require_nontrivial` enabled. It rejects a proof if a probe can establish the conclusion
+after removing propositional assumptions. Passing this check does not prove that each
+assumption is necessary.
 
-Pass a `tag` to file related checks together — one paper, one investigation — and retrieve
-them later with `log { "tag": "..." }`. Rejections are kept as well as successes, so the
-history of a claim stays visible, including a step that stopped verifying after a dependency
-changed.
+Use `tag` to group related attempts, and `log { "tag": "..." }` to retrieve them.
+The ledger keeps both successes and rejections.
 
-**5. Report honestly.** If the verdict is `VERIFIED`, say the claim is machine-checked and
-state the **elaborated statement** from the result, not a looser paraphrase. If the verdict is
-anything else, do not present the claim as proved.
+### 5. Report the result accurately
 
-## Writing the Lean source
+Only a `VERIFIED` verdict supports calling the result machine-checked. Quote the returned
+elaborated statement, and compare it with the English claim:
 
-- **No `import` lines.** Mathlib, Physlib and Cslib are already imported. An `import` in your
-  submission is rejected.
-- **Physlib results are not all complete.** It ships placeholders marked `@[sorryful]`
-  (`sorryAx`) and `@[pseudo]` (`Lean.ofReduceBool`). Citing one is not an error you will see
-  in the proof — the audit catches it as an untrusted axiom, and the verdict is a rejection.
-  If that happens, the physics result you leaned on is not actually proved yet. Cslib carries
-  no such placeholders, so this caveat is Physlib's alone.
-- `search` and `close` see all three. Cslib is where computation lives — lambda calculi,
-  automata, process calculi, type systems, verified algorithms — so reach for it when the
-  claim is about a program or a model of computation rather than about numbers.
-- Put helper lemmas first and the claim you care about **last**; that last theorem is what
-  gets audited by default.
-- Prefer `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,
-  `simp`, `decide`, `grind` for routine goals.
-- `exact?` and `apply?` are for *finding* proofs interactively. Once you know the answer, put
-  the concrete term in your submission.
+- Are the types correct? In particular, natural-number subtraction and division truncate.
+- Are the quantifiers (`∀`, `∃`) and their order correct?
+- Are the assumptions justified, rather than added to make the proof easy?
+- Is the conclusion the full claim?
 
-## What will get you rejected
+If the statements differ, correct the Lean and verify again. For any other verdict, explain
+what failed without claiming a proof.
 
-The verifier is adversarial by design. These are all rejected, and attempting them is worse
-than admitting you cannot prove the claim:
+## Writing Lean source
 
-| Attempt | Why it fails |
+- Do not include `import` lines. Mathlib, Physlib, Cslib, and the audit module are preloaded.
+- Put helper lemmas first and the theorem to check last, or select it with `target`.
+- Use tactics such as `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
+  `aesop`, `simp`, `decide`, and `grind` for routine goals.
+- Use `exact?` and `apply?` to find proofs, then submit the concrete term they suggest.
+- Physlib includes unfinished results marked `@[sorryful]` or `@[pseudo]`. A proof that
+  depends on their untrusted axioms is rejected, even if the submission contains no `sorry`.
+  Find a proved result or state that the dependency is unfinished.
+- Search Cslib for computation topics such as automata, type systems, and verified algorithms
+  before defining your own model.
+
+## Rejection rules
+
+| Construct or condition | Reason |
 |---|---|
-| `sorry` anywhere | the proof is incomplete by definition |
-| `axiom foo : ...` | you may only use Mathlib's existing foundations |
-| `native_decide` | trusts the compiler instead of the kernel |
-| `set_option debug.skipKernelTC` | disables the type-checker |
-| `unsafe`, `partial def`, `@[implemented_by]`, `@[extern]` | bypass the kernel |
-| `#exit` | hides everything after it |
-| redefining the audit commands | detected by a tripwire; treated as tampering |
-| contradictory hypotheses | vacuously true, supports no claim |
-| unused hypotheses | the statement is weaker than it looks (fatal under `require_nontrivial`) |
+| `sorry`, `sorryAx` | Incomplete proof |
+| New `axiom` declarations | Untrusted assumptions |
+| `native_decide` | Uses compiler-based evidence rather than only kernel checking |
+| `debug.skipKernelTC` | Disables kernel type checking |
+| `unsafe`, `partial def`, `@[implemented_by]`, `@[extern]` | Unsupported ways to bypass normal checking |
+| `#exit` | Stops processing before later declarations |
+| Changes to audit commands | Interference with verification |
+| Detected contradictory assumptions | The assumptions cannot hold together |
+| Conclusion proved without removed assumptions | Warning by default; rejection with `require_nontrivial` |
 
-## The trap that matters most
-
-A proof can be perfectly sound and still be worthless, because it proves something other than
-what you claimed. Lean checks the proof; it cannot check that the statement means what your
-English sentence meant. **That comparison is your job.**
-
-Concretely, always read the elaborated statement in the result and ask:
-
-- Are the quantifiers the ones I meant (`∀` vs `∃`, and in what order)?
-- Are the hypotheses the ones I claimed, or did I quietly add one that makes it easy?
-- Is the conclusion the full claim, or a weakened version?
-- Are types right — `ℕ` subtraction and division truncate, so `n - m` on `ℕ` is not what a
-  reader assumes.
-
-If the elaborated statement does not match your English claim, the verification is worthless
-no matter how green the verdict is. Fix the statement and verify again.
-
-One mechanical check helps here, though it cannot replace reading the statement: with
-`require_nontrivial` set, a proof is rejected when its hypotheses turn out to be unnecessary.
-A claim that does not need its own hypotheses is usually a claim about something other than
-what you meant, so this catches a useful share of the trap by a different route.
+Lean checks a formal proof, not the accuracy of the translation from English. That final
+comparison remains your responsibility.

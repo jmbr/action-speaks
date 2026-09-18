@@ -1,43 +1,40 @@
-# Reference: verifying claims with Lean
+# nullius reference
 
-Loaded on demand. `SKILL.md` has the workflow; this has the details.
+See [SKILL.md](../SKILL.md) for the workflow. Commands below use `scripts/nullius` relative
+to the skill directory.
 
-## Failure catalogue
+## Failed checks
 
-What each verdict line means and what to do about it.
-
-| Check | Meaning | What to do |
+| Check | Meaning | Action |
 |---|---|---|
-| `static_guard` | banned construct in the source | remove it; these are never negotiable |
-| `elaboration` | the proof does not compile | read the Lean error; use `close` to find the lemma |
-| `no_sorry` | proof incomplete, anywhere in the file | finish it, or admit you cannot prove it |
-| `target_declared` | the named theorem does not exist | name the theorem you want audited, put it last |
-| `audit_integrity` | the submission interfered with the verifier | submit a plain proof |
-| `trusted_axioms` | rests on something beyond `propext`, `Classical.choice`, `Quot.sound` | remove the axiom / `native_decide`, or stop citing an unfinished Physlib result (see below) |
-| `statement_sorry_free` | `sorry` inside the statement itself | write the statement out fully |
-| `not_vacuous` | hypotheses contradict each other | **fix the statement, not the proof** |
-| `hypotheses_used` | conclusion holds without the hypotheses | strengthen the conclusion, or drop the hypotheses and claim the stronger result |
+| `static_guard` | Banned source construct | Remove it and submit a plain proof |
+| `elaboration` | Lean could not type-check the source | Read the error; use `search` or `close` for lemmas |
+| `no_sorry` | An unfinished proof occurs in the submission | Complete it or report that it remains unproved |
+| `target_declared` | The selected theorem could not be resolved | Check its name or put the intended theorem last |
+| `kernel_replay` | The kernel rejected a rechecked declaration | Remove code that bypasses normal checking |
+| `audit_integrity` | The audit failed its integrity check | Remove changes to audit behavior |
+| `trusted_axioms` | The proof depends on an untrusted axiom | Remove that dependency; check for unfinished Physlib results |
+| `statement_sorry_free` | The statement contains `sorry` | Complete the statement |
+| `is_theorem` | The target is a definition, not a theorem | Select a theorem |
+| `not_vacuous` | The probe found contradictory assumptions | Review the statement, not just the proof |
+| `hypotheses_used` | The probe proved the conclusion without the removed assumptions | Review the conclusion and assumptions |
 
-## The two repairs that are not obvious
+`hypotheses_used` is a warning unless `--require-nontrivial` is enabled. The allowed axioms
+are `propext`, `Classical.choice`, and `Quot.sound`.
 
-### Vacuous: fix the statement, not the proof
+## Common repairs
 
-```
-[FAIL] not_vacuous - hypotheses are contradictory, so the theorem is vacuously true
-```
-
-The instinct is to change the proof. That is wrong — the proof is fine and Lean was right to
-accept it. The *statement* is the problem: the hypotheses cannot all hold, so the theorem
-says nothing.
+### Contradictory assumptions
 
 ```lean
 -- rejected: no ℕ is both > 5 and < 3
 theorem bad (n : ℕ) (h₁ : n > 5) (h₂ : n < 3) : n = 42 := by omega
 ```
 
-Work out what you actually meant, and restate it.
+Lean accepts this proof, but its assumptions cannot hold together. Review the intended claim
+and correct its assumptions. Changing the proof alone does not address the problem.
 
-### `ℕ` truncation: the most common false "obvious" claim
+### Natural-number arithmetic
 
 ```lean
 -- rejected: FALSE at n = 0, because 0 - 1 = 0 in ℕ
@@ -47,51 +44,48 @@ theorem bad (n : ℕ) : n - 1 < n := by omega
 theorem good (n : ℕ) (hn : 0 < n) : n - 1 < n := by omega
 ```
 
-`ℕ` subtraction truncates at zero and `ℕ` division floors. If a claim involves subtraction,
-division, or "the difference between", either add the hypothesis that makes it well-behaved
-or state it over `ℤ`/`ℝ`.
+Natural-number subtraction stops at zero; division discards the remainder. Add the needed
+assumption or choose a different type, depending on the intended claim.
 
-### Physlib: the result you cited may not be proved yet
+### Unfinished Physlib results
 
-Mathlib, Physlib and Cslib are all imported, but they do not hold themselves to the same
-standard. Physlib deliberately ships unfinished results, marked `@[sorryful]` (resting on
-`sorryAx`) or `@[pseudo]` (resting on `Lean.ofReduceBool`). Nothing in your submission looks
-wrong when you cite one — there is no `sorry` to see, and the proof can be a bare `rfl` — but
-the axiom footprint gives it away:
+Physlib includes results marked `@[sorryful]` or `@[pseudo]` that depend on untrusted axioms.
+A citation can therefore fail even when your submission contains no unfinished proof:
 
-```
+```text
 [FAIL] trusted_axioms - untrusted: sorryAx
   axioms: sorryAx
 ```
 
-That is not a defect in your proof. It means the physics result you leaned on is a
-placeholder, so the claim is not available to you yet. Say so, rather than working around it.
+Use a completed result, prove the missing step, or report that the dependency is unfinished.
 
 ## Finding lemmas
 
-Three routes, in increasing order of reliability and cost:
-
 ```bash
 scripts/nullius search 'every continuous function on a compact set attains its maximum'
-scripts/nullius search '|- Continuous (fun _ => _)'          # Loogle pattern
-scripts/nullius search 'Real.sqrt, |- _ ≤ _'                 # Loogle conjunction
-scripts/nullius close 'Irrational (Real.sqrt 2)'              # ask Lean; authoritative
+scripts/nullius search '|- Continuous (fun _ => _)' --backend loogle
+scripts/nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle
+scripts/nullius close 'Irrational (Real.sqrt 2)'
 scripts/nullius close '0 ≤ x^2' -b '(x : ℝ)'
 ```
 
-Loogle patterns: `?a` is a named wildcard, `_` an anonymous one, `|-` restricts the match to
-the conclusion, commas conjoin constraints, `"foo"` matches names containing `foo`.
+Loogle pattern syntax:
 
-`close` runs `exact?`/`apply?` inside Lean. Slower (seconds), but whatever it returns actually
-closes the goal — it cannot invent a name. When `search` and `close` disagree, trust `close`.
+| Syntax | Meaning |
+|---|---|
+| `?a` | Named wildcard |
+| `_` | Anonymous wildcard |
+| `|-` | Match only the conclusion |
+| `,` | Require all listed constraints |
+| `"foo"` | Match declaration names containing `foo` |
 
-Shape search runs against a **local** Loogle index covering Mathlib, Physlib and Cslib at
-exactly the revisions this verifier pins, so what it finds is what you can cite. If that index
-has not been built the search says so rather than answering from somewhere else; the public
-service is one explicit request away (`--backend loogle-remote`), but its index is a
-different Mathlib revision with neither Physlib nor Cslib, so a miss there means little. The
-result names which answered: `loogle-local` or `loogle`. Natural-language search is remote
-either way.
+Local Loogle searches the installed library versions. If it is unavailable, build it with
+`scripts/build-loogle.sh` in the verifier repository. Hosted Loogle must be requested with
+`--backend loogle-remote`; it searches a different Mathlib revision without Physlib or Cslib.
+Natural-language search uses the remote LeanSearch service.
+
+`close` runs search tactics in Lean against your goal. Treat the suggestions as proof
+candidates and run the finished proof through `verify`.
 
 ## Worked example: claim to verdict
 
@@ -99,9 +93,8 @@ Claim: *the arithmetic mean of two nonnegative reals is at least their geometric
 
 ```bash
 scripts/nullius statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
-# → ∀ (a b : ℝ), 0 ≤ a → 0 ≤ b → √(a * b) ≤ (a + b) / 2 ; hypotheses satisfiable
 
-scripts/nullius verify "AM-GM for two nonnegative reals" <<'EOF'
+scripts/nullius verify "AM-GM for two nonnegative reals" --require-nontrivial <<'EOF'
 theorem am_gm_two (a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) :
     Real.sqrt (a * b) ≤ (a + b) / 2 := by
   rw [show a * b = ((a+b)/2)^2 - ((a-b)/2)^2 by ring]
@@ -112,12 +105,13 @@ theorem am_gm_two (a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) :
 EOF
 ```
 
-Then report: *"Machine-checked in Lean 4 / Mathlib: `∀ (a b : ℝ), 0 ≤ a → 0 ≤ b →
-√(a * b) ≤ (a + b) / 2`."* Quote the elaborated statement, not a paraphrase.
+After verification, report the elaborated statement:
+`∀ (a b : ℝ), 0 ≤ a → 0 ≤ b → √(a * b) ≤ (a + b) / 2`.
+Compare it with the English claim before calling the claim machine-checked.
 
 ## Refuting a claim
 
-To refute something, prove its negation — equally checkable:
+Prove the negation to refute a claim:
 
 ```bash
 scripts/nullius verify "not every continuous function is differentiable" <<'EOF'
@@ -127,50 +121,46 @@ theorem not_all_cont_diff : ¬ (∀ f : ℝ → ℝ, Continuous f → Differenti
 EOF
 ```
 
-If you can prove neither the claim nor its negation, say exactly that. "I could not settle
-this" is a legitimate and useful answer; a fabricated proof is not.
+If neither direction is proved, report that the question remains unresolved.
 
 ## Repeated or batch use
 
-Each CLI invocation starts its own Lean session (~2.6 s to import Mathlib and Physlib). For
-more than a handful of checks, drive the Python API, which keeps sessions warm:
+The CLI starts Lean for each invocation. For repeated checks, reuse sessions through Python:
 
 ```python
-from nullius import Harness            # after `pip install -e .` in a checkout
+from nullius import Harness
 
-with Harness(pool_size=4).warm() as h:
-    verdicts = h.verify_many([{"source": s, "claim": c} for s, c in items])
+with Harness(pool_size=2).warm() as h:
+    verdicts = h.verify_many(
+        [{"source": s, "claim": c} for s, c in items],
+        require_nontrivial=True,
+    )
 ```
 
-A warm pool verifies in 10–200 ms per claim, and `h.prove(propose)` runs a repair loop that
-feeds each failure back to the model. See `docs/INTEGRATION.md` in the verifier repo.
+`h.prove(propose)` supports a repair loop that sends failure feedback to your proof generator.
+See `docs/INTEGRATION.md` in the verifier repository.
 
-## Setup and diagnosis
+## Setup, history, and reproducibility
 
 ```bash
-scripts/nullius doctor    # provenance, startup time, three sanity checks
-scripts/nullius log       # what has been verified so far
+scripts/nullius doctor
+scripts/nullius log
+scripts/nullius log --recall 'gradient descent'
 ```
 
-`doctor` should end with "verifier is discriminating correctly", meaning it accepted a
-genuine proof and rejected both a `sorry` and a vacuous theorem. If it fails, the verifier
-needs rebuilding — see `README.md` in the verifier repo. The wrapper finds the repository by
-resolving its own symlink; set `NULLIUS_ROOT` to override.
+`doctor` checks configuration and whether the verifier accepts and rejects its sample proofs
+as expected. Use any error message to identify the missing configuration or build step.
+The wrapper follows its symlink to find the repository; `NULLIUS_ROOT` overrides that path.
 
-## Provenance
+The ledger stores attempts with their source and library versions. Use `--tag NAME` when
+verifying related claims and `log --tag NAME` to retrieve them. A failed attempt does not
+establish that a claim is unprovable. When reusing an earlier proof, compare its statement
+and verify its source again.
 
-Every verdict records the toolchain and the Mathlib, Physlib and Cslib revisions, and each
-check is appended to a SQLite ledger. When a verification matters, cite it:
+Record the toolchain and library revisions with results you publish. A proof can stop
+compiling when dependencies change. For this checkout:
 
+```text
+Lean 4.32.0, Mathlib 81a5d257c8e4, Physlib cf1d86d1fbba, Cslib 197a7be62126
+Allowed axioms: propext, Classical.choice, Quot.sound
 ```
-Lean 4.32.0, Mathlib 81a5d257c8e4, Physlib cf1d86d1fbba, Cslib 197a7be62126,
-axioms: propext, Classical.choice, Quot.sound
-```
-
-A proof that verifies against one Mathlib revision may not even elaborate against another,
-so the revision is part of the claim.
-
-Group related checks with `--tag`, and retrieve them with `nullius log --tag NAME`. The
-ledger keeps rejections as well as successes, so a claim's history stays visible — including
-a step that stopped verifying after a dependency changed, which is exactly what you want to
-find out about.

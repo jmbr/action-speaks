@@ -1,54 +1,48 @@
-# Cookbook — nullius on applied mathematics
+# Cookbook: checking applied mathematics
 
-Full formalisation of an applied paper is rarely worth the effort. The wins are narrower and
-much cheaper than that, and they cluster in a few places: the load-bearing inequality you
-derived by hand, the hypothesis set you never checked was non-empty, and the `ℕ` index
-expression that does not mean what it reads — and, if you work with Physlib, the physics
-result you built on that turns out to be a placeholder. Cslib brings the same treatment to
-claims about computation, where the classic omission is a termination hypothesis.
+Start with a specific claim, not an entire paper. Good candidates include a key inequality,
+an error estimate, a suspicious set of assumptions, or an expression involving integer
+indices. The examples below also cover library citations and computer-generated proofs.
 
-Every Lean block below is verified on each run of `tests/test_docs.py`, against the
-toolchain and revisions this repository pins. The `-- expect:` line says what the verifier
-must return; blocks marked `rejected` are there because failing usefully is half the point.
+`tests/test_docs.py` checks every Lean block below against the installed libraries.
+Each `-- expect:` line specifies the expected result. Some examples intentionally fail.
 
 ## Two interfaces, same verifier
 
-This document uses shell commands (`nullius verify`, `nullius close`, …). Inside an agent —
-Copilot, pi, Claude Code — the same operations arrive as MCP tools, where the shell is not
-available. **The names are identical**, so every recipe here transfers directly:
+Examples use the installed CLI. Agents with MCP support can use tools with the same names;
+other agents can use the shell wrapper supplied by the skill.
 
 | Operation                               | CLI                 | MCP tool    |
 |-----------------------------------------|---------------------|-------------|
 | Check a proof                           | `nullius verify`    | `verify`    |
-| Elaborate a statement, test for vacuity | `nullius statement` | `statement` |
+| Check types and look for contradictory assumptions | `nullius statement` | `statement` |
 | Find a lemma by meaning or shape        | `nullius search`    | `search`    |
 | Find what closes a goal                 | `nullius close`     | `close`     |
 | Look up past verdicts                   | `nullius log`       | `log`       |
 
-Flags map to arguments of the same name: `--require-nontrivial` is `require_nontrivial`,
-`--tag` is `tag`, `-t` is `target`, `-c` is `claim`, `-b` is `binders`. So
+For `verify`, `--require-nontrivial` maps to `require_nontrivial`, `--tag` to `tag`,
+`-t` to `target`, and `-c` to `claim`. For `close`, `-b` maps to `binders`. For example:
 
 ```bash
-nullius verify "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
+nullius verify bound.lean -c "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial
 ```
 
-is, from an agent:
+The corresponding MCP `verify` arguments are:
 
 ```json
 {"source": "theorem …", "claim": "energy estimate, eq. (3.7)",
  "tag": "paper-draft", "require_nontrivial": true}
 ```
 
-(`nullius check` is accepted as an alias for `verify`, for muscle memory.) Both interfaces
-write to the same ledger, so a result checked from the shell is visible to the agent and the
-other way round.
+Both interfaces write to the configured ledger. The skill wrapper has different argument
+syntax; see [agent setup](SETUP-AGENTS.md#shell-wrapper-syntax).
 
 ## The shape of a useful check
 
-The pattern that makes this affordable is **assume the analysis**: the hard analytic facts
-become *hypotheses*, and what gets verified is only what follows from them.
+You can check a consequence without formalizing all its prerequisites. State those
+prerequisites as explicit assumptions, justify them separately, and prove what follows.
 
-Here is the global error bound for a one-step method:
+For example, this theorem bounds a sequence that satisfies an error recurrence:
 
 ```lean
 -- expect: verified-nontrivial
@@ -67,36 +61,21 @@ theorem error_recursion_accumulates (q d : ℝ) (e : ℕ → ℝ) (hq : 0 ≤ q)
     linarith
 ```
 
-The hypothesis `e (n+1) ≤ q * e n + d` *is* the analysis. Establishing it for an actual
-scheme needs a Lipschitz condition, a Taylor remainder, and existence and smoothness of the
-exact solution — none of which appear here. `e` is an arbitrary sequence; the theorem knows
-nothing about differential equations. What is checked is the other half: that this recursion
-accumulates to that closed form, with the powers and the geometric sum in the right places
-and nothing dropped.
+This checks how the recurrence accumulates. It does not show that a numerical method
+satisfies the recurrence: `e` is an arbitrary sequence, with no differential equation in
+the statement.
 
-That is the half where mistakes actually happen. The Lipschitz estimate is usually the part
-you can check by hand, or cite.
+For an application, justify `hrec` separately. Do not assume the conclusion in another
+form. Also review whether the assumptions can hold together.
 
-**The trust boundary moves; it does not vanish.** You have reduced "is my error bound right?"
-to "does my scheme really satisfy that recursion?" — a smaller and sharper question. Be
-honest with yourself about which hypotheses you are importing, because assuming the analysis
-is also precisely how one fakes a result. Two rules keep it defensible:
+## Check assumptions before building on them
 
-1. Every hypothesis must be independently justifiable — a textbook theorem, or a bound
-   verified separately. Never the conclusion in disguise.
-2. Check the hypotheses can be satisfied at all. See the next section.
+Run `nullius statement` before attempting a proof. It checks types and tries to find
+contradictory assumptions. Applied arguments often combine parameter ranges and step-size
+conditions that need to be checked together.
 
-## Pattern: check a hypothesis set before building on it
-
-The cheapest useful call is `statement` (`nullius statement`) on a lemma you are
-*about* to assume. It elaborates without proving and reports whether the hypotheses are
-contradictory. Applied work stacks conditions — a decay rate, a step-size restriction, a
-parameter range — and it is easy to write down a set that is quietly empty. A theorem with
-empty hypotheses is vacuously true and supports nothing, while looking entirely respectable.
-
-Suppose a convergence argument assumes a contraction factor `0 < q < 1` together with a step
-condition `1/(1-q) ≤ q`. That is empty: the condition says `q(1-q) ≥ 1`, but `q(1-q)` peaks at
-`1/4`. Any theorem carrying those hypotheses is worthless.
+For example, the following proof derives a contradiction from `0 < q < 1` and
+`1/(1-q) ≤ q`:
 
 ```lean
 -- expect: verified
@@ -106,18 +85,15 @@ theorem contraction_conditions_empty (q : ℝ) (hq : 0 < q) (hq1 : q < 1)
   nlinarith [sq_nonneg (q - 1 / 2)]
 ```
 
-**Important caveat, learned the hard way.** On this example the automatic vacuity probe
-reported *"hypotheses are satisfiable as far as the prover can tell"* — it missed it. The
-probe runs a fixed battery of finishing tactics, so it is sound but incomplete: a reported
-vacuity is always real, a clean report is evidence and not proof. When a condition looks
-suspiciously tight, spend the extra minute trying to prove `False` from it yourself. Here
-`nlinarith` needed to be handed the maximiser, `sq_nonneg (q - 1/2)`.
+The automatic contradiction probe misses this example. The explicit proof rewrites the
+division and gives `nlinarith` the additional fact `sq_nonneg (q - 1/2)`.
+A clean probe result therefore does not establish consistency. If assumptions look
+suspicious, try a separate proof of `False` or construct an example satisfying them.
 
-## Pattern: verify the load-bearing inequality, not the paper
+## Check key inequalities
 
-Applied arguments rest on a handful of inequalities, often obtained after a page of algebra.
-Formalise those alone. This one — Cauchy with `ε` — is the workhorse of energy estimates, and
-exactly where a stray factor of two silently ruins a constant:
+Formalize the inequalities on which the argument depends. For an energy estimate, this
+checks the factors and the assumption on `ε`:
 
 ```lean
 -- expect: verified-nontrivial
@@ -127,8 +103,8 @@ theorem young_with_epsilon (a b ε : ℝ) (hε : 0 < ε) :
   nlinarith [sq_nonneg (ε * a - b), sq_nonneg (ε * a + b), hε.le]
 ```
 
-When a threshold is supposed to be sharp, state it as an equivalence — the `↔` is where the
-constant lives. Explicit Euler on `y' = -Ly`:
+To check both directions of a threshold, use `↔`. This example checks the multiplier bound
+used for explicit Euler on `y' = -Ly`:
 
 ```lean
 -- expect: verified-nontrivial
@@ -140,7 +116,7 @@ theorem euler_stability_iff (L h : ℝ) (hL : 0 < L) (hh : 0 < h) :
   · intro h1; constructor <;> nlinarith
 ```
 
-And the step that turns per-step growth into `e^{TL}` in every Euler error analysis:
+This next example bounds a repeated growth factor by an exponential:
 
 ```lean
 -- expect: verified-nontrivial
@@ -154,39 +130,34 @@ theorem euler_growth_le_exp (h L : ℝ) (n : ℕ) (hh : 0 ≤ h) (hL : 0 ≤ L) 
         rw [← Real.exp_nat_mul]; ring_nf
 ```
 
-Each is three to eight lines, because none of them formalises the surrounding theory.
+These proofs check the displayed inequalities, not the surrounding numerical analysis.
 
-## Pattern: distrust `ℕ` for anything with `-` or `/`
+## Choose the right arithmetic for indices
 
-Natural subtraction truncates (`0 - 1 = 0`) and natural division floors. Applied work is full
-of indices, grid sizes and step counts, so this bites often, and a "verified" `ℕ` statement
-can quietly be a different claim from the one you read. Split a grid of odd size into two
-halves and a point vanishes:
+On `ℕ`, subtraction stops at zero and division discards the remainder. For instance,
+dividing a grid size into two equal integer parts need not preserve the total:
 
 ```lean
 -- expect: verified
 theorem nat_halving_loses_a_point : ∃ n : ℕ, n / 2 + n / 2 ≠ n := ⟨3, by decide⟩
 ```
 
-Worth internalising that this is a *theorem*, not a quirk. Use `ℝ` or `ℤ` unless you
-genuinely mean the truncating operation.
+Use `ℕ` for counts when these operations are intended. Use `ℤ` for signed differences or
+`ℝ` for real-valued ratios.
 
-## Pattern: physics, and the placeholder trap
+## Check physics citations for unfinished proofs
 
-Physlib is imported alongside Mathlib and Cslib, so a claim about a physical system is checkable the
-same way an inequality is. The workflow is the same too — find the library's own lemmas
-rather than restate them:
+Physlib is preloaded. Search for its existing results and the assumptions they require:
 
 ```
-nullius search 'ClassicalMechanics.HarmonicOscillator.ω, |- _ = _'
+nullius search 'ClassicalMechanics.HarmonicOscillator.ω, |- _ = _' --backend loogle
   → ω_sq : S.ω ^ 2 = S.k / S.m
-nullius search 'ClassicalMechanics.HarmonicOscillator.m, |- 0 < _'
+nullius search 'ClassicalMechanics.HarmonicOscillator.m, |- 0 < _' --backend loogle
   → m_pos : 0 < self.m
 ```
 
-That second query is the shape worth learning: *a declaration mentioning this quantity whose
-conclusion is a positivity*. It found the side condition the algebra needs, which is the part
-one forgets. With both in hand the proof is three lines:
+The second query asks for a result mentioning the mass whose conclusion is a positivity
+bound. The proof uses that bound to justify division:
 
 ```lean
 -- expect: verified-nontrivial
@@ -198,10 +169,8 @@ theorem k_eq_m_mul_omega_sq (S : HarmonicOscillator) : S.k = S.m * S.ω ^ 2 := b
   field_simp
 ```
 
-**Now the trap, which is specific to physics and has no analogue in Mathlib.** Physlib ships
-results that are deliberately unfinished — a statement with no proof behind it, marking work
-nobody has done yet, attributed `@[sorryful]` or `@[pseudo]`. Building on one looks *exactly*
-like building on a theorem:
+Physlib also includes unfinished results marked `@[sorryful]` or `@[pseudo]`.
+A citation can look complete while depending on one of them:
 
 ```lean
 -- expect: rejected
@@ -210,32 +179,20 @@ theorem uses_placeholder :
       ClassicalMechanics.CoplanarDoublePendulum.ConfigurationSpace := rfl
 ```
 
-There is no `sorry` in that submission, the proof really is `rfl`, and nothing in the source
-looks wrong. It is caught only by asking what the theorem ultimately rests on:
+The source contains no `sorry`, but the axiom check follows its dependencies and reports:
 
 ```
 [FAIL] trusted_axioms - untrusted: sorryAx
   axioms: sorryAx
 ```
 
-`sorryAx` is Lean's marker for "this rests on something nobody has proved". A placeholder
-cannot hide from that question, which is why the axiom footprint is checked rather than the
-text. Against Mathlib that check is near-ceremonial — Mathlib has no such placeholders — and
-against Physlib it does real work.
+`sorryAx` marks an unfinished proof dependency. Use a completed result, prove the missing
+step, or report the limitation.
 
-When it fires, the fix is not to your proof. The physics result you leaned on is not
-available yet; say so.
+## Include the assumptions a computation theorem needs
 
-## Pattern: claims about computation, where the missing hypothesis is termination
-
-Cslib is imported alongside Mathlib and Physlib, so a claim about a program or a model of
-computation is checkable the same way: lambda calculi, automata, process calculi, type
-systems, rewriting.
-
-Rewriting is where the characteristic error lives. "My rewrite rules are locally confluent,
-so the normal form is unique" is a thing people write in papers, and it is **false** — local
-confluence does not imply confluence. The missing hypothesis is termination, and the result
-that needs it is Newman's lemma. Lean will not let the gap pass:
+Cslib covers computation topics such as automata, type systems, and rewriting.
+This attempt to use Newman's lemma omits its termination assumption:
 
 ```lean
 -- expect: rejected
@@ -244,7 +201,7 @@ theorem locally_confluent_suffices {α : Type} (r : α → α → Prop)
   hlc.Terminating_toConfluent
 ```
 
-The error names precisely what is absent:
+Lean reports that the supplied term still needs a termination argument:
 
 ```
 has type
@@ -253,8 +210,7 @@ but is expected to have type
   ... Relation.Join (Relation.ReflTransGen r) b c
 ```
 
-Supply the hypothesis and it goes through — and `--require-nontrivial` confirms both
-hypotheses are load-bearing rather than decoration:
+Supply the missing assumption:
 
 ```lean
 -- expect: verified-nontrivial
@@ -264,41 +220,19 @@ theorem newman {α : Type} (r : α → α → Prop)
   hlc.Terminating_toConfluent ht
 ```
 
-This is the same lesson as the vacuity probes, arriving from the other direction: there the
-danger was a hypothesis that could not hold, here it is a hypothesis you forgot you needed.
-Both are failures of the *statement*, which no amount of proof checking would catch if the
-statement were never written down.
+This proves confluence under the displayed local-confluence and termination assumptions.
+The `require_nontrivial` probe also passes, but that check does not establish the necessity
+of each assumption separately.
 
-Unlike Physlib, Cslib ships no placeholder results, so the axiom-footprint trap above has no
-analogue here.
+## Use a computer algebra system to find a proof certificate
 
-## Pattern: let a computer algebra system find the certificate
+A *certificate* is data from which Lean can reconstruct a proof. The optional
+[`polyrith'` contribution](../contrib/polyrith-local/README.md) asks Singular for polynomial
+coefficients, then suggests a `linear_combination` proof. It is separate from the verifier.
 
-Some claims are easy to believe and horrible to derive. The two-link robot arm is the
-standard example: the distance from shoulder to hand depends only on the *elbow* angle,
-because everything involving the shoulder cancels. Physically obvious, and an afternoon of
-error-prone expansion by hand across eight quantities.
-
-`polyrith'` (see `contrib/polyrith-local/`) asks Singular for a certificate and turns it into
-a `linear_combination` that Lean checks. Written as a session:
-
-> **Confirm the squared reach of a two-link arm is `L1² + L2² + 2·L1·L2·cos(elbow)`,
-> independent of the shoulder angle.**
->
-> Replacing the trigonometry with algebra — `c1, s1` for the shoulder's cosine and sine,
-> `c2, s2` for the elbow — makes it polynomial, so it can be checked exactly. Each
-> Pythagorean identity becomes an explicit hypothesis. First, is the setup consistent?
->
-> `statement '(x y L1 L2 c1 s1 c2 s2 : ℚ) (hx : ...) (p1 : c1^2+s1^2 = 1) ... '`
-> → *elaborates; hypotheses satisfiable*
->
-> Now ask for a proof rather than guess one: `polyrith'`
->
-> → `linear_combination (L2*c2*c1 + x*c1^2 + ... ) * hx + ... `
->
-> Each hypothesis is multiplied by a polynomial and the four sum to the claim. Note the
-> third coefficient has seven terms including an `x²` — there is no half-remembered identity
-> to reach for here. Checking it:
+Here is a certificate for a polynomial model of a two-link arm. The variables `c1`, `s1`,
+`c2`, and `s2` satisfy the displayed identities; the theorem does not define them as
+trigonometric functions:
 
 ```lean
 -- expect: verified-nontrivial
@@ -317,21 +251,15 @@ theorem arm_reach (x y L1 L2 c1 s1 c2 s2 : ℚ)
       (L2 ^ 2 * c1 ^ 2 + L2 ^ 2 * s1 ^ 2) * p2
 ```
 
-> **VERIFIED**, with `hypotheses_used` — so all four assumptions are load-bearing rather
-> than along for the ride. Two honest limits: this is exact arithmetic over `ℚ`, and a
-> controller will use floating point, which is a separate question; and `c1, s1` are only
-> *constrained* by the Pythagorean identity, not proved to be an angle's cosine and sine,
-> which is all this claim needs.
+This proof passes with `require_nontrivial`. It establishes the displayed identity over
+`ℚ`, not a floating-point error bound or a theorem about a physical controller.
 
-The division of labour is the point. Singular is a large, fast, unverified program, and it is
-trusted with nothing: it proposes a certificate, and Lean re-derives the arithmetic itself. A
-mistake there produces a failed tactic, never a theorem. That is what lets a heavyweight
-algebra engine sit underneath a tool whose premise is taking nobody's word for anything.
+Singular supplies the coefficients; Lean checks the resulting arithmetic. The submitted
+certificate can be checked without running Singular again.
 
-## Pattern: do not guess lemma names
+## Look up lemma names
 
-Inventing a plausible-sounding name is the most common way an attempt dies. This is a real
-rejection, not a constructed one — the name is right in spirit and does not exist:
+An otherwise plausible proof can fail because a lemma name is wrong:
 
 ```lean
 -- expect: rejected
@@ -345,60 +273,50 @@ theorem euler_growth_guessed (h L : ℝ) (n : ℕ) (hh : 0 ≤ h) (hL : 0 ≤ L)
         rw [← Real.exp_nat_mul]; ring_nf
 ```
 
-The fix is to ask instead of guess — `close`, at the shell or from an agent:
+Ask Lean for a suitable lemma:
 
 ```
 nullius close 'a ^ n ≤ b ^ n' -b '(a b : ℝ) (n : ℕ) (ha : 0 ≤ a) (hab : a ≤ b)'
 ```
 
-which answers `exact pow_le_pow_left₀ ha hab n` — the `₀` suffix being exactly the kind of
-detail nobody recalls correctly. `close` runs in the real environment, so it cannot
-hallucinate: it reports only lemmas that genuinely close the goal. `search` is the
-complement — by meaning or by shape, against remote indexes — and is worth using even if you
-never formalise anything, to answer "does Mathlib already have my bound, and what is it
-called?" Search may return a name that does not exist; `close` cannot.
+The suggestion is `exact pow_le_pow_left₀ ha hab n`, with a `₀` suffix.
+`close` asks the installed Lean environment. `search` can also find lemmas by shape through
+local Loogle or by meaning through remote LeanSearch. Verify any resulting proof.
 
-## Pattern: make unused hypotheses fatal
+## Check for unnecessary assumptions
 
-`--require-nontrivial` rejects a proof whose hypotheses turn out to be unnecessary. That
-sounds pedantic and is not: it catches the case where you *believe* a condition is doing
-work, and it is not — which usually means the statement is weaker than the claim you intend
-to make with it, or that you have stated the wrong thing.
+`--require-nontrivial` rejects a proof if a probe establishes the conclusion after removing
+propositional assumptions. This can reveal that the statement is weaker than intended:
 
 ```lean
 -- expect: rejected-nontrivial
 theorem positivity_unused (x : ℝ) (hx : 0 < x) : 0 ≤ x ^ 2 := sq_nonneg x
 ```
 
-The conclusion holds for every real, so `hx` is decoration. Either drop it and claim the
-stronger unconditional result, or strengthen the conclusion to something that needs it.
+Here the cited lemma does not need `hx`. Either remove the assumption or revise the
+conclusion to express the intended claim. The probe can miss unnecessary assumptions;
+passing it is not a proof that each assumption is needed.
 
-## What this does not do for you
+## Scope of the result
 
-- **It cannot check that your Lean says what your English said.** Lean checks the proof; the
-  translation is yours. This is why every verdict prints the elaborated statement — read it,
-  and confirm the quantifiers, the hypotheses and the types are the ones you meant.
-- **It says nothing about modelling.** Whether your equations describe the physical system,
-  whether your discretisation is stable in practice, whether floating point resembles `ℝ` —
-  all outside.
-- **Numerics formalise badly.** Interval arithmetic in Lean is painful and usually not worth
-  your time.
-- **A verdict is tied to a revision.** A proof that verifies against one Mathlib may not
-  elaborate against the next. The ledger records the toolchain and revisions per row for
-  exactly this reason; cite them alongside the result.
+Lean checks the formal statement, not its translation from English or its suitability as
+a model. Compare the returned statement with the claim, and account separately for physical
+assumptions, discretization, and floating-point arithmetic.
 
-## A realistic workflow
+Results also depend on library versions. Keep the recorded toolchain and revisions with
+the proof so it can be reproduced.
 
-While writing a paper, formalise the two or three inequalities you are least sure of, tag
-them so they are easy to find again, and move on:
+## Group checks for a paper
+
+Use a tag to collect related attempts:
 
 ```bash
-nullius verify "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial < bound.lean
+nullius verify bound.lean -c "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial
 nullius log --tag paper-draft
 ```
 
 From an agent, the same two steps are `verify` with `tag: "paper-draft"` and
 `log` with `tag: "paper-draft"`.
 
-The ledger keeps rejections as well as successes, so the history of a claim — including a
-step that stopped verifying after a dependency bump — stays visible.
+The ledger keeps both successes and rejections. Review failed checks before retrying, and
+re-verify stored proofs before citing them in a new environment.

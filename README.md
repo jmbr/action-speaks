@@ -1,432 +1,277 @@
-# nullius — making an agent back up its claims
+# nullius — check an agent's mathematical claims
 
-A verification harness that lets an LLM agent prove its mathematical assertions in Lean 4 +
-Mathlib — with Physlib for physics and Cslib for computation — and that refuses to accept the
-proof unless it is actually worth something.
+nullius checks Lean 4 proofs written by AI agents. It uses Mathlib for mathematics,
+Physlib for physics, and Cslib for computer science. You can call it from Python, the
+command line, an HTTP service, or an MCP tool.
 
-*Nullius in verba* — "on the word of no one" — is the Royal Society's motto, adopted as a
-commitment to settle questions by evidence rather than by authority. An agent's word is
-exactly the kind of authority it refers to.
+It checks more than whether a proof compiles: it rejects incomplete proofs and untrusted
+axioms, and looks for contradictory or unnecessary assumptions. **You still need to check
+that the Lean statement matches the claim you intended.**
 
-## The problem this solves
+The name comes from *nullius in verba*: "on the word of no one."
 
-"The proof compiled" is a much weaker statement than it sounds. On this machine, before any
-of this was built:
+## Start here
 
-```lean
-axiom evil : False
-theorem cheat : 2 + 2 = 5 := absurd evil (by simp)
-```
-
-compiles with **zero errors**. So does any proof containing `sorry`. And even an honest,
-fully-checked proof can be worthless:
-
-```lean
-theorem useless (n : Nat) (h₁ : n > 5) (h₂ : n < 3) : n = 42 := by omega
-```
-
-This is a genuine theorem — Lean is right to accept it — but no such `n` exists, so it
-supports no claim whatsoever. An agent that autoformalises carelessly produces these
-constantly, and they look like success.
-
-So there are two independent failure modes:
-
-1. **Unsound proof** — `sorry`, injected axioms, `native_decide`, kernel bypasses.
-2. **Sound proof of the wrong statement** — vacuous hypotheses, weakened conclusions, type
-   confusion. This is the one that will actually bite you.
-
-## How it addresses them
-
-**Soundness** is settled by asking Lean what the proof ultimately rests on, rather than
-whether it compiled. `#print axioms` reports kernel-level dependencies and sees through every
-tactic, macro and `set_option`:
-
-```
-cheat  → depends on axioms: [evil, propext]                    rejected
-sorry  → depends on axioms: [sorryAx]                          rejected
-native → depends on axioms: [..._native.native_decide.ax_1]    rejected
-honest → depends on axioms: [propext, Classical.choice, Quot.sound]   accepted
-```
-
-Anything outside `{propext, Classical.choice, Quot.sound}` is disqualifying.
-
-**Meaningfulness** is settled by two probes written as Lean metaprograms:
-
-- *Vacuity*: try to derive `False` from the theorem's hypotheses alone. If that succeeds, the
-  hypotheses are contradictory and the theorem is vacuously true — rejected.
-- *Triviality*: try to prove the conclusion with the hypotheses deleted. If that succeeds,
-  the hypotheses do no work and the statement is weaker than advertised.
-
-## Layout
-
-```
-lean/Nullius/Audit.lean   the audit commands (#audit_axioms, #audit_replay, #audit_vacuity,
-                         #audit_triviality, #audit_shape), pinned to Lean v4.32.0
-lean/lakefile.toml       pins Mathlib, Physlib, Cslib and the Lean REPL; lake-manifest.json locks all
-nullius/config.py         locates the project, records toolchain + Mathlib + Physlib + Cslib + REPL revs
-nullius/repl.py           persistent REPL session and pool
-nullius/guard.py          static ban-list, applied before Lean sees the source
-nullius/verify.py         the pipeline and the Verdict type
-nullius/ledger.py         append-only SQLite record of every verdict, and recall of earlier ones
-nullius/search.py         Loogle (local or hosted), LeanSearch, and local exact?/apply?
-scripts/build-loogle.sh  builds Loogle against our toolchain, for offline shape search
-contrib/                 finished work that belongs elsewhere; not built, not maintained here
-lean/NulliusAll.lean     import-only root whose Loogle index covers Mathlib + Physlib + Cslib
-nullius/cli.py            command-line interface
-nullius/harness.py        pooled, thread-safe entry point for programmatic use
-nullius/http_server.py    HTTP service for non-Python harnesses
-nullius/mcp_server.py     MCP server (stdio, standard library only)
-skills/nullius/ the agent skill (pi, Copilot, Claude Code, Codex)
-mcp/                     MCP server entry, templated on the repo path
-pyproject.toml           packaging; `pip install -e .` gives the `nullius` command
-noxfile.py               lint, format, type-check and test sessions, each in its own venv
-LICENSE                  Apache 2.0, matching Lean, Mathlib, Physlib, Cslib and Loogle
-install.sh               symlinks the skill and merges the MCP entry into place
-tests/test_adversarial.py  attacks that must be rejected, proofs that must pass
-tests/test_docs.py       re-runs every Lean example in the documentation
-tests/test_search.py     local shape search reaches Mathlib, Physlib and Cslib
-tests/test_entrypoints.py  entry points work from an agent's stripped environment
-tests/check_names.py     catches renamed tools and superseded revisions in prose
-.pre-commit-config.yaml  runs all five before a commit lands (via prek)
-AGENTS.md                the contract handed to the agent; harnesses read it from the root
-docs/COOKBOOK.md         worked patterns for applied mathematics
-docs/INTEGRATION.md      how to drive this from a harness
-docs/SETUP-AGENTS.md     enabling it in pi / Copilot (skill + MCP)
-```
-
-The Lean REPL is a pinned `require` in `lean/lakefile.toml`, so `lake build` fetches it, locks
-its revision in `lake-manifest.json`, and guarantees it is built against the same toolchain as
-the project — a mismatch there breaks elaboration in ways that are tedious to diagnose.
-
-## Prior art
-
-This is not the first tool in this space, and the soundness layer is not novel:
-
-* [SafeVerify](https://github.com/GasStationManager/SafeVerify) checks Lean submissions
-  against a target spec, requires the same three axioms via `CollectAxioms.collect`, bans
-  `partial`/`unsafe`, and uses `Environment.replay` to defend against environment
-  manipulation. It is the proof-checking backend for PutnamBench's leaderboard and has been
-  used to check DeepSeek-Prover-V2, Kimina, Seed-Prover and Trinity output. The kernel replay
-  here follows its approach.
-* [lean4checker](https://github.com/leanprover/lean4checker) is the kernel re-checker
-  SafeVerify is built on.
-* [LeanTool](https://github.com/GasStationManager/LeanTool) provides an LLM↔Lean feedback
-  loop with MCP/HTTP/CLI interfaces, and its `check_false` tactic — which tries to prove the
-  negation of the goal at a `sorry` hole — is the nearest predecessor to the vacuity check.
-* [lean-lsp-mcp](https://github.com/oOo0oOo/lean-lsp-mcp) exposes Lean's LSP, Loogle,
-  LeanSearch and friends to agents.
-
-What is unusual here is treating **vacuity and triviality as blocking gates**: rejecting a
-proof because its hypotheses are contradictory, or because they do no work. Those checks
-matter precisely when the agent writes its *own* statement, which is the case the
-submission-against-a-spec tools do not have to handle — when a trusted party pins the
-statement in advance, a vacuous statement is the spec author's problem, not the checker's.
-
-If you need to verify submissions against a known specification, use SafeVerify. This tool is
-for the case where the claim itself is the thing being invented.
-
-## The pipeline
-
-A submission is accepted only if it survives, in order:
-
-| Check | Rejects |
+| Task | Guide |
 |---|---|
-| `static_guard` | `axiom`, `sorryAx`, `native_decide`, `debug.skipKernelTC`, `unsafe`, `partial def`, `@[implemented_by]`, `@[extern]`, `#exit`, `maxHeartbeats 0`, `#eval`/`run_cmd`, direct environment writes, IO, custom syntax, audit tampering |
-| `elaboration` | anything Lean reports an error for |
-| `no_sorry` | `sorry` in the target or in any helper it depends on |
-| `target_declared` | the claimed theorem does not exist |
-| `kernel_replay` | declarations the elaborator accepted but the kernel does not |
-| `audit_integrity` | the submission subverted the audit machinery (tripwire) |
-| `trusted_axioms` | dependence on anything outside the trusted three |
-| `statement_sorry_free` | `sorry` inside the statement itself |
-| `not_vacuous` | contradictory hypotheses |
-| `hypotheses_used` | hypotheses that do no work (warning by default) |
+| Install and build nullius | [Setup from scratch](#setup-from-scratch) |
+| Enable it in an agent | [Agent setup](docs/SETUP-AGENTS.md) |
+| Use Python, HTTP, MCP, or the CLI | [Integration guide](docs/INTEGRATION.md) |
+| Work through mathematical examples | [Cookbook](docs/COOKBOOK.md) |
+| Follow the agent workflow | [AGENTS.md](AGENTS.md) |
 
-The layers are deliberately redundant: the test suite disables the guard and confirms the
-Lean-side checks still reject every attack unaided.
+Once installed:
 
-### Why the kernel replay matters
-
-The axiom audit is only meaningful if the declarations it walks were themselves accepted by
-the kernel, and they need not have been. A declaration inserted with `addDeclCore ... false`,
-or admitted under `set_option debug.skipKernelTC true`, is in the environment without ever
-having been checked. Demonstrated on this machine:
-
-```
-theorem forged : 4 = 5     -- installed with doCheck := false, value is `trivial`
-#print axioms forged       -- 'forged' does not depend on any axioms
+```bash
+nullius doctor
+nullius statement '(n : Nat) (h : 5 < n) : 25 < n * n'
+nullius search 'sum of two even numbers is even'
+nullius close '25 < n * n' -b '(n : Nat) (h : 5 < n)'
+nullius verify proof.lean -c "My claim" --require-nontrivial
+nullius log --stats
 ```
 
-A false theorem with a spotless axiom footprint. `kernel_replay` re-adds every declaration
-the submission introduced through `Kernel.Environment.addDecl` under a fresh name, and the
-kernel rejects it:
-
-```
-(kernel) declaration type mismatch, has type True but is expected to have type 4 = 5
-```
-
-This is the approach used by [lean4checker](https://github.com/leanprover/lean4checker) and
-[SafeVerify](https://github.com/GasStationManager/SafeVerify), which re-check submissions
-against the kernel rather than trusting the elaborator's environment. Replay runs *before*
-the axiom audit, since the axiom audit's result is worthless otherwise.
-
-### The tripwire
-
-Replay defeats a forged environment, but the audit commands themselves are elaborated in the
-environment the submission created, so a submission could redefine `#audit_axioms` to report
-success. This was a real hole — the adversarial suite caught it. Each audit run injects a
-**canary** built from a `sorry`, alongside the target aliased under an unpredictable random
-name, with the order shuffled. Honest audit machinery must flag the canary as untrusted;
-machinery rigged to say "trusted" clears the canary too and is caught.
-
-SafeVerify avoids this problem more thoroughly by never entering the submission's environment
-at all: it works on `.olean` files in a separate process. That is the stronger design where
-latency does not matter. This harness keeps the audit in-process to preserve millisecond
-checks, and pays for it with the guard and the tripwire.
-
-## Usage
-
-See **[SETUP-AGENTS.md](docs/SETUP-AGENTS.md)** to enable this in pi or Copilot,
-**[INTEGRATION.md](docs/INTEGRATION.md)** for driving it from a harness (Python API, HTTP service,
-MCP, CLI), and **[AGENTS.md](AGENTS.md)** for the contract handed to the agent.
-**[COOKBOOK.md](docs/COOKBOOK.md)** works through what to check in applied mathematics, and what
-not to bother with; every example in it is re-run by `tests/test_docs.py`.
+For repeated checks, keep a Python session open:
 
 ```python
 from nullius import Harness
 
-with Harness(pool_size=4).warm() as h:
-    v = h.verify("theorem t (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
-                 claim="if n > 5 then n squared exceeds 25")
+with Harness(pool_size=1).warm() as h:
+    v = h.verify(
+        "theorem t (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
+        claim="if n > 5 then n squared exceeds 25",
+        require_nontrivial=True,
+    )
     print(v.statement if v.verified else v.feedback())
 ```
 
-```bash
-nullius doctor                      # check the installation
-nullius verify proof.lean -c "..."  # verify a file
-nullius statement '(n : Nat) (h : 5 < n) : 25 < n * n'
-nullius search 'sum of two even numbers is even'
-nullius close '25 < n * n' -b '(n : Nat) (h : 5 < n)'
-nullius log --stats
+## What it checks
 
-python3 -m nullius.http_server --port 823 --pool 4  # HTTP service
-```
+Lean accepts declarations that use `sorry` (an unfinished proof) or new axioms. Those are
+useful while developing a proof, but they are not evidence for a claim. nullius checks the
+proof's axiom dependencies and allows only `propext`, `Classical.choice`, and `Quot.sound`.
 
-### As an MCP server
+A complete proof can also prove the wrong thing. nullius runs two additional checks:
 
-```json
-{
-  "mcpServers": {
-    "nullius": {
-      "command": "python3",
-      "args": ["-m", "nullius.mcp_server"],
-      "cwd": "/home/jmbr/sources/nullius"
-    }
-  }
-}
-```
+- **Contradictory assumptions (vacuity).** It tries to derive `False` from the assumptions.
+  If it succeeds, the theorem is rejected.
+- **Unnecessary assumptions (triviality).** It tries to prove the conclusion after removing
+  propositional assumptions. If it succeeds, it warns by default or rejects the proof when
+  `require_nontrivial` is enabled.
 
-Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
-subcommands. Point the agent at `AGENTS.md` for the workflow it should follow.
+These two checks use a fixed set of tactics. They can miss problems. Passing them does
+**not** establish that the assumptions are consistent, that each is necessary, or that the
+statement matches your informal claim.
 
-## Performance
+### Verification pipeline
 
-Measured on this machine (24 cores, 62 GB):
-
-| Operation | Time |
+| Check | What fails |
 |---|---|
-| Session start (`import Mathlib` + `import Physlib` + `import Cslib`) | ~2.9 s, ~0.8 GB resident / ~5.2 GB mapped |
-| Verify a simple theorem | 10–20 ms |
-| Verify with vacuity + triviality probes | 60–200 ms |
-| Rejection by static guard | < 1 ms (no Lean involved) |
+| `static_guard` | Banned source constructs, including new axioms, kernel bypasses, custom elaboration, IO, and changes to the audit code |
+| `elaboration` | Lean reports errors while translating the source into a typed proof |
+| `no_sorry` | The submission contains unfinished proofs |
+| `target_declared` | The theorem selected for checking cannot be resolved |
+| `kernel_replay` | The kernel rejects declarations rechecked after elaboration |
+| `audit_integrity` | The audit fails to identify an injected, known-bad proof |
+| `trusted_axioms` | The target depends on an axiom outside the allowed set |
+| `statement_sorry_free` | The theorem's statement contains `sorry` |
+| `is_theorem` | The target is a definition rather than a theorem |
+| `not_vacuous` | The probe finds contradictory assumptions |
+| `hypotheses_used` | The probe proves the conclusion without the removed assumptions; a warning unless `require_nontrivial` is enabled |
 
-Adding libraries to the prelude costs almost nothing at startup: oleans are memory-mapped, so
-pages are only faulted in as they are used, and a session that never touches physics or
-computation never pays for it. Measured either side of the Cslib import on the same machine,
-startup moved 2.83 s → 2.87 s and both resident and mapped size were unchanged. Budget by
-mapped size rather than resident when setting `pool_size`.
+### Why replay and an integrity check are needed
 
-The import cost is paid once per process. Every check then branches off that same pristine
-environment — which is also a soundness property, not just a speed one: it stops one
-submission from leaving definitions behind for the next to exploit.
+An axiom check alone is not enough. Lean metaprograms can insert declarations without a
+kernel check. nullius therefore rechecks eligible local declarations with the kernel before
+examining their axiom dependencies.
+
+The audit also runs in the submission's environment, where modified audit commands could
+report false results. To detect this, nullius adds a known-bad proof, called a *canary*,
+alongside a randomly named alias of the target. The audit must reject the canary.
+
+These checks supplement the source guard; they are not a sandbox for running arbitrary
+untrusted code. The [adversarial tests](tests/test_adversarial.py) exercise the checks with
+and without the guard.
 
 ## Limitations
 
-- **Vacuity detection is sound but incomplete.** It runs a fixed battery of finishing tactics
-  (`omega`, `simp_all`, `nlinarith`, `aesop`, …). A subtle contradiction it cannot find will
-  pass. A *reported* vacuity is always real; a clean report is evidence, not proof.
-- **Statement faithfulness is not automated.** Nothing here can confirm that the Lean
-  statement means what the English claim meant. The verdict shows the elaborated statement
-  precisely so a human (or a second agent) can compare. This is the residual trust.
-- **The trusted computing base** is Lean's kernel, Mathlib, and `Nullius/Audit.lean`.
-  Physlib is *not* in it: its incomplete results rest on `sorryAx` or `Lean.ofReduceBool`,
-  and the axiom audit rejects anything that reaches them, so importing it cannot weaken a
-  verdict — it can only make more things provable. Cslib ships no such placeholders, and in
-  any case the audit trusts a fixed list of axioms rather than a list of libraries, which is
-  what makes adding a library a safe operation.
-- **The toolchain is pinned by Physlib, not by us.** Physlib tracks Mathlib about one release
-  behind, so the whole graph sits at whatever it supports (currently v4.32.0). Cslib tags a
-  release per toolchain and the v4.32.0 tag requires the same Mathlib revision, which is the
-  only reason all three coexist. Bump the pins in `lean/lakefile.toml` together, or not at
-  all; a mismatch fails to resolve.
-- **Search backends vary in reach.** Shape search (Loogle) runs against a local index
-  covering Mathlib, Physlib *and* Cslib at the pinned revisions. It is never silently
-  replaced by the public service, whose index is a different Mathlib revision with neither of
-  the other two — that has to be requested by name (`--backend loogle-remote`), because a
-  miss against the wrong library is indistinguishable from a lemma that does not exist.
-  Natural-language search (LeanSearch) is remote either way. `close` works offline and is
-  authoritative.
+- **Check the translation.** Compare the returned *elaborated statement*—the statement Lean
+  actually interpreted—with the informal claim. Pay attention to types, assumptions, and
+  quantifiers.
+- **The probes are incomplete.** A failed attempt to find a contradiction is not a proof
+  that the assumptions can be satisfied. The unnecessary-assumption check has the same
+  limitation.
+- **Some Physlib results are unfinished.** A citation can compile but still depend on
+  `sorryAx` or `Lean.ofReduceBool`. The axiom check rejects those dependencies.
+- **Library versions matter.** Lean, Mathlib, Physlib, Cslib, and the REPL must use compatible
+  versions. Update the pins in `lean/lakefile.toml` together.
+- **Search results depend on the backend.** Local Loogle searches the installed Mathlib,
+  Physlib, and Cslib. Hosted Loogle searches a different Mathlib version and does not cover
+  the other two libraries. LeanSearch is a remote natural-language service. `close` asks
+  the installed Lean environment for tactic suggestions.
+
+## Recalling earlier work
+
+The SQLite *ledger* stores verification attempts, including their source, result, and
+library versions. It keeps rejected attempts as well as successful ones.
+
+`statement` automatically looks for similar earlier work. CLI and MCP `verify` also look
+for identical source. You can search directly:
+
+```bash
+nullius log --recall 'gradient descent step size'
+```
+
+Recall uses three kinds of match:
+
+| Match | Meaning |
+|---|---|
+| Source hash | The source text is identical |
+| Normalized statement text | The printed statements match after limited text normalization |
+| Full-text search | The wording is similar; only previously verified entries are returned |
+
+Statement matching is a heuristic, not a test of mathematical equivalence. Renaming a
+variable can prevent a match. Even a match must be compared with the current claim.
+**Reuse the stored source, but verify it again before citing it.**
+
+A rejected attempt does not establish that the claim is unprovable. Read the failed check:
+a tactic error calls for another proof attempt; a detected contradiction calls for reviewing
+the statement. Library updates can change either outcome.
+
+## Setup from scratch
+
+### Prerequisites
+
+- Python 3.10 or later and Git.
+- [elan](https://github.com/leanprover/elan), which provides Lean and `lake`.
+- Roughly 12 GB of free disk space for the toolchain, compiled libraries, and search index.
+
+elan reads `lean/lean-toolchain` to select the required Lean version.
+
+### Install the Python package
+
+Run from this checkout:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
+nullius has no required Python dependencies. Use an **editable install** (`-e`): the driver
+expects the built `lean/` project beside its source. It is not a standalone PyPI package.
+
+Without installing, you can run `python3 -m nullius.cli` from the repository root, or use
+`skills/nullius/scripts/nullius` from another directory.
+
+### Build Lean and the libraries
+
+```bash
+cd lean
+lake exe cache get && lake build
+lake build repl
+lake build Physlib
+lake build Cslib
+cd ..
+./scripts/build-loogle.sh
+```
+
+Mathlib's compiled files are downloaded from its cache. Physlib and Cslib build locally,
+which can take several minutes.
+
+The last command builds local Loogle in `vendor/`. Its first query builds a search index;
+use `./scripts/build-loogle.sh --index` to build the index in advance. The index is cached
+and rebuilt when the compiled libraries change.
+
+Without local Loogle, shape search reports that it is unavailable. It never silently
+switches to the public service. To use that service explicitly, choose
+`--backend loogle-remote`.
+
+### Enable the command and agent tools
+
+```bash
+./install.sh --dry-run
+./install.sh
+nullius doctor
+```
+
+The installer adds the command to `~/.local/bin`, links the skill, and configures Copilot's
+MCP server. It uses the checkout's interpreter, so virtualenv activation is not required.
+See [agent setup](docs/SETUP-AGENTS.md) for individual install options.
+
+`doctor` checks that a complete proof is accepted and that an unfinished proof and a theorem
+with contradictory assumptions are rejected.
+
+## Performance
+
+Starting Lean loads the libraries and takes several seconds. Reusing a session avoids that
+cost; simple proofs can then take milliseconds, while harder proofs and probes take longer.
+Use `Harness` or a persistent server for repeated work.
+
+Each concurrent verification needs a session. Measure memory use on your workload before
+increasing the pool size. Submissions start from the same initial environment, so definitions
+from one submission are not available to the next.
 
 ## Reproducing a verdict
 
-Every ledger row stores the toolchain and the Mathlib, Physlib and Cslib revisions, so a
-third party can rebuild the exact environment:
+The ledger records the source, toolchain, and Mathlib, Physlib, and Cslib revisions.
+The checkout pins its dependencies in `lean/lake-manifest.json`. Current library pins are:
 
-```
+```text
 toolchain   leanprover/lean4:v4.32.0
 mathlib     81a5d257c8e410db227a6665ed08f64fea08e997
 physlib     cf1d86d1fbba4fe42ce52577bab8b9df40d83a28
 cslib       197a7be621263b84c67ca4f803f69205b36d06df
 ```
 
-The Physlib revision matters more than the others. Physlib ships results that are
-deliberately incomplete, and which ones are complete changes between commits, so "this was
-accepted" is only meaningful against a known revision.
+Rebuild the recorded versions and rerun the stored source to reproduce a result.
 
-## Recalling earlier work
+## Project layout
 
-An agent working across sessions re-derives the same lemma more often than it should, and a
-source hash misses the cases that matter: the same theorem proved twice from different
-sources. Those are also the expensive ones, since the cost is not Lean re-checking (10–200 ms)
-but the agent rediscovering a lemma name it already knew.
+| Path | Purpose |
+|---|---|
+| `lean/Nullius/Audit.lean` | Lean audit commands |
+| `lean/lakefile.toml`, `lean/lake-manifest.json` | Dependency requirements and locked revisions |
+| `lean/NulliusAll.lean` | Combined imports for the local search index |
+| `nullius/config.py`, `nullius/repl.py` | Configuration, Lean processes, and session pool |
+| `nullius/guard.py`, `nullius/verify.py` | Source restrictions, verification pipeline, and verdicts |
+| `nullius/ledger.py`, `nullius/search.py` | Stored results, recall, and lemma search |
+| `nullius/harness.py` | Python API |
+| `nullius/cli.py`, `nullius/http_server.py`, `nullius/mcp_server.py` | CLI and server entry points |
+| `skills/nullius/`, `mcp/`, `install.sh` | Agent instructions and installation |
+| `tests/`, `noxfile.py`, `.pre-commit-config.yaml` | Tests and development checks |
+| `contrib/` | Separate contributions, not part of the verifier build |
 
-So `statement` and `verify` consult the ledger automatically, on three keys of decreasing
-confidence: the source hash, the **elaborated statement** (Lean's own normal form, so one
-theorem matches however it was written), and a full-text search over claims. The third tier is
-restricted to verified rows, and is labelled a candidate rather than a result.
-
-A hit is a pointer, never evidence. Every verdict is revision-stamped, so a match is reported
-with whether the pins have moved — and the two verdicts read that drift in opposite
-directions. For a verification, drift *weakens* the row: it may no longer elaborate, so
-re-verify. For a rejection it *strengthens* the case for trying again, since Mathlib gains
-lemmas and Physlib completes results that were placeholders when the rejection was recorded.
-
-Rejections are deliberately not shown as discouragement. Most are attempt-level — a tactic
-that did not work — which says nothing about whether the claim is provable. Only
-`not_vacuous`, `hypotheses_used`, `statement_sorry_free` and `is_theorem` are defects of the
-statement itself, and those are reported as "restate this", which is actionable. Nothing in
-the ledger can support the claim that something is unprovable, so nothing here says it.
+## Contributing
 
 ```bash
-nullius log --recall 'gradient descent step size'   # ask directly
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/prek install
+.venv/bin/nox -s lint format
+.venv/bin/nox -s types
+.venv/bin/nox -s tests
 ```
 
-## Setup from scratch
+Use `nox -s fix` to apply formatting. Tests are standalone Python scripts, not pytest tests:
+run them through nox or directly, for example `python3 tests/test_docs.py`.
+The documentation suite runs the cookbook's Lean blocks and the skill guides' proof examples.
 
-### Prerequisites
+Commit hooks run the checks selected by `.pre-commit-config.yaml`. Use
+`.venv/bin/prek run --all-files` to run all hooks.
 
-| | Why | Check |
-|---|---|---|
-| **elan** | provides `lake` and the pinned Lean toolchain | `lake --version` |
-| **Python 3.10+** | the driver | `python3 --version` |
-| **git** | fetches Mathlib, Physlib, Cslib, the REPL and Loogle | `git --version` |
-| **~12 GB free** | ~10 GB of built oleans and indexes here, ~2 GB for the toolchain under `~/.elan` | `df -h .` |
+## Related tools
 
-Install elan if `lake` is missing (<https://github.com/leanprover/elan>); it downloads the
-right Lean version by itself, driven by `lean/lean-toolchain`.
+- [SafeVerify](https://github.com/GasStationManager/SafeVerify) checks proofs against a supplied
+  specification. Its kernel-replay approach informed this project.
+- [lean4checker](https://github.com/leanprover/lean4checker) rechecks declarations with Lean's kernel.
+- [LeanTool](https://github.com/GasStationManager/LeanTool) provides a Lean feedback loop and
+  contradiction checks.
+- [lean-lsp-mcp](https://github.com/oOo0oOo/lean-lsp-mcp) exposes Lean's language server and search tools.
 
-### Install
+nullius focuses on claims whose statements are written by the agent, rather than supplied
+as a fixed specification.
 
-```bash
-python3 -m venv .venv && .venv/bin/pip install -e .   # the driver; no dependencies
-```
+## Licence and authorship
 
-You never have to activate that virtualenv. `./install.sh` below symlinks the console script
-into `~/.local/bin`, and wires the skill and the MCP server to the interpreter inside it by
-absolute path — so `nullius` works from any shell, and an agent that launches the server with
-a stripped environment gets a working verifier rather than an import error.
-
-An editable install from a checkout is the supported arrangement, and the only one that
-works: this package is a driver for a Lean project of several gigabytes that has to be built
-here, and it finds that project relative to its own source file. A copied install would look
-for `lean/` inside `site-packages`, and fails with a message saying so. For the same reason
-there is nothing on PyPI to install: the Python is a few thousand lines of stdlib, and
-everything that gives a verdict its weight is the Lean tree beside it, pinned to exact
-revisions.
-
-If you would rather not install at all, every entry point still works from the repository
-root (`python3 -m nullius.cli ...`), and `skills/nullius/scripts/nullius` works from
-anywhere regardless — it prefers `.venv` and falls back to the source tree.
-
-### Build the Lean side
-
-```bash
-cd lean
-lake exe cache get && lake build     # Mathlib (~3.6 GB, cached) + the audit module
-lake build repl                      # the REPL, pinned by lake-manifest.json
-lake build Physlib                   # physics; builds from source, ~15 min
-lake build Cslib                     # computer science; from source, ~1 min
-cd .. && ./scripts/build-loogle.sh   # shape search, offline (~15 s)
-```
-
-### Check it, and enable it
-
-```bash
-./install.sh                # `nullius` on PATH, plus the skill and MCP server
-nullius doctor              # before install.sh: .venv/bin/nullius doctor
-```
-
-`doctor` verifies a genuine proof, a `sorry` proof and a vacuous one, so it fails loudly if
-the verifier has stopped discriminating.
-
-### Contributing
-
-```bash
-.venv/bin/pip install -e ".[dev]"    # adds prek and nox
-prek install                         # run the checks before each commit
-python3 tests/test_adversarial.py    # or run them directly
-python3 tests/test_docs.py
-```
-
-`noxfile.py` holds the wider sessions, each in its own environment: `nox -s lint format` for
-ruff, `nox -s types` for basedpyright, `nox -s tests` for the whole suite, `nox -s fix` to
-apply what `format` asks for. Rules live in `[tool.ruff.lint]` in `pyproject.toml`.
-
-Two things there are deliberate and easy to undo by accident. Sessions install the package
-with `-e`, because a copied install looks for the multi-gigabyte Lean tree beside itself in
-`site-packages` and fails at startup. And the tests are invoked as scripts rather than
-through pytest, which collects nothing from them and would exit 0 having run nothing —
-they are written as standalone `main()` scripts so that they can double as commit hooks.
-
-`lake exe cache get` only serves Mathlib, so Physlib and Cslib compile locally the first time.
-Physlib dominates that cost; Cslib is about a minute of wall time on a many-core machine.
-
-`scripts/build-loogle.sh` is what makes shape search work. Loogle has no dependencies and does
-not need to be one of ours: the binary reads the `.olean` files of any Lake project built
-with the same toolchain, so the script clones it into `vendor/`, copies our `lean-toolchain`
-over its own, and builds — about 15 seconds, with nothing of Mathlib rebuilt. Shape search
-then runs offline, covers Physlib and Cslib as well as Mathlib, and answers from the exact
-revisions pinned here rather than whatever the hosted service last deployed. The first query
-builds a 377 MB index (~2 min, cached beside the oleans and rebuilt automatically when they
-change); pass `--index` to pay that cost up front instead. Skip the script and shape search
-reports that it has no index, rather than quietly answering from the public service — that
-one is still there, but you have to ask for it: `nullius search --backend loogle-remote`.
-
-`prek install` wires the checks into `git commit`: prose is scanned for renamed tools and
-superseded revisions on every commit (72 ms, no Lean), and the two Lean suites run only when
-something they cover actually changes — about 12 s for a commit that touches everything. Use
-`prek run --all-files` to check the whole tree, and `SKIP=nullius-docs git commit` to bypass
-a hook deliberately. `pre-commit` reads the same config if you prefer it to `prek`.
-
-## Licence and provenance
-
-Apache 2.0 — see [LICENSE](LICENSE). That matches every component this sits on: Lean 4,
-Mathlib, Physlib, Cslib and Loogle are all Apache 2.0, so there is no licence seam anywhere in the
-dependency graph, and a result proved here can go upstream to Mathlib without relicensing.
-
-Much of this repository was written by coding agents working under human direction and
-review; the `Co-authored-by` trailers in the git history record which commits, and the
-session that produced them. Saying so is not a disclaimer, it is the same principle the tool
-applies to mathematics: a claim about provenance should be checkable rather than taken on
-trust. Judge the code by the audit it survives — `tests/test_adversarial.py` is the argument,
-not the authorship.
+Apache 2.0; see [LICENSE](LICENSE). Lean, Mathlib, Physlib, Cslib, and Loogle also use Apache 2.0.
+Coding agents contributed under human direction and review; commit trailers identify
+co-authored commits.

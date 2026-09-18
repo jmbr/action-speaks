@@ -1,184 +1,207 @@
-# Using nullius from a harness
+# Using nullius in an application
 
-Four integration paths, in rough order of how tightly coupled they are.
-
-| Path | Use when | Startup cost |
+| Interface | Best for | Lean session lifetime |
 |---|---|---|
-| Python API (`Harness`) | your harness is Python | once per process |
-| HTTP service | your harness is not Python, or runs elsewhere | once per server |
-| MCP server | the agent should call it as a tool, mid-conversation | once per server |
-| CLI | one-off checks, shell scripts, CI | **once per invocation** |
+| Python `Harness` | Python applications and batches | Reused until the harness closes |
+| HTTP | Applications in other languages | Reused by the server |
+| MCP | Agents calling tools during a conversation | Reused by the server |
+| CLI | One-off checks and shell scripts | New session for each invocation |
 
-The Mathlib, Physlib and Cslib imports cost ~2.9 s per Lean session. Everything below except the CLI
-pays that once and then answers in milliseconds. Do not shell out to the CLI in a loop.
+Loading the libraries takes several seconds. Use a persistent interface for repeated checks
+instead of starting the CLI in a loop.
 
-All four paths need the package installed from a checkout, which is one line and pulls in
-nothing — see [Setup from scratch](../README.md#setup-from-scratch):
+All interfaces require a built checkout. Follow [Setup from scratch](../README.md#setup-from-scratch),
+including the editable Python install:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv
+.venv/bin/pip install -e .
 ```
 
-## 1. Python
+## Python
 
 ```python
 from nullius import Harness
 
-with Harness(pool_size=4).warm() as h:
+with Harness(pool_size=1).warm() as h:
     v = h.verify(
         "theorem main (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
         claim="if n > 5 then n squared exceeds 25",
+        require_nontrivial=True,
     )
     if v.verified:
-        print(v.statement)     # ∀ (n : ℕ), 5 < n → 25 < n * n
+        print(v.statement)
     else:
-        print(v.feedback())    # what to tell the model
+        print(v.feedback())
 ```
 
-`Verdict` carries `verified`, `status`, `statement`, `axioms`, `checks`, `provenance`,
-`elapsed`, `to_dict()`, `to_json()`, `render()` (for logs) and `feedback()` (for the model).
+`Verdict` includes the status, elaborated statement, checks, axioms, library revisions, and
+elapsed time. Use `to_dict()` or `to_json()` for structured output, `render()` for a summary,
+and `feedback()` for suggested repairs.
 
-### Batch, concurrently
+The following snippets assume `h` is still inside its `with Harness(...)` block.
+
+### Batches
 
 ```python
 verdicts = h.verify_many([
-    {"source": src_a, "claim": "..."},
-    {"source": src_b, "claim": "..."},
+    {"source": src_a, "claim": "...", "require_nontrivial": True},
+    {"source": src_b, "claim": "...", "require_nontrivial": True},
 ])
 ```
 
-Order is preserved; concurrency is capped at the pool size. A batch of 6 finishes in ~0.1 s
-on a warm pool of 3.
+Results keep the input order. Increase `pool_size` to allow concurrent checks; each active
+check uses one Lean session.
 
-### Repair loop
+### Repair loops
 
-The common pattern: verify, feed the failure back, resubmit.
+Provide a function that generates Lean source from a prompt and any previous feedback:
 
 ```python
 def propose(feedback, round):
-    prompt = base_prompt if feedback is None else f"{base_prompt}\n\nPrevious attempt failed:\n{feedback}"
+    prompt = base_prompt
+    if feedback is not None:
+        prompt += f"\n\nPrevious attempt failed:\n{feedback}"
     return model.generate(prompt)
 
-verdict, history = h.prove(propose, claim="...", max_rounds=3)
+verdict, history = h.prove(
+    propose, claim="...", max_rounds=3, require_nontrivial=True
+)
 print(f"{len(history)} round(s) -> {verdict.status}")
 ```
 
-`feedback()` is written to be actionable rather than descriptive. For a vacuous theorem it
-says *fix the statement, not the proof* — which is the correction the model actually needs
-and rarely makes on its own.
+The loop stops on success or after `max_rounds`. A failed tactic calls for another proof
+attempt; contradictory assumptions call for a revised statement.
 
-### Pre-flight
-
-Check the statement before spending rounds on a proof:
+### Statement checks and search
 
 ```python
 info = h.check_statement("(n : Nat) (h1 : n > 5) (h2 : n < 3) : n = 42")
-if info["vacuous"]:
-    ...   # hypotheses contradict; no proof of this is worth anything
+if not info["ok"]:
+    print(info)
+elif info["vacuous"]:
+    print("Review the assumptions:", info["vacuity_witness"])
+
+h.search("sum of two even numbers is even")
+h.find_proof("25 < n * n", binders="(n : Nat) (h : 5 < n)")
 ```
 
-### Finding lemmas
+`check_statement` also returns related ledger entries in `recall` when logging is enabled.
+To look up stored work directly:
 
 ```python
-h.search("sum of two even numbers is even")            # natural language + shape
-h.find_proof("25 < n * n", binders="(n : Nat) (h : 5 < n)")  # asks Lean; cannot hallucinate
+for hit in h.recall(text="gradient descent step size"):
+    print(hit.render())
 ```
 
-### As a reward signal
+Matches are suggestions for reuse, not new verification results. Compare the statements and
+re-verify the stored source.
 
-For RL or best-of-n, `verified` is the boolean, and the checks give partial credit:
+### Training or ranking proof attempts
 
-```python
-def reward(v):
-    if v.verified:
-        return 1.0
-    passed = sum(c.passed for c in v.checks)
-    return 0.5 * passed / max(1, len(v.checks))
-```
+You can use `v.verified` as a success signal and `v.checks` for diagnostics. If you assign
+partial credit for passed checks, treat it as a training heuristic, not evidence of a proof.
+Keep `require_nontrivial=True`, and check the statement against the intended task: even a
+verified theorem can be irrelevant to that task.
 
-Note that `not_vacuous` and `hypotheses_used` are what stop a model from farming reward by
-emitting easy-but-empty theorems. Keep `require_nontrivial=True` when the score matters.
-
-## 2. HTTP
+## HTTP
 
 ```bash
-python3 -m nullius.http_server --port 823 --pool 4
+python3 -m nullius.http_server --port 8823 --pool 2
 ```
 
 ```bash
-curl -s localhost:823/verify -H 'Content-Type: application/json' \
+curl -s localhost:8823/verify -H 'Content-Type: application/json' \
   -d '{"source":"theorem t (n : Nat) (h : 5 < n) : 25 < n * n := by nlinarith",
-       "claim":"if n>5 then n^2>25"}'
+       "claim":"if n > 5 then n squared exceeds 25",
+       "require_nontrivial":true}'
 ```
+
+The response contains the verdict fields, plus `feedback` and `render`. For example, these
+are selected fields from a successful response:
 
 ```json
-{"verified": true,
- "status": "verified",
- "statement": "∀ (n : ℕ), 5 < n → 25 < n * n",
- "axioms": ["propext", "Classical.choice", "Quot.sound"],
- "checks": [{"name": "static_guard", "passed": true}, ...],
- "feedback": "VERIFIED. Cite this as machine-checked, ...",
- "provenance": {"toolchain": "leanprover/lean4:v4.32.0", "mathlib_rev": "81a5d257c8e4...",
-                "physlib_rev": "cf1d86d1fbba..."}}
+{
+  "verified": true,
+  "status": "verified",
+  "statement": "∀ (n : ℕ), 5 < n → 25 < n * n",
+  "axioms": ["propext", "Classical.choice", "Quot.sound"]
+}
 ```
 
-Endpoints: `GET /health`, `GET /ledger`, `POST /verify`, `/verify_many`, `/statement`,
-`/search`, `/find_proof`. Binds to localhost and has no authentication — submissions run
-arbitrary elaboration in Lean, so keep it off untrusted networks.
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Server configuration and library revisions |
+| `GET /ledger?limit=20` | Recent attempts and ledger statistics |
+| `POST /verify` | Check one proof |
+| `POST /verify_many` | Check an `items` array of proof submissions |
+| `POST /statement` | Check a statement and return related earlier work |
+| `POST /search` | Search for lemmas |
+| `POST /find_proof` | Ask Lean for a tactic for a goal |
 
-## 3. MCP
+The server binds to localhost by default and has no authentication. Lean processes
+submitted source; the verifier is not a security sandbox. Keep the service off untrusted
+networks.
+
+## MCP
 
 ```json
-{"mcpServers": {"nullius": {
-  "command": "/path/to/nullius/.venv/bin/python3",
-  "args": ["-m", "nullius.mcp_server"],
-  "cwd": "/path/to/nullius"}}}
+{
+  "mcpServers": {
+    "nullius": {
+      "command": "/path/to/nullius/.venv/bin/python3",
+      "args": ["-m", "nullius.mcp_server"],
+      "cwd": "/path/to/nullius"
+    }
+  }
+}
 ```
 
-Tools: `verify`, `statement`, `search`, `close`, `log` — the same names as the CLI
-subcommands. Put `AGENTS.md` in the system prompt so the agent knows the workflow and the
-rejection rules.
+The tools are `verify`, `statement`, `search`, `close`, and `log`. Give the agent the
+[workflow instructions](../AGENTS.md), or install the skill as described in
+[agent setup](SETUP-AGENTS.md).
 
-## 4. CLI
+## CLI
 
 ```bash
 nullius verify proof.lean -c "claim" --json --require-nontrivial
-echo "$SRC" | nullius verify - --json
+printf '%s\n' "$SRC" | nullius verify - --json
+nullius log --recall 'gradient descent step size'
 ```
 
-Exit code is 0 when verified, 1 otherwise, so it drops into CI directly. Each invocation
-starts its own Lean session.
+For `verify`, exit code 0 means verified, 1 means not verified, and 2 indicates a
+configuration or command-line error. Use `--no-log` to avoid reading or writing the ledger.
 
-## Operational notes
+The installed `nullius` command takes a **file path** after `verify`; use `-` for stdin.
+The skill's `scripts/nullius` wrapper has different syntax: it takes a claim and reads the
+proof from stdin, or from `-f FILE`.
 
-- **Pool sizing.** One in-flight verification needs one Lean session (~7 GB resident, though
-  `.olean` pages are shared, so the marginal session costs far less than the first). Size the
-  pool to your concurrency, not your core count.
-- **Isolation.** Every check branches off a pristine Mathlib environment, so one submission
-  cannot leave definitions behind for the next. This is a soundness property, not just
-  hygiene.
-- **Timeouts.** A wedged Lean process cannot be interrupted politely; on timeout the session
-  is killed and replaced. Set `NULLIUS_COMMAND_TIMEOUT` (default 120 s).
-- **Ledger.** Every verdict is appended to `ledger.sqlite3` with the toolchain and Mathlib
-  revision. Pass `log=False` to `Harness` for throwaway runs; keep it on when the verdicts
-  are evidence you may need to defend later.
+## Operation and configuration
 
-## Environment variables
+- **Pool size:** each concurrent check needs a Lean process. Increase the pool only as
+  needed and measure memory use.
+- **Isolation:** each submission starts from the preloaded library environment. Definitions
+  from earlier submissions are not retained for later ones.
+- **Timeouts:** a timed-out Lean process is killed. A later call starts a replacement.
+- **Logging:** verdicts are appended to `ledger.sqlite3` with their source and library
+  versions. `Harness(log=False)` disables ledger use.
 
-| Variable | Default |
+| Environment variable | Default |
 |---|---|
-| `NULLIUS_LEAN_DIR` | `<repo>/lean` |
-| `NULLIUS_REPL_BIN` | `<repo>/repl/.lake/build/bin/repl` |
-| `NULLIUS_LEDGER` | `<repo>/ledger.sqlite3` |
+| `NULLIUS_ROOT` | Checkout containing the Python package |
+| `NULLIUS_LEAN_DIR` | `<root>/lean` |
+| `NULLIUS_REPL_BIN` | `<lean_dir>/.lake/packages/repl/.lake/build/bin/repl`; legacy `<root>/repl/` is also checked |
+| `NULLIUS_LAKE_BIN` | `lake` on PATH, then standard elan locations |
+| `NULLIUS_LEDGER` | `<root>/ledger.sqlite3` |
+| `NULLIUS_LOOGLE_BIN` | `<root>/vendor/loogle/.lake/build/bin/loogle`, if built |
+| `NULLIUS_LOOGLE_MODULE` | `NulliusAll` |
 | `NULLIUS_POOL_SIZE` | 2 |
-| `NULLIUS_COMMAND_TIMEOUT` | 120 |
-| `NULLIUS_STARTUP_TIMEOUT` | 300 |
+| `NULLIUS_COMMAND_TIMEOUT` | 120 seconds |
+| `NULLIUS_STARTUP_TIMEOUT` | 300 seconds |
 | `NULLIUS_LEAN_THREADS` | 4 |
 
-## What you still have to do yourself
+## Reporting results
 
-The verifier certifies that the proof is sound and that the theorem is not empty. It cannot
-certify that the Lean statement means what your English claim meant. Always surface
-`verdict.statement` next to the claim — in the transcript, the PR comment, wherever the
-claim is presented — so the mismatch is visible to a human. That comparison is the residual
-trust, and it is the one place a harness should not fully automate.
+Display `verdict.statement` beside the informal claim. Verification checks the formal proof;
+it does not check that the formalization expresses the intended claim. The contradiction
+and unnecessary-assumption probes can miss problems, so they do not replace this comparison.
