@@ -87,6 +87,27 @@ Natural-language search uses the remote LeanSearch service.
 `close` runs search tactics in Lean against your goal. Treat the suggestions as proof
 candidates and run the finished proof through `verify`.
 
+### Ledger-search limits
+
+`--backend ledger` searches cached earlier targets; `--backend loogle --include-ledger`
+adds a separate group alongside library results. Only explicit `--refresh-ledger` rechecks
+proofs and builds the index. Ordinary searches do neither; a missing or outdated cache asks
+for refresh. The default cache is `<root>/build/ledger-search`; override it with
+`NULLIUS_LEDGER_INDEX_DIR`. `NULLIUS_LEDGER_REFRESH_TIMEOUT` defaults to 900 seconds.
+
+Only formerly verified targets that pass current rechecking and export are indexed.
+Identical source/target pairs share a hit; helpers are not separate hits. Export copies
+kernel-level theorem, definition, and opaque dependency terms with remapped names, not
+source text. Targets depending on local inductives, structures, or recursors are excluded
+in this initial version. Index metadata lists exclusions; an export failure does not show
+that a claim is unprovable. These limits do not change the accepted proof language.
+
+Ledger source stays local. `--backend both --include-ledger` sends only the original query
+to remote natural-language search; remote-only backends cannot include ledger results.
+Retrieve a hit with `scripts/nullius log --id 123 --json`, include its needed declarations,
+and verify a fresh submission. Generated aliases are not available in normal submissions
+or `close`. Reading the index or a source row does not create, migrate, or write the ledger.
+
 ## Worked example: claim to verdict
 
 Claim: *the arithmetic mean of two nonnegative reals is at least their geometric mean.*

@@ -16,11 +16,63 @@ import json
 import re
 import sqlite3
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
 from .verify import Verdict
+
+
+class LedgerReadError(RuntimeError):
+    """An existing ledger cannot be read without changing it."""
+
+
+def _read_rows(path: Path, row_id: int | None = None) -> list[dict[str, Any]]:
+    path = Path(path).absolute()
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        raise LedgerReadError(f"cannot access ledger {path}: {exc}") from exc
+    required = {"id", "source", "target", "status", "verified", "source_sha256", "statement"}
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=30)) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("BEGIN")
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(verifications)")}
+            missing = required - columns
+            if missing:
+                raise LedgerReadError(
+                    f"ledger {path} is missing columns: {', '.join(sorted(missing))}"
+                )
+            if row_id is None:
+                query = (
+                    "SELECT * FROM verifications WHERE status = 'verified' "
+                    "AND verified = 1 ORDER BY id"
+                )
+                args = ()
+            else:
+                query = "SELECT * FROM verifications WHERE id = ?"
+                args = (row_id,)
+            return [dict(row) for row in conn.execute(query, args)]
+    except sqlite3.Error as exc:
+        raise LedgerReadError(f"cannot read ledger {path}: {exc}") from exc
+
+
+def read_verified_rows(path: Path) -> list[dict[str, Any]]:
+    """Read a snapshot of verified rows without creating or migrating the database."""
+    return _read_rows(path)
+
+
+def read_ledger_row(path: Path, row_id: int) -> dict[str, Any] | None:
+    """Retrieve an attempt, including its source; a missing ledger or ID returns None."""
+    if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id <= 0:
+        raise ValueError("ledger ID must be a positive integer")
+    rows = _read_rows(path, row_id)
+    return rows[0] if rows else None
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS verifications (

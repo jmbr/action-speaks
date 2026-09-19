@@ -29,19 +29,26 @@ the local route.
 from __future__ import annotations
 
 import json
+import math
 import os
+import queue
 import re
+import signal
 import subprocess
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, TextIO
 
-from .repl import ReplError, Session
+from .repl import ReplError, ReplTimeout, Session
+
+if TYPE_CHECKING:
+    from .config import Config
 
 LOOGLE_URL = "https://loogle.lean-lang.org/json"
 LEANSEARCH_URL = "https://leansearch.net/search"
@@ -56,12 +63,17 @@ class Hit:
     signature: str = ""
     doc: str = ""
     source: str = ""
+    ledger: dict[str, Any] | None = None
 
     def render(self) -> str:
         head = f"{self.name}"
         if self.signature:
             head += f" : {self.signature}"
         tail = f"    [{self.source}{(' / ' + self.module) if self.module else ''}]"
+        if self.ledger:
+            ids = ", ".join(f"#{i}" for i in self.ledger["ids"])
+            tail += f"\n    ledger {ids}; retrieve with log --id {self.ledger['ids'][0]}"
+            tail += "\n    Not preloaded: retrieve the source and verify any new submission."
         return head + "\n" + tail
 
 
@@ -72,12 +84,14 @@ class SearchResult:
     hits: list[Hit] = field(default_factory=list)
     error: str | None = None
     note: str = ""
+    index: dict[str, Any] | None = None
 
     def render(self, limit: int = 10) -> str:
         if self.error:
             return f"{self.backend} search failed: {self.error}"
         if not self.hits:
-            return f"{self.backend}: no results for {self.query!r}"
+            text = f"{self.backend}: no results for {self.query!r}"
+            return text + (f"\n  ({self.note})" if self.note else "")
         lines = [f"{self.backend}: {len(self.hits)} hit(s) for {self.query!r}"]
         if self.note:
             lines.append(f"  ({self.note})")
@@ -86,7 +100,7 @@ class SearchResult:
         return "\n".join(lines)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "query": self.query,
             "backend": self.backend,
             "error": self.error,
@@ -99,10 +113,14 @@ class SearchResult:
                     "signature": h.signature,
                     "doc": h.doc[:500],
                     "source": h.source,
+                    **({"ledger": h.ledger} if h.ledger is not None else {}),
                 }
                 for h in self.hits
             ],
         }
+        if self.index is not None:
+            result["index"] = self.index
+        return result
 
 
 def _http_json(
@@ -169,6 +187,11 @@ class LoogleSession:
         lean_dir: Path | None = None,
         module: str | None = None,
         lake_bin: Path | None = None,
+        *,
+        index_file: Path | None = None,
+        index_mode: str = "use",
+        environment: dict[str, str] | None = None,
+        direct: bool = False,
     ) -> None:
         from .config import Config
 
@@ -185,8 +208,36 @@ class LoogleSession:
             cfg.loogle_module if cfg else os.environ.get("NULLIUS_LOOGLE_MODULE", "NulliusAll")
         )
         self.proc: subprocess.Popen[str] | None = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.startup_seconds: float | None = None
+        self.index_file = index_file
+        self.index_mode = index_mode
+        self.environment = environment
+        self.direct = direct
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        self._stderr: deque[str] = deque(maxlen=20)
+
+    @staticmethod
+    def _pump(stream: TextIO, lines: queue.Queue[str | None]) -> None:
+        try:
+            for line in stream:
+                lines.put(line)
+        finally:
+            lines.put(None)
+
+    @staticmethod
+    def _pump_errors(stream: TextIO, errors: deque[str]) -> None:
+        for line in stream:
+            errors.append(line)
+
+    def _readline(self, timeout: float) -> str:
+        try:
+            line = self._lines.get(timeout=max(0.001, timeout))
+        except queue.Empty as exc:
+            raise ReplTimeout(f"Loogle did not reply within {timeout:.1f}s") from exc
+        if line is None:
+            raise ReplError("Loogle exited: " + "".join(self._stderr).strip())
+        return line
 
     @property
     def available(self) -> bool:
@@ -206,43 +257,58 @@ class LoogleSession:
             if self.proc is not None and self.proc.poll() is None:
                 return
             t0 = time.time()
+            command = [
+                str(self.binary),
+                "--module",
+                self.module,
+                "-i",
+                "--json",
+                "--index-mode",
+                self.index_mode,
+            ]
+            if self.index_file is not None:
+                command += ["--index-file", str(self.index_file)]
+            if not self.direct:
+                command = [str(self.lake_bin), "env", *command]
             self.proc = subprocess.Popen(
-                [
-                    str(self.lake_bin),
-                    "env",
-                    str(self.binary),
-                    "--module",
-                    self.module,
-                    "-i",
-                    "--json",
-                ],
+                command,
                 cwd=str(self.lean_dir),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,  # progress chatter about index rebuilds
+                stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                env=self.environment,
+                start_new_session=True,
             )
-            # It announces itself once, before the first result line.
-            assert self.proc.stdout is not None
-            banner = self.proc.stdout.readline()
-            if not banner.strip():
-                self.proc = None
-                raise ReplError("loogle exited before becoming ready")
+            assert self.proc.stdout is not None and self.proc.stderr is not None
+            self._lines = queue.Queue()
+            self._stderr = deque(maxlen=20)
+            threading.Thread(
+                target=self._pump, args=(self.proc.stdout, self._lines), daemon=True
+            ).start()
+            threading.Thread(
+                target=self._pump_errors, args=(self.proc.stderr, self._stderr), daemon=True
+            ).start()
+            try:
+                banner = self._readline(timeout)
+                if banner.strip() != "Loogle is ready.":
+                    raise ReplError(f"unexpected Loogle startup response: {banner[:200]}")
+            except ReplError:
+                self.close()
+                raise
             self.startup_seconds = time.time() - t0
 
     def query(self, q: str, limit: int = 12, timeout: float = 900.0) -> SearchResult:
-        self.start(timeout=timeout)
-        assert self.proc is not None and self.proc.stdin and self.proc.stdout
         with self._lock:
-            if self.proc.poll() is not None:
-                return SearchResult(q, "loogle-local", error="loogle process exited")
             try:
+                self.start(timeout=timeout)
+                assert self.proc is not None and self.proc.stdin
                 # One query per line, one JSON object per line back.
                 self.proc.stdin.write(q.replace("\n", " ") + "\n")
                 self.proc.stdin.flush()
-                line = self.proc.stdout.readline()
-            except (BrokenPipeError, OSError) as exc:
+                line = self._readline(timeout)
+            except (ReplError, OSError) as exc:
                 self.close()
                 return SearchResult(q, "loogle-local", error=f"loogle: {exc}")
         if not line.strip():
@@ -258,27 +324,76 @@ class LoogleSession:
             if self.proc is None:
                 return
             try:
-                if self.proc.stdin:
-                    self.proc.stdin.close()
-                self.proc.terminate()
+                if self.proc.poll() is None:
+                    os.killpg(self.proc.pid, signal.SIGTERM)
                 self.proc.wait(timeout=10)
-            except Exception:
-                self.proc.kill()
+            except subprocess.TimeoutExpired:
+                os.killpg(self.proc.pid, signal.SIGKILL)
+                self.proc.wait()
+            except ProcessLookupError:
+                self.proc.wait()
             finally:
+                for stream in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+                    if stream:
+                        stream.close()
                 self.proc = None
 
 
 _local_loogle: LoogleSession | None = None
 _local_lock = threading.Lock()
+_configured_sessions: dict[tuple[str, ...], LoogleSession] = {}
 
 
-def local_loogle_session() -> LoogleSession:
+def local_loogle_session(config: Config | None = None) -> LoogleSession:
     """The process-wide local Loogle session, created on first use."""
     global _local_loogle
     with _local_lock:
+        if config is not None:
+            key = (
+                str(config.lean_dir.resolve()),
+                str(config.loogle_bin),
+                str(config.lake_bin),
+                config.loogle_module,
+            )
+            if key not in _configured_sessions:
+                _configured_sessions[key] = LoogleSession(
+                    binary=config.loogle_bin,
+                    lean_dir=config.lean_dir,
+                    lake_bin=config.lake_bin,
+                    module=config.loogle_module,
+                )
+            return _configured_sessions[key]
         if _local_loogle is None:
             _local_loogle = LoogleSession()
         return _local_loogle
+
+
+def close_sessions(config: Config | None = None) -> None:
+    """Close existing search processes without creating new sessions."""
+    global _local_loogle
+    with _local_lock:
+        if _local_loogle is not None and (
+            config is None
+            or (
+                _local_loogle.lean_dir.resolve() == config.lean_dir.resolve()
+                and _local_loogle.binary == config.loogle_bin
+                and _local_loogle.module == config.loogle_module
+                and _local_loogle.lake_bin == config.lake_bin
+            )
+        ):
+            _local_loogle.close()
+            _local_loogle = None
+        for key in list(_configured_sessions):
+            if config is None or key == (
+                str(config.lean_dir.resolve()),
+                str(config.loogle_bin),
+                str(config.lake_bin),
+                config.loogle_module,
+            ):
+                _configured_sessions.pop(key).close()
+    from .ledger_search import close_ledger_sessions
+
+    close_ledger_sessions(config)
 
 
 def loogle_remote(query: str, limit: int = 12, timeout: float = 20.0) -> SearchResult:
@@ -297,7 +412,9 @@ def loogle_remote(query: str, limit: int = 12, timeout: float = 20.0) -> SearchR
     return _parse_loogle_json(query, raw, limit, "loogle")
 
 
-def loogle(query: str, limit: int = 12, timeout: float = 20.0) -> SearchResult:
+def loogle(
+    query: str, limit: int = 12, timeout: float = 20.0, *, config: Config | None = None
+) -> SearchResult:
     """Shape-directed search, against the local index.
 
     Query forms Loogle understands:
@@ -315,8 +432,10 @@ def loogle(query: str, limit: int = 12, timeout: float = 20.0) -> SearchResult:
     to guessing names. If the local index is unavailable, that is reported, and the hosted
     service remains available by asking for it: `loogle_remote`, or `backend="loogle-remote"`.
     """
-    session = local_loogle_session()
-    if not session.available:
+    session = (
+        None if config is not None and config.loogle_bin is None else local_loogle_session(config)
+    )
+    if session is None or not session.available:
         return SearchResult(
             query,
             "loogle-local",
@@ -442,11 +561,18 @@ def local_search(
     )
 
 
-BACKENDS = ("loogle", "loogle-remote", "leansearch", "both")
+BACKENDS = ("loogle", "loogle-remote", "leansearch", "both", "ledger")
 
 
 def search(
-    query: str, limit: int = 10, timeout: float = 20.0, backend: str = "both"
+    query: str,
+    limit: int = 10,
+    timeout: float = 20.0,
+    backend: str = "both",
+    *,
+    include_ledger: bool = False,
+    refresh_ledger: bool = False,
+    config: Config | None = None,
 ) -> list[SearchResult]:
     """Dispatch a query to the requested backend(s).
 
@@ -460,11 +586,29 @@ def search(
     """
     if backend not in BACKENDS:
         raise ValueError(f"unknown backend {backend!r}; expected one of {', '.join(BACKENDS)}")
+    if not isinstance(include_ledger, bool) or not isinstance(refresh_ledger, bool):
+        raise ValueError("include_ledger and refresh_ledger must be booleans")
+    if include_ledger and backend in ("loogle-remote", "leansearch"):
+        raise ValueError("include_ledger requires a local backend: loogle, both, or ledger")
+    if refresh_ledger and not (include_ledger or backend == "ledger"):
+        raise ValueError("refresh_ledger requires include_ledger or backend='ledger'")
+    if limit < 1:
+        raise ValueError("limit must be positive")
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be finite and positive")
     out: list[SearchResult] = []
     if backend in ("loogle", "both"):
-        out.append(loogle(query, limit=limit, timeout=timeout))
+        out.append(loogle(query, limit=limit, timeout=timeout, config=config))
     if backend == "loogle-remote":
         out.append(loogle_remote(query, limit=limit, timeout=timeout))
     if backend in ("leansearch", "both"):
         out.append(leansearch(query, limit=limit, timeout=timeout))
+    if include_ledger or backend == "ledger":
+        from .ledger_search import search_ledger
+
+        out.append(
+            search_ledger(
+                query, limit=limit, timeout=timeout, refresh=refresh_ledger, config=config
+            )
+        )
     return out

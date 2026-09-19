@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import search as S
 from .config import Config, ConfigError
-from .ledger import Ledger
+from .ledger import Ledger, LedgerReadError, read_ledger_row
 from .repl import ReplError, Session
 from .verify import Verifier
 
@@ -154,14 +154,26 @@ def cmd_statement(args: argparse.Namespace) -> int:
 
 def cmd_search(args: argparse.Namespace) -> int:
     query = " ".join(args.query)
-    results = S.search(query, limit=args.limit, backend=args.backend)
-    S.local_loogle_session().close()
+    include_ledger = getattr(args, "include_ledger", False)
+    refresh_ledger = getattr(args, "refresh_ledger", False)
+    try:
+        results = S.search(
+            query,
+            limit=args.limit,
+            backend=args.backend,
+            include_ledger=include_ledger,
+            refresh_ledger=refresh_ledger,
+        )
+    finally:
+        S.close_sessions()
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2, ensure_ascii=False))
-        return 0
-    for r in results:
-        print(r.render(limit=args.limit))
-        print()
+    else:
+        for r in results:
+            print(r.render(limit=args.limit))
+            print()
+    if args.backend == "ledger" or include_ledger or refresh_ledger:
+        return int(any(r.error and r.backend in ("ledger", "loogle-ledger") for r in results))
     return 0
 
 
@@ -175,20 +187,47 @@ def cmd_close(args: argparse.Namespace) -> int:
 
 
 def cmd_log(args: argparse.Namespace) -> int:
+    row_id = getattr(args, "id", None)
+    if row_id is not None:
+        if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id <= 0:
+            raise ValueError("ledger ID must be a positive integer")
+        if (
+            args.limit is not None
+            or args.status is not None
+            or args.tag is not None
+            or args.recall is not None
+            or args.stats
+        ):
+            raise ValueError(
+                "--id cannot be combined with --limit, --status, --tag, --recall or --stats"
+            )
     cfg = Config.discover()
+    if row_id is not None:
+        row = read_ledger_row(cfg.ledger_path, row_id)
+        if row is None:
+            print(f"ledger entry #{row_id} not found", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            print(f"ledger #{row['id']} [{row['status']}]")
+            print(f"target: {row['target'] or '-'}")
+            print(f"source:\n{row['source']}")
+        return 0
+    limit = args.limit if args.limit is not None else 20
     ledger = Ledger(cfg.ledger_path)
     if args.stats:
         print(json.dumps(ledger.stats(), indent=2))
         return 0
     if args.recall:
-        hits = ledger.recall(text=args.recall, limit=args.limit, current=cfg.provenance())
+        hits = ledger.recall(text=args.recall, limit=limit, current=cfg.provenance())
         if not hits:
             print(f"nothing recorded resembling {args.recall!r}")
             return 1
         for h in hits:
             print(h.render())
         return 0
-    rows = ledger.recent(limit=args.limit, status=args.status, tag=args.tag)
+    rows = ledger.recent(limit=limit, status=args.status, tag=args.tag)
     if args.json:
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return 0
@@ -247,6 +286,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="'loogle' is the local index; 'loogle-remote' is the hosted service",
     )
     se.add_argument("-n", "--limit", type=int, default=8)
+    se.add_argument(
+        "--include-ledger", action="store_true", help="also search the optional local ledger index"
+    )
+    se.add_argument(
+        "--refresh-ledger", action="store_true", help="rebuild the requested ledger index"
+    )
     se.add_argument("--json", action="store_true")
     se.set_defaults(func=cmd_search)
 
@@ -258,7 +303,8 @@ def build_parser() -> argparse.ArgumentParser:
     g.set_defaults(func=cmd_close)
 
     lg = sub.add_parser("log", help="show recent verifications")
-    lg.add_argument("-n", "--limit", type=int, default=20)
+    lg.add_argument("-n", "--limit", type=int, help="maximum recent entries (default: 20)")
+    lg.add_argument("--id", type=int, help="retrieve one entry, including its source, read-only")
     lg.add_argument("--status", choices=("verified", "rejected", "error"))
     lg.add_argument("--tag", help="only entries recorded with this --tag")
     lg.add_argument(
@@ -280,6 +326,12 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
         return 2
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except LedgerReadError as exc:
+        print(f"ledger error: {exc}", file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
 

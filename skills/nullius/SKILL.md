@@ -35,7 +35,7 @@ give up. A detected contradiction or unnecessary assumption calls for reviewing 
 statement.
 
 The commands below use `scripts/nullius` relative to this skill directory. Use the full path
-above when working elsewhere. For a direct ledger search, run
+above when working elsewhere. For wording-based ledger recall, run
 `scripts/nullius log --recall TEXT`.
 
 ### 3. Find lemmas
@@ -52,6 +52,27 @@ verify the resulting proof.
 
 LeanSearch is remote. Hosted Loogle is available only through `--backend loogle-remote`;
 it uses a different Mathlib revision and does not cover Physlib or Cslib.
+
+#### Find reusable earlier proofs
+
+When you need an earlier proof, use local ledger shape search, not just library search:
+
+```bash
+scripts/nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger
+scripts/nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+scripts/nullius log --id 123 --json
+```
+
+`ledger` searches only earlier targets; `--include-ledger` adds a separate group alongside
+library results. Defaults are unchanged. Ordinary ledger searches never compile or verify.
+If the cache is missing or outdated, explicitly add `--refresh-ledger` to recheck proofs
+and build it. MCP uses `backend: "ledger"`, `include_ledger: true`, and
+`refresh_ledger: true` for the same options; retrieve source with `log { "id": 123 }`.
+
+Use the hit's row ID to retrieve its source, include the needed declarations, and verify
+a fresh submission. Do not cite generated aliases or assume earlier proofs are preloaded.
+Read [export limitations](references/GUIDE.md#ledger-search-limits) before interpreting
+missing results.
 
 ### 4. Verify the proof
 

@@ -63,9 +63,10 @@ class Harness:
         return self
 
     def close(self) -> None:
-        self.pool.close()
-        # Also release the local Loogle process and its in-memory index, if search was used.
-        S.local_loogle_session().close()
+        try:
+            self.pool.close()
+        finally:
+            S.close_sessions(self.config)
 
     def __enter__(self) -> "Harness":
         return self
@@ -188,9 +189,26 @@ class Harness:
             current=self.config.provenance(),
         )
 
-    def search(self, query: str, backend: str = "both", limit: int = 8) -> list[S.SearchResult]:
-        """Find a lemma. `loogle` is the local index; `loogle-remote` the hosted service."""
-        return S.search(query, limit=limit, backend=backend)
+    def search(
+        self,
+        query: str,
+        backend: str = "both",
+        limit: int = 8,
+        *,
+        include_ledger: bool = False,
+        refresh_ledger: bool = False,
+    ) -> list[S.SearchResult]:
+        """Find a lemma; ledger access is opt-in and unavailable with `log=False`."""
+        if self.ledger is None and (backend == "ledger" or include_ledger or refresh_ledger):
+            raise ValueError("ledger access is disabled (Harness(log=False))")
+        return S.search(
+            query,
+            limit=limit,
+            backend=backend,
+            include_ledger=include_ledger,
+            refresh_ledger=refresh_ledger,
+            config=self.config,
+        )
 
     def find_proof(
         self,

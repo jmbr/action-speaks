@@ -83,8 +83,13 @@ elif info["vacuous"]:
     print("Review the assumptions:", info["vacuity_witness"])
 
 h.search("sum of two even numbers is even")
+h.search("Real.sqrt, |- _ ≤ _", backend="ledger")
+h.search("Real.sqrt, |- _ ≤ _", backend="loogle", include_ledger=True)
 h.find_proof("25 < n * n", binders="(n : Nat) (h : 5 < n)")
 ```
+
+Ledger shape search is opt-in. Add `refresh_ledger=True` to explicitly recheck and build
+its cache; see [ledger search](#optional-local-ledger-search) below.
 
 `check_statement` also returns related ledger entries in `recall` when logging is enabled.
 To look up stored work directly:
@@ -133,6 +138,7 @@ are selected fields from a successful response:
 |---|---|
 | `GET /health` | Server configuration and library revisions |
 | `GET /ledger?limit=20` | Recent attempts and ledger statistics |
+| `GET /ledger/123` | Read one entry, including its source and target |
 | `POST /verify` | Check one proof |
 | `POST /verify_many` | Check an `items` array of proof submissions |
 | `POST /statement` | Check a statement and return related earlier work |
@@ -176,6 +182,52 @@ The installed `nullius` command takes a **file path** after `verify`; use `-` fo
 The skill's `scripts/nullius` wrapper has different syntax: it takes a claim and reads the
 proof from stdin, or from `-f FILE`.
 
+## Optional local ledger search
+
+Default searches are unchanged. Use Loogle patterns to search earlier verified targets:
+
+```bash
+nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
+nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger
+nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+```
+
+`backend="ledger"` searches only the ledger. `include_ledger` adds a separate ledger group
+to `loogle` or `both`; it is invalid with remote-only backends. Ledger source stays local.
+With `both`, only the original query goes to the existing remote natural-language search.
+
+HTTP `POST /search` and MCP `search` accept the same keys. For example, this explicitly
+refreshes before searching:
+
+```json
+{"query": "Real.sqrt, |- _ ≤ _", "backend": "ledger", "refresh_ledger": true}
+```
+
+For library and ledger results together, use `"backend": "loogle", "include_ledger": true`.
+Python `Harness.search` uses the same keyword flags, with Python booleans.
+
+**Refresh is explicit.** Ordinary ledger searches never invoke the compiler, Lake, the
+verifier, or an index build. A missing or outdated cache returns an error asking for
+`--refresh-ledger` (API: `refresh_ledger=true`). Refresh requires `backend="ledger"` or
+`include_ledger`; `Harness(log=False)` rejects explicit ledger access.
+
+Refresh rechecks formerly verified targets against the current environment and indexes only
+those that pass rechecking and export. Identical source/target pairs are deduplicated;
+helpers are not separate hits. The cache holds immutable audited `.olean` entries and a
+small, target-only Loogle index, not a rebuilt Mathlib index.
+
+Export copies kernel-level theorem, definition, and opaque dependency terms with names
+remapped, not source text. This initial version excludes targets whose dependency closure
+contains locally declared inductives, structures, or recursors. Index result metadata lists
+exclusions; failures do not show that a claim is unprovable. These are export limitations,
+not changes to the proof language accepted by the verifier.
+
+**Reuse source, not generated aliases.** Use a hit's row ID to retrieve its current source:
+CLI `nullius log --id 123 --json`, MCP `log { "id": 123 }`, or HTTP `GET /ledger/123`.
+Include the needed declarations and verify a fresh submission. Earlier proofs are not
+preloaded, and `close` is unchanged. Index and single-row source reads do not create, migrate,
+or write the ledger.
+
 ## Operation and configuration
 
 - **Pool size:** each concurrent check needs a Lean process. Increase the pool only as
@@ -193,6 +245,8 @@ proof from stdin, or from `-f FILE`.
 | `NULLIUS_REPL_BIN` | `<lean_dir>/.lake/packages/repl/.lake/build/bin/repl`; legacy `<root>/repl/` is also checked |
 | `NULLIUS_LAKE_BIN` | `lake` on PATH, then standard elan locations |
 | `NULLIUS_LEDGER` | `<root>/ledger.sqlite3` |
+| `NULLIUS_LEDGER_INDEX_DIR` | `<root>/build/ledger-search` |
+| `NULLIUS_LEDGER_REFRESH_TIMEOUT` | 900 seconds |
 | `NULLIUS_LOOGLE_BIN` | `<root>/vendor/loogle/.lake/build/bin/loogle`, if built |
 | `NULLIUS_LOOGLE_MODULE` | `NulliusAll` |
 | `NULLIUS_POOL_SIZE` | 2 |

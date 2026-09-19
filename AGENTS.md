@@ -47,6 +47,25 @@ If local Loogle is unavailable, report that. Use `backend: "loogle-remote"` only
 the public index uses a different Mathlib revision and does not include Physlib or Cslib.
 A missing result there does not establish that a lemma is absent locally.
 
+When looking for reusable earlier proofs, explicitly search the local ledger:
+
+```text
+search { "query": "Real.sqrt, |- _ ≤ _", "backend": "ledger" }
+search { "query": "Real.sqrt, |- _ ≤ _", "backend": "loogle", "include_ledger": true }
+log    { "id": 123 }
+```
+
+`ledger` searches only earlier targets; `include_ledger` returns them as a separate group
+alongside library results. Ordinary ledger searches read the cache without compiling or
+verifying. If it is missing or outdated, opt in to rechecking and rebuilding with
+`refresh_ledger: true` on the search call. Defaults remain unchanged.
+
+Retrieve a hit's source by its row ID, include the needed declarations in your submission,
+and verify it afresh. Do not cite generated aliases or assume earlier proofs are preloaded.
+Only targets that pass current rechecking and export enter the index. Read its exclusions:
+an export failure is not evidence of unprovability. See
+[export limitations](docs/INTEGRATION.md#optional-local-ledger-search).
+
 The tools are `verify`, `statement`, `search`, `close`, and `log`. Clients may prefix their
 names with the server name, for example `nullius-search`.
 

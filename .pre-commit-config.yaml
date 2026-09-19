@@ -21,6 +21,27 @@ repos:
 
   - repo: local
     hooks:
+      - id: nullius-ledger-readonly
+        name: ledger reads do not create or migrate databases
+        entry: python3 tests/test_ledger_readonly.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/ledger\.py|tests/test_ledger_readonly\.py)$
+
+      - id: nullius-ledger-interfaces
+        name: optional ledger search interfaces remain compatible
+        entry: python3 tests/test_ledger_interfaces.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/.*\.py|tests/test_ledger_interfaces\.py)$
+
+      - id: nullius-ledger-search
+        name: ledger targets are searchable without implicit builds
+        entry: python3 tests/test_ledger_search.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/.*\.py|lean/Nullius/LedgerExport\.lean|scripts/ledger_index\.lean|tests/test_ledger_search\.py)$
+
       # Instant and Lean-free, so it runs on every commit. Catches the failure mode that
       # tests cannot: prose that still refers to a renamed tool or a superseded revision.
       - id: nullius-names

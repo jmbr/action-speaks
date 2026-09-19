@@ -29,7 +29,7 @@ from typing import Any, Callable
 
 from . import search as S
 from .config import Config
-from .ledger import Ledger
+from .ledger import Ledger, LedgerReadError, read_ledger_row
 from .repl import ReplError, Session
 from .verify import Verifier
 
@@ -162,7 +162,10 @@ TOOLS: list[dict[str, Any]] = [
             "names - invented names are the most common cause of failed proofs. "
             "'loogle-remote' queries the public loogle.lean-lang.org instead; ask for it "
             "only if the local index is unavailable, and treat its results with care, since "
-            "it indexes a different Mathlib revision and neither Physlib nor Cslib."
+            "it indexes a different Mathlib revision and neither Physlib nor Cslib. "
+            "'ledger' searches only the optional local ledger index; include_ledger adds "
+            "it to 'loogle' or 'both'. Ledger hits are pointers: retrieve their source with "
+            "`log` and re-verify before citing."
         ),
         "inputSchema": {
             "type": "object",
@@ -170,10 +173,16 @@ TOOLS: list[dict[str, Any]] = [
                 "query": {"type": "string"},
                 "backend": {
                     "type": "string",
-                    "enum": ["loogle", "loogle-remote", "leansearch", "both"],
+                    "enum": list(S.BACKENDS),
                     "default": "both",
                 },
                 "limit": {"type": "integer", "default": 8},
+                "include_ledger": {"type": "boolean", "default": False},
+                "refresh_ledger": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Rebuild the requested ledger index before searching.",
+                },
             },
             "required": ["query"],
         },
@@ -210,12 +219,18 @@ TOOLS: list[dict[str, Any]] = [
         "name": "log",
         "description": (
             "List past verification results recorded by this verifier, or search them with "
-            "`recall` to find work already done on a claim. A hit is a pointer to re-verify, "
-            "never proof in itself."
+            "`recall` to find work already done on a claim. Use `id` alone to retrieve one "
+            "entry read-only, including its source and target. A hit is a pointer to "
+            "re-verify, never proof in itself."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
+                "id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Retrieve one entry; cannot be combined with listing options.",
+                },
                 "limit": {"type": "integer", "default": 10},
                 "status": {"type": "string", "enum": ["verified", "rejected", "error"]},
                 "tag": {
@@ -298,11 +313,18 @@ def tool_search(args: dict[str, Any]) -> str:
     query = args.get("query", "")
     backend = args.get("backend", "both")
     limit = int(args.get("limit", 8))
-    try:
-        results = S.search(query, limit=limit, backend=backend)
-    except ValueError as exc:
-        return f"error: {exc}"
-    return "\n\n".join(r.render(limit) for r in results) or "no results"
+    results = S.search(
+        query,
+        limit=limit,
+        backend=backend,
+        include_ledger=args.get("include_ledger", False),
+        refresh_ledger=args.get("refresh_ledger", False),
+        config=_config,
+    )
+    text = "\n\n".join(r.render(limit) for r in results) or "no results"
+    if any(r.error and r.backend == "loogle-ledger" for r in results):
+        raise ValueError(text)
+    return text
 
 
 def tool_close(args: dict[str, Any]) -> str:
@@ -314,6 +336,16 @@ def tool_close(args: dict[str, Any]) -> str:
 
 
 def tool_log(args: dict[str, Any]) -> str:
+    if "id" in args:
+        row_id = args["id"]
+        if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id <= 0:
+            raise ValueError("ledger ID must be a positive integer")
+        if any(key in args for key in ("limit", "status", "tag", "recall", "stats")):
+            raise ValueError("id cannot be combined with limit, status, tag, recall or stats")
+        row = read_ledger_row(config().ledger_path, row_id)
+        if row is None:
+            raise ValueError(f"ledger entry #{row_id} not found")
+        return json.dumps(row, indent=2, ensure_ascii=False)
     lg = ledger()
     if args.get("stats"):
         return json.dumps(lg.stats(), indent=2)
@@ -397,6 +429,9 @@ def handle(req: dict[str, Any]) -> dict[str, Any] | None:
         except ReplError as exc:
             text = f"Lean backend error: {exc}"
             is_error = True
+        except (ValueError, LedgerReadError) as exc:
+            text = f"error: {exc}"
+            is_error = True
         except Exception:
             text = f"tool failed:\n{traceback.format_exc(limit=3)}"
             is_error = True
@@ -409,26 +444,29 @@ def handle(req: dict[str, Any]) -> dict[str, Any] | None:
 def serve(stdin=None, stdout=None) -> int:
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
-    for line in stdin:
-        line = line.strip()
-        if not line:
-            continue
+    try:
+        for line in stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            try:
+                resp = handle(req)
+            except Exception:
+                resp = _error(req.get("id"), -32603, traceback.format_exc(limit=3))
+            if resp is not None:
+                stdout.write(json.dumps(resp) + "\n")
+                stdout.flush()
+        return 0
+    finally:
         try:
-            req = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        try:
-            resp = handle(req)
-        except Exception:
-            resp = _error(req.get("id"), -32603, traceback.format_exc(limit=3))
-        if resp is not None:
-            stdout.write(json.dumps(resp) + "\n")
-            stdout.flush()
-    if _session is not None:
-        _session.close()
-    # The local Loogle process, if one was started, holds a large index in memory.
-    S.local_loogle_session().close()
-    return 0
+            if _session is not None:
+                _session.close()
+        finally:
+            S.close_sessions(_config)
 
 
 def main() -> int:

@@ -138,6 +138,27 @@ A rejected attempt does not establish that the claim is unprovable. Read the fai
 a tactic error calls for another proof attempt; a detected contradiction calls for reviewing
 the statement. Library updates can change either outcome.
 
+### Optional local shape search
+
+Use Loogle patterns to find reusable earlier proofs:
+
+```bash
+nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
+nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger
+nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+nullius log --id 123 --json
+```
+
+`ledger` searches only cached ledger targets; `--include-ledger` adds a separate group
+alongside library results. Defaults are unchanged. Only explicit `--refresh-ledger`
+rechecks proofs and builds the cache; ordinary ledger searches never compile or verify.
+A missing or outdated cache asks you to refresh.
+
+Hits point to source, not preloaded lemmas. Retrieve the row by its ID, include the needed
+declarations, and verify a fresh submission. See the
+[ledger-search guide](docs/INTEGRATION.md#optional-local-ledger-search) for configuration
+and export limitations.
+
 ## Setup from scratch
 
 ### Prerequisites

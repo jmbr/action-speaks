@@ -48,6 +48,8 @@ class Config:
     command_timeout: float = 120.0
     lean_threads: int = 4
     pool_size: int = 2
+    ledger_index_dir: Path | None = None
+    ledger_refresh_timeout: float = 900.0
 
     @classmethod
     def discover(cls) -> "Config":
@@ -77,6 +79,10 @@ class Config:
             startup_timeout=float(os.environ.get("NULLIUS_STARTUP_TIMEOUT", "300")),
             lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", "4")),
             pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", "2")),
+            ledger_index_dir=Path(
+                os.environ.get("NULLIUS_LEDGER_INDEX_DIR", root / "build" / "ledger-search")
+            ),
+            ledger_refresh_timeout=float(os.environ.get("NULLIUS_LEDGER_REFRESH_TIMEOUT", "900")),
         )
 
     @staticmethod

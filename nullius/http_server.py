@@ -11,6 +11,7 @@ Endpoints (all JSON):
     POST /search              {"query": ..., "backend": "both"}
     POST /find_proof          {"goal": ..., "binders": ...}
     GET  /ledger?limit=20     recent verdicts
+    GET  /ledger/123          one entry, including source and target (read-only)
 
 Binds to localhost by default. There is no authentication, and submissions run arbitrary
 elaboration in Lean, so do not expose this to an untrusted network.
@@ -25,6 +26,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .harness import Harness
+from .ledger import LedgerReadError, read_ledger_row
 
 _harness: Harness | None = None
 
@@ -56,7 +58,10 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         if length > MAX_BODY:
             raise ValueError("request body too large")
-        return json.loads(self.rfile.read(length).decode())
+        body = json.loads(self.rfile.read(length).decode())
+        if not isinstance(body, dict):
+            raise ValueError("request body must be a JSON object")
+        return body
 
     # -- routes ------------------------------------------------------------
 
@@ -84,6 +89,24 @@ class Handler(BaseHTTPRequestHandler):
                     "stats": lg.stats() if lg else None,
                 },
             )
+        elif url.path.startswith("/ledger/"):
+            raw_id = url.path.removeprefix("/ledger/")
+            try:
+                if not raw_id.isascii() or not raw_id.isdigit() or int(raw_id) <= 0:
+                    raise ValueError("ledger ID must be a positive integer")
+                if _harness.ledger is None:
+                    raise ValueError("ledger access is disabled (Harness(log=False))")
+                row = read_ledger_row(_harness.config.ledger_path, int(raw_id))
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+                return
+            except LedgerReadError as exc:
+                self._send(500, {"error": str(exc), "type": type(exc).__name__})
+                return
+            if row is None:
+                self._send(404, {"error": f"ledger entry #{raw_id} not found"})
+            else:
+                self._send(200, row)
         else:
             self._send(404, {"error": f"no such endpoint: {url.path}"})
 
@@ -127,11 +150,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, _harness.check_statement(body.get("statement", "")))
 
             elif path == "/search":
-                results = _harness.search(
-                    body.get("query", ""),
-                    backend=body.get("backend", "both"),
-                    limit=int(body.get("limit", 8)),
-                )
+                try:
+                    results = _harness.search(
+                        body.get("query", ""),
+                        backend=body.get("backend", "both"),
+                        limit=int(body.get("limit", 8)),
+                        include_ledger=body.get("include_ledger", False),
+                        refresh_ledger=body.get("refresh_ledger", False),
+                    )
+                except (TypeError, ValueError) as exc:
+                    self._send(400, {"error": str(exc)})
+                    return
                 self._send(200, {"results": [r.to_dict() for r in results]})
 
             elif path == "/find_proof":
