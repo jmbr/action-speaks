@@ -1,6 +1,6 @@
 # Hooks for `prek` (or `pre-commit`; the config format is the same).
 #
-#   prek install     enable them for this clone
+#   prek install     enable them for this clone (both shims, see below)
 #   prek run --all-files
 #
 # Deliberately short. A hook per test script duplicates `noxfile.py`, which already owns the
@@ -14,6 +14,12 @@
 # `nox -s tests` before pushing rather than on every commit.
 #
 # Skippable in an emergency with `SKIP=nox-quick git commit`.
+#
+# Two shims are installed, not one. `commit-msg` runs the Conventional Commits check and
+# `pre-commit` runs the rest; declaring both here means `prek install` wires them up, rather
+# than the message check sitting in this file uninstalled and silently never running.
+
+default_install_hook_types: [pre-commit, commit-msg]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -25,6 +31,14 @@ repos:
       - id: check-merge-conflict
       - id: end-of-file-fixer
       - id: trailing-whitespace
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.18.1
+    hooks:
+      # Subjects must say what kind of change they are, so a release tool can read the
+      # history. The body is unconstrained and remains the valuable part.
+      - id: commitizen
+        stages: [commit-msg]
 
   - repo: local
     hooks:

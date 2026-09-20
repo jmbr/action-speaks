@@ -29,9 +29,10 @@ dependencies = []
 
 [project.optional-dependencies]
 # `prek` runs the commit hooks in `.pre-commit-config.yaml`; `nox` runs the wider sessions in
-# noxfile.py, each in its own environment; `pytest` runs the suite itself. Only contributors
-# need any of them.
-dev = ["prek>=0.2", "nox>=2025.5", "pytest>=8.0"]
+# noxfile.py, each in its own environment; `pytest` runs the suite itself; `commitizen`
+# validates commit messages. Only contributors need any of them — none is imported by the
+# package, so the trusted computing base above is unaffected.
+dev = ["prek>=0.2", "nox>=2025.5", "pytest>=8.0", "commitizen>=4.0"]
 
 [project.scripts]
 nullius = "nullius.cli:main"
@@ -44,6 +45,29 @@ include = ["nullius*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "nullius.__version__" }
+
+[tool.commitizen]
+# Conventional Commits, so a release tool can read the history rather than a human
+# summarising it. Commitizen validates messages; it does not bump versions or write a
+# changelog here. That belongs to one engine, and this is not it.
+name = "cz_conventional_commits"
+# The version lives in `nullius/__init__.py` and is read from there by
+# `[tool.setuptools.dynamic]` above. Named here so the two cannot drift, not so that
+# Commitizen bumps it.
+version_provider = "pep621"
+tag_format = "v$version"
+
+# Below 1.0 a breaking change stays a minor bump: going to 2.0 on the first `!` would claim
+# a stability this project has not offered yet. Revisit when it reaches 1.0.
+major_version_zero = true
+
+[tool.commitizen.customize]
+# `feat` and `fix` are the releasing types. The rest describe work that changes no behaviour
+# a user of the package can observe, and produce no version bump.
+#
+# Scopes are optional and free-form. A fixed list would go stale against a codebase that
+# gains modules like `daemon` and `project_check` as it grows, and a scope nobody can
+# remember gets guessed rather than chosen.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

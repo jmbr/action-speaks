@@ -45,7 +45,10 @@ FORBIDDEN = {
 
 # Where a documented revision is expected to match what lake actually pins.
 REV_CITATION = re.compile(r"\b(mathlib|physlib|cslib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40})\b", re.I)
-LEAN_VERSION = re.compile(r"\b(?:leanprover/lean4:)?v?(4\.\d+\.\d+)\b")
+# A citation has to name Lean to count. Matching a bare `4.x.y` caught unrelated pins that
+# merely look like one -- a `rev: v4.18.1` for a commit-hook tool, say -- and a version
+# number with nothing to attach it to is not a Lean citation in the first place.
+LEAN_VERSION = re.compile(r"(?:leanprover/lean4:|\bLean\s+)v?(4\.\d+\.\d+)\b")
 
 SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/test_names.py")
 

@@ -297,9 +297,31 @@ examples. Tests needing a built `lean/` checkout carry the `lean` marker, so
 `pytest -m "not lean"` selects the rest. Arguments reach pytest after `--`, for example
 `nox -s tests -- -k adversarial`.
 
-Commit hooks are deliberately few: file hygiene, plus `nox -s quick`. The Lean-backed tests
-need a built checkout and take minutes, so run `nox -s tests` before pushing rather than on
-every commit. Use `.venv/bin/prek run --all-files` to run all hooks.
+Commit hooks are deliberately few: file hygiene, a Conventional Commits check, plus
+`nox -s quick`. The Lean-backed tests need a built checkout and take minutes, so run
+`nox -s tests` before pushing rather than on every commit. Use
+`.venv/bin/prek run --all-files` to run all hooks.
+
+### Commit messages
+
+Subjects follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), so
+that release tooling can read the history rather than have somebody summarise it. `prek
+install` wires up a `commit-msg` hook that rejects anything else.
+
+```text
+feat: add a per-user session daemon
+fix(daemon): stop a failed bind unlinking the winner's socket
+docs: say that the MCP server answers one request at a time
+feat!: rename the environment variables
+```
+
+`feat` is a minor bump and `fix` a patch one. `docs`, `test`, `build`, `ci`, `refactor`,
+`perf`, `style` and `chore` release nothing. A `!` before the colon, or a `BREAKING CHANGE:`
+footer, marks a breaking change; below 1.0 that is still a minor bump, since 2.0 would claim
+a stability this project has not offered yet. Scopes are optional and free-form.
+
+Only the subject is constrained. The body is where the reasoning goes, and it is the part
+worth writing: say why the change is right, not what the diff already shows.
 
 ## Related tools
 
