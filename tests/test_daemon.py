@@ -14,6 +14,7 @@ import os
 import socket
 import stat
 import sys
+import tempfile
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler
@@ -37,14 +38,31 @@ CONFIG = Config(
 
 
 @pytest.fixture
-def private(tmp_path: Path) -> Path:
-    directory = tmp_path / "runtime"
+def short_root() -> Iterator[Path]:
+    """A deliberately short temporary root.
+
+    pytest's `tmp_path` embeds the test name and a run counter, which together already reach
+    98 of the 104 bytes a socket path may use, so it overflows as soon as that counter gains
+    a digit. Only the test that is about the limit should be anywhere near it.
+    """
+    with tempfile.TemporaryDirectory(prefix="nul") as name:
+        yield Path(name)
+
+
+@pytest.fixture
+def cache(short_root: Path) -> Path:
+    return short_root / "c"
+
+
+@pytest.fixture
+def private(short_root: Path) -> Path:
+    directory = short_root / "r"
     directory.mkdir(mode=0o700)
     return directory
 
 
 @pytest.fixture(autouse=True)
-def isolated(monkeypatch, tmp_path: Path) -> None:
+def isolated(monkeypatch, cache: Path) -> None:
     """No test may reach a daemon the developer happens to be running."""
     for name in (
         "XDG_RUNTIME_DIR",
@@ -56,7 +74,7 @@ def isolated(monkeypatch, tmp_path: Path) -> None:
         "LISTEN_FDS",
     ):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
 
 
 # -- addressing ------------------------------------------------------------
@@ -86,20 +104,20 @@ def test_private_tmpdir_is_the_first_fallback(monkeypatch, private: Path) -> Non
 
 
 def test_world_readable_tmpdir_is_refused_in_favor_of_the_cache(
-    monkeypatch, tmp_path: Path
+    monkeypatch, short_root: Path, cache: Path
 ) -> None:
-    shared = tmp_path / "shared"
+    shared = short_root / "shared"
     shared.mkdir(mode=0o755)
     monkeypatch.setenv("TMPDIR", str(shared))
     base, warning = D.runtime_dir()
     assert shared not in base.parents and base != shared
-    assert base == tmp_path / "cache" / "nullius" / "run"
+    assert base == cache / "nullius" / "run"
     assert warning and "not private" in warning
 
 
-def test_fallback_always_warns_as_the_specification_requires(monkeypatch, tmp_path: Path) -> None:
+def test_fallback_always_warns_as_the_specification_requires(cache: Path) -> None:
     base, warning = D.runtime_dir()
-    assert base == tmp_path / "cache" / "nullius" / "run"
+    assert base == cache / "nullius" / "run"
     assert warning
 
 
@@ -115,16 +133,16 @@ def test_two_checkouts_never_share_a_socket() -> None:
 
 
 def test_overlong_socket_path_is_explained_rather_than_left_to_the_kernel(
-    monkeypatch, tmp_path: Path
+    monkeypatch, short_root: Path
 ) -> None:
-    deep = tmp_path / ("d" * 120)
+    deep = short_root / ("d" * 120)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(deep))
     with pytest.raises(D.DaemonError, match="NULLIUS_SOCKET"):
         D.address(CONFIG)
 
 
-def test_explicit_socket_overrides_the_resolver(monkeypatch, tmp_path: Path) -> None:
-    chosen = tmp_path / "chosen.sock"
+def test_explicit_socket_overrides_the_resolver(monkeypatch, short_root: Path) -> None:
+    chosen = short_root / "chosen.sock"
     monkeypatch.setenv("NULLIUS_SOCKET", str(chosen))
     assert D.address(CONFIG).path == chosen
 
@@ -132,15 +150,15 @@ def test_explicit_socket_overrides_the_resolver(monkeypatch, tmp_path: Path) -> 
 # -- preparing and probing -------------------------------------------------
 
 
-def test_prepare_creates_a_private_directory(tmp_path: Path) -> None:
-    path = tmp_path / "run" / "nullius" / "a.sock"
+def test_prepare_creates_a_private_directory(short_root: Path) -> None:
+    path = short_root / "run" / "nullius" / "a.sock"
     D.prepare(path)
     assert path.parent.is_dir()
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
 
 
-def test_prepare_refuses_a_directory_others_can_read(tmp_path: Path) -> None:
-    directory = tmp_path / "loose"
+def test_prepare_refuses_a_directory_others_can_read(short_root: Path) -> None:
+    directory = short_root / "loose"
     directory.mkdir(mode=0o755)
     with pytest.raises(D.DaemonError, match="readable by other users"):
         D.prepare(directory / "a.sock")
