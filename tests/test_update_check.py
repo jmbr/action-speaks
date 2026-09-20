@@ -29,10 +29,19 @@ LAKEFILE = '[[require]]\nname = "mathlib"\nrev = "{}"\n'
 NO_MATHLIB = '[[require]]\nname = "batteries"\nrev = "abc123"\n'
 
 
-def upstream(spec: dict[str, dict[str, tuple[str, str | None]]], tags=("v4.33.0", "v4.32.0")):
-    """A fake GitHub: spec[repo][release] = (toolchain version, lakefile body or None)."""
+def upstream(
+    spec: dict[str, dict[str, tuple[str, str | None]]],
+    tags=("v4.33.0", "v4.32.0"),
+    branches: dict[str, str] | None = None,
+):
+    """A fake GitHub: spec[repo][ref] = (toolchain version, lakefile body or None)."""
+    branches = branches or {}
 
     def get(path: str):
+        if path.startswith("/repos/") and path.count("/") == 3:
+            return {"default_branch": branches.get(path.split("/repos/")[1], "main")}
+        if "/commits/" in path:
+            return {"sha": "c" * 40}
         if path.startswith("/repos/leanprover-community/mathlib4/tags"):
             return [{"name": t} for t in tags]
         if "/git/ref/tags/" in path:
@@ -92,7 +101,10 @@ def test_a_library_without_a_tag_blocks_the_release(monkeypatch, pins) -> None:
     del spec["leanprover-community/physlib"]["v4.33.0"]
     data = survey(monkeypatch, upstream(spec))
     assert not row(data, "v4.33.0")["converges"]
-    assert row(data, "v4.33.0")["libraries"]["Physlib"]["why_not"] == "no tag for this release"
+    assert (
+        row(data, "v4.33.0")["libraries"]["Physlib"]["why_not"]
+        == "nothing built against this release"
+    )
 
 
 def test_disagreeing_mathlib_blocks_the_release(monkeypatch, pins) -> None:
@@ -189,3 +201,27 @@ def test_json_output_is_machine_readable(monkeypatch, pins, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["current"]["toolchain"] == "4.32.0"
     assert any(r["converges"] for r in payload["releases"])
+
+
+def test_a_default_branch_counts_when_there_is_no_tag(monkeypatch, pins) -> None:
+    """Physlib tags per release but lags its own branch, and FloatLib tags by its own
+    version. Judging on a release-named tag alone reported both as unavailable while they
+    were in fact built against it."""
+    spec = shipped("v4.33.0", "v4.33.0")
+    del spec["leanprover-community/physlib"]["v4.33.0"]
+    spec["leanprover-community/physlib"]["master"] = ("4.33.0", LAKEFILE.format("v4.33.0"))
+    data = survey(monkeypatch, upstream(spec, branches={"leanprover-community/physlib": "master"}))
+    physlib = row(data, "v4.33.0")["libraries"]["Physlib"]
+    assert physlib["usable"]
+    assert physlib["from_branch"], "a branch pin is a commit, and the report has to say so"
+    assert row(data, "v4.33.0")["converges"]
+
+
+def test_a_release_candidate_is_not_the_release(monkeypatch, pins) -> None:
+    """`v4.33.0-rc2` truncated to `4.33.0` once, which read as ready two prereleases early."""
+    spec = shipped("v4.33.0", "v4.33.0")
+    del spec["leanprover/cslib"]["v4.33.0"]
+    spec["leanprover/cslib"]["main"] = ("4.33.0-rc2", LAKEFILE.format("v4.33.0-rc2"))
+    data = survey(monkeypatch, upstream(spec))
+    assert not row(data, "v4.33.0")["libraries"]["cslib"]["usable"]
+    assert not row(data, "v4.33.0")["converges"]

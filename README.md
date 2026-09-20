@@ -1,4 +1,4 @@
-# action-speaks — check an agent's mathematical claims
+# action-speaks-louder-than-words — check an agent's mathematical claims
 
 action-speaks checks Lean 4 proofs written by AI agents. It uses Mathlib for mathematics,
 Physlib for physics, and Cslib for computer science. You can call it from Python, the

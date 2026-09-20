@@ -50,7 +50,7 @@ CANDIDATES = {
 }
 
 RELEASE = re.compile(r"^v4\.\d+\.\d+$")
-TOOLCHAIN = re.compile(r"v(4\.\d+\.\d+)")
+TOOLCHAIN = re.compile(r"v(4\.\d+\.\d+(?:-rc\d+)?)")
 # `rev = "..."` in a lakefile.toml require block, or `@ "..."` in a lakefile.lean one.
 TOML_REV = re.compile(r'name\s*=\s*"mathlib".*?rev\s*=\s*"([^"]+)"', re.S | re.I)
 LEAN_REV = re.compile(r'mathlib4"?\s*@\s*"([^"]+)"', re.I)
@@ -111,23 +111,24 @@ class Support:
 
     release: str
     tagged: bool
+    ref: str | None = None
     toolchain: str | None = None
     mathlib: str | None = None
     moving: list[str] = field(default_factory=list)
 
     @property
     def usable(self) -> bool:
-        """Tagged for this release and built against it.
+        """Built against this release, whether from a tag or the default branch.
 
         A missing Mathlib requirement is not a failure: `repl` declares none, so it is
         judged on its toolchain alone. Only libraries that name a Mathlib take part in the
         agreement test below.
         """
-        return self.tagged and self.toolchain == self.release.lstrip("v")
+        return self.ref is not None and self.toolchain == self.release.lstrip("v")
 
     def why_not(self) -> str | None:
-        if not self.tagged:
-            return "no tag for this release"
+        if self.ref is None:
+            return "nothing built against this release"
         if self.toolchain != self.release.lstrip("v"):
             return f"tagged, but built against v{self.toolchain}"
         return None
@@ -160,20 +161,42 @@ def moving_refs(body: str | None) -> list[str]:
     return out
 
 
-def support(repo: str, release: str) -> Support:
-    """Whether `repo` has a usable tag for `release`, and what it needs."""
-    toolchain = text_at(repo, "lean-toolchain", release)
+def _at_ref(repo: str, release: str, ref: str, tagged: bool) -> Support | None:
+    toolchain = text_at(repo, "lean-toolchain", ref)
     if toolchain is None:
-        return Support(release=release, tagged=False)
-    body = text_at(repo, "lakefile.toml", release) or text_at(repo, "lakefile.lean", release)
+        return None
+    body = text_at(repo, "lakefile.toml", ref) or text_at(repo, "lakefile.lean", ref)
     found = TOOLCHAIN.search(toolchain)
     return Support(
         release=release,
-        tagged=True,
+        tagged=tagged,
+        ref=ref,
         toolchain=found.group(1) if found else toolchain.strip(),
         mathlib=mathlib_required(body),
         moving=moving_refs(body),
     )
+
+
+def support(repo: str, release: str) -> Support:
+    """What `repo` offers for `release`, by tag or, failing that, on its default branch.
+
+    Not every library tags per Lean release. Physlib does, but lags its own branch; FloatLib
+    tags by its own version entirely. Judging only by a tag named after the release reports
+    both as unavailable while they are in fact built against it — which is how this check
+    missed that v4.34.0 had become reachable. The branch is reported as untagged so the
+    difference stays visible: a pin taken from it is a commit, not a release.
+    """
+    if (tagged := _at_ref(repo, release, release, True)) is not None:
+        return tagged
+    head = _at_ref(repo, release, default_branch(repo), False)
+    if head is not None and head.toolchain == release.lstrip("v"):
+        return head
+    return Support(release=release, tagged=False)
+
+
+def default_branch(repo: str) -> str:
+    data = get(f"/repos/{repo}")
+    return data.get("default_branch", "main") if isinstance(data, dict) else "main"
 
 
 def releases(limit: int) -> list[str]:
@@ -184,15 +207,16 @@ def releases(limit: int) -> list[str]:
 
 
 def resolve(repo: str, ref: str) -> str | None:
-    """The commit a tag points at, dereferencing annotated tags."""
+    """The commit `ref` names, whether it is a tag or a branch."""
     data = get(f"/repos/{repo}/git/ref/tags/{ref}")
-    if not isinstance(data, dict):
-        return None
-    obj = data.get("object", {})
-    if obj.get("type") == "tag":
-        inner = get(f"/repos/{repo}/git/tags/{obj['sha']}")
-        return inner.get("object", {}).get("sha") if isinstance(inner, dict) else None
-    return obj.get("sha")
+    if isinstance(data, dict):
+        obj = data.get("object", {})
+        if obj.get("type") == "tag":
+            inner = get(f"/repos/{repo}/git/tags/{obj['sha']}")
+            return inner.get("object", {}).get("sha") if isinstance(inner, dict) else None
+        return obj.get("sha")
+    commits = get(f"/repos/{repo}/commits/{ref}")
+    return commits.get("sha") if isinstance(commits, dict) else None
 
 
 def survey(candidates: bool, limit: int) -> dict:
@@ -218,6 +242,8 @@ def survey(candidates: bool, limit: int) -> dict:
                         "moving_refs": a.moving,
                         "usable": a.usable,
                         "why_not": a.why_not(),
+                        "ref": a.ref,
+                        "from_branch": a.ref is not None and not a.tagged,
                     }
                     for n, a in answers.items()
                 },
@@ -249,6 +275,8 @@ def report(data: dict, candidates: bool) -> int:
         for name, info in row["libraries"].items():
             if name in SHIPPED and info.get("why_not"):
                 notes.append(f"{name}: {info['why_not']}")
+            elif info.get("from_branch"):
+                notes.append(f"{name}: from {info['ref']}, pin the commit")
             if info["moving_refs"]:
                 notes.append(f"{name}: moving ref {', '.join(info['moving_refs'])}")
         if candidates and row["candidates_lost"]:
@@ -272,7 +300,8 @@ def report(data: dict, candidates: bool) -> int:
     print(f'  lean-toolchain            leanprover/lean4:{newest["release"]}')
     print(f'  mathlib   rev = "{newest["release"]}"')
     for name, repo in SHIPPED.items():
-        sha = resolve(repo, newest["release"])
+        ref = newest["libraries"].get(name, {}).get("ref") or newest["release"]
+        sha = resolve(repo, ref)
         print(f'  {name:<9} rev = "{sha}"' if sha else f"  {name:<9} (resolve by hand: no tag)")
     print("\nAfter bumping: rebuild, rerun scripts/build-loogle.sh (it reads .olean files")
     print("directly, so a stale binary reports an incompatible header), and run the suite.")
