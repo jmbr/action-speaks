@@ -64,7 +64,7 @@ Retrieve a hit's source by its row ID, include the needed declarations in your s
 and verify it afresh. Do not cite generated aliases or assume earlier proofs are preloaded.
 Only targets that pass current rechecking and export enter the index. Read its exclusions:
 an export failure is not evidence of unprovability. See
-[export limitations](docs/INTEGRATION.md#optional-local-ledger-search).
+[export limitations](docs/LEDGER.md#optional-local-ledger-search).
 
 The tools are `verify`, `statement`, `search`, `close`, and `log`. Clients may prefix their
 names with the server name, for example `action-speaks-search`.

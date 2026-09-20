@@ -10,7 +10,7 @@
 Loading the libraries takes several seconds. Use a persistent interface for repeated checks
 instead of starting the CLI in a loop.
 
-All interfaces require a built checkout. Follow [Setup from scratch](../README.md#setup-from-scratch),
+All interfaces require a built checkout. Follow the [installation guide](INSTALL.md),
 including the editable Python install:
 
 ```bash
@@ -89,7 +89,7 @@ h.find_proof("25 < n * n", binders="(n : Nat) (h : 5 < n)")
 ```
 
 Ledger shape search is opt-in. Add `refresh_ledger=True` to explicitly recheck and build
-its cache; see [ledger search](#optional-local-ledger-search) below.
+its cache; see [optional local ledger search](LEDGER.md#optional-local-ledger-search).
 
 `check_statement` also returns related ledger entries in `recall` when logging is enabled.
 To look up stored work directly:
@@ -244,59 +244,19 @@ The unit is socket-activated: systemd owns the socket and starts the daemon on f
 an idle machine is not holding a warm pool. A daemon killed rather than stopped leaves its
 socket file behind; the next start removes it rather than failing to bind.
 
-## Optional local ledger search
-
-Default searches are unchanged. Use Loogle patterns to search earlier verified targets:
-
-```bash
-action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
-action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger
-action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
-```
-
-`backend="ledger"` searches only the ledger. `include_ledger` adds a separate ledger group
-to `loogle` or `both`; it is invalid with remote-only backends. Ledger source stays local.
-With `both`, only the original query goes to the existing remote natural-language search.
-
-HTTP `POST /search` and MCP `search` accept the same keys. For example, this explicitly
-refreshes before searching:
-
-```json
-{"query": "Real.sqrt, |- _ ≤ _", "backend": "ledger", "refresh_ledger": true}
-```
-
-For library and ledger results together, use `"backend": "loogle", "include_ledger": true`.
-Python `Harness.search` uses the same keyword flags, with Python booleans.
-
-**Refresh is explicit.** Ordinary ledger searches never invoke the compiler, Lake, the
-verifier, or an index build. A missing or outdated cache returns an error asking for
-`--refresh-ledger` (API: `refresh_ledger=true`). Refresh requires `backend="ledger"` or
-`include_ledger`; `Harness(log=False)` rejects explicit ledger access.
-
-Refresh rechecks formerly verified targets against the current environment and indexes only
-those that pass rechecking and export. Identical source/target pairs are deduplicated;
-helpers are not separate hits. The cache holds immutable audited `.olean` entries and a
-small, target-only Loogle index, not a rebuilt Mathlib index.
-
-Export copies kernel-level theorem, definition, and opaque dependency terms with names
-remapped, not source text. This initial version excludes targets whose dependency closure
-contains locally declared inductives, structures, or recursors. Index result metadata lists
-exclusions; failures do not show that a claim is unprovable. These are export limitations,
-not changes to the proof language accepted by the verifier.
-
-**Reuse source, not generated aliases.** Use a hit's row ID to retrieve its current source:
-CLI `action-speaks log --id 123 --json`, MCP `log { "id": 123 }`, or HTTP `GET /ledger/123`.
-Include the needed declarations and verify a fresh submission. Earlier proofs are not
-preloaded, and `close` is unchanged. Index and single-row source reads do not create, migrate,
-or write the ledger.
-
 ## Operation and configuration
+
+Starting Lean loads the libraries and takes several seconds. Reuse a session through
+`Harness`, a persistent server, or `action-speaks serve` for repeated work. In a measured
+checkout, a CLI verification that took about three seconds without the daemon took about a
+third of a second with it; harder proofs and probes still take longer.
 
 - **Pool size:** each concurrent check needs a Lean process, and each holds roughly 7.5 GB
   resident, about 4 GB of it private; the remainder is shared `.olean` pages, so a second
-  session costs much less than the first. Increase the pool only as needed, and measure. The pool bounds the whole server, including requests that
-  name a project: those reuse the same warm sessions, since selecting a project changes the
-  ledger rather than the verifier tree. Requests beyond the pool wait for a free session.
+  session costs much less than the first. Increase the pool only as needed, and measure.
+  The pool bounds the whole server, including requests that name a project: those reuse the
+  same warm sessions, since selecting a project changes the ledger rather than the verifier
+  tree. Requests beyond the pool wait for a free session.
 - **Isolation:** each submission starts from the preloaded library environment. Definitions
   from earlier submissions are not retained for later ones.
 - **Daemon:** `action-speaks serve` shares one warm pool with every CLI call and MCP server for
@@ -305,7 +265,8 @@ or write the ledger.
   use. An MCP server still answers its own requests sequentially.
 - **Timeouts:** a timed-out Lean process is killed. A later call starts a replacement.
 - **Logging:** verdicts are appended to `ledger.sqlite3` with their source and library
-  versions. `Harness(log=False)` disables ledger use.
+  versions. `Harness(log=False)` disables ledger use. See [ledger and
+  reproducibility](LEDGER.md) for recall, local shape search, and provenance.
 
 | Environment variable | Default |
 |---|---|

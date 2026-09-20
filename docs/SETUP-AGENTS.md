@@ -1,6 +1,7 @@
 # Set up action-speaks for an agent
 
-First [install and build action-speaks](../README.md#setup-from-scratch). Then run:
+The [installation guide](INSTALL.md) prepares one checkout. This guide connects that built
+checkout to agent clients on the current machine. After building, run:
 
 ```bash
 ./install.sh --dry-run    # Preview changes
