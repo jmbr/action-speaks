@@ -1,6 +1,6 @@
 # action-speaks reference
 
-See [SKILL.md](../SKILL.md) for the workflow. Commands below use `scripts/action-speaks` relative
+See [SKILL.md](../SKILL.md) for the workflow. Commands below use the `action-speaks` command
 to the skill directory.
 
 ## Failed checks
@@ -62,11 +62,11 @@ Use a completed result, prove the missing step, or report that the dependency is
 ## Finding lemmas
 
 ```bash
-scripts/action-speaks search 'every continuous function on a compact set attains its maximum'
-scripts/action-speaks search '|- Continuous (fun _ => _)' --backend loogle
-scripts/action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle
-scripts/action-speaks close 'Irrational (Real.sqrt 2)'
-scripts/action-speaks close '0 ≤ x^2' -b '(x : ℝ)'
+action-speaks search 'every continuous function on a compact set attains its maximum'
+action-speaks search '|- Continuous (fun _ => _)' --backend loogle
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle
+action-speaks close 'Irrational (Real.sqrt 2)'
+action-speaks close '0 ≤ x^2' -b '(x : ℝ)'
 ```
 
 Loogle pattern syntax:
@@ -104,7 +104,7 @@ that a claim is unprovable. These limits do not change the accepted proof langua
 
 Ledger source stays local. `--backend both --include-ledger` sends only the original query
 to remote natural-language search; remote-only backends cannot include ledger results.
-Retrieve a hit with `scripts/action-speaks log --id 123 --json`, include its needed declarations,
+Retrieve a hit with `action-speaks log --id 123 --json`, include its needed declarations,
 and verify a fresh submission. Generated aliases are not available in normal submissions
 or `close`. Reading the index or a source row does not create, migrate, or write the ledger.
 
@@ -119,9 +119,9 @@ verifier repository for registration, history association/import, and source pro
 Claim: *the arithmetic mean of two nonnegative reals is at least their geometric mean.*
 
 ```bash
-scripts/action-speaks statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
+action-speaks statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
 
-scripts/action-speaks verify "AM-GM for two nonnegative reals" --require-nontrivial <<'EOF'
+action-speaks verify - -c "AM-GM for two nonnegative reals" --require-nontrivial <<'EOF'
 theorem am_gm_two (a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) :
     Real.sqrt (a * b) ≤ (a + b) / 2 := by
   rw [show a * b = ((a+b)/2)^2 - ((a-b)/2)^2 by ring]
@@ -141,7 +141,7 @@ Compare it with the English claim before calling the claim machine-checked.
 Prove the negation to refute a claim:
 
 ```bash
-scripts/action-speaks verify "not every continuous function is differentiable" <<'EOF'
+action-speaks verify - -c "not every continuous function is differentiable" <<'EOF'
 theorem not_all_cont_diff : ¬ (∀ f : ℝ → ℝ, Continuous f → Differentiable ℝ f) := by
   intro h
   exact not_differentiableAt_abs_zero (h _ continuous_abs 0)
@@ -170,14 +170,14 @@ See `docs/INTEGRATION.md` in the verifier repository.
 ## Setup, history, and reproducibility
 
 ```bash
-scripts/action-speaks doctor
-scripts/action-speaks log
-scripts/action-speaks log --recall 'gradient descent'
+action-speaks doctor
+action-speaks log
+action-speaks log --recall 'gradient descent'
 ```
 
 `doctor` checks configuration and whether the verifier accepts and rejects its sample proofs
 as expected. Use any error message to identify the missing configuration or build step.
-The wrapper follows its symlink to find the repository; `ACTION_SPEAKS_ROOT` overrides that path.
+`ACTION_SPEAKS_ROOT` points the command at a different built checkout.
 
 The ledger stores attempts with their source and library versions. Use `--tag NAME` when
 verifying related claims and `log --tag NAME` to retrieve them. A failed attempt does not

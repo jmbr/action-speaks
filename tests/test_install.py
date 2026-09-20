@@ -11,7 +11,6 @@ import hashlib
 import io
 import json
 import os
-import stat
 import sys
 from pathlib import Path
 
@@ -38,9 +37,8 @@ TEMPLATE = {
 def checkout(tmp_path: Path) -> Path:
     """A repository layout complete enough to install from."""
     root = tmp_path / "checkout"
-    (root / "skills" / "action-speaks" / "scripts").mkdir(parents=True)
+    (root / "skills" / "action-speaks").mkdir(parents=True)
     (root / "skills" / "action-speaks" / "SKILL.md").write_text("# skill\n")
-    (root / "skills" / "action-speaks" / "scripts" / "action-speaks").write_text("#!/bin/sh\n")
     (root / "mcp").mkdir()
     (root / "mcp" / "copilot-mcp-config.json").write_text(json.dumps(TEMPLATE))
     return root
@@ -377,11 +375,16 @@ def test_repeated_install_is_idempotent(checkout: Path, home: Path) -> None:
     assert snapshot(home) == after
 
 
-def test_the_wrapper_is_made_executable(checkout: Path, home: Path) -> None:
-    wrapper = checkout / "skills/action-speaks/scripts/action-speaks"
-    wrapper.chmod(0o644)
-    run(make(checkout, home), "--skill")
-    assert wrapper.stat().st_mode & stat.S_IXUSR
+def test_skill_only_install_says_the_command_is_missing(checkout: Path, home: Path) -> None:
+    """The skill instructs agents to run `action-speaks`; installed without it, it cannot work."""
+    _, out = run(make(checkout, home), "--skill")
+    assert "not installed" in out
+
+
+def test_skill_install_is_quiet_when_the_command_exists(checkout: Path, home: Path) -> None:
+    with_venv(checkout)
+    _, out = run(make(checkout, home), "--skill")
+    assert "not installed" not in out
 
 
 def test_components_are_mutually_exclusive(checkout: Path, home: Path) -> None:
@@ -404,9 +407,8 @@ def test_help_names_every_component() -> None:
 def test_paths_with_spaces_are_handled(tmp_path: Path) -> None:
     """No shell is involved, so a space is not a quoting problem."""
     root = tmp_path / "check out"
-    (root / "skills" / "action-speaks" / "scripts").mkdir(parents=True)
+    (root / "skills" / "action-speaks").mkdir(parents=True)
     (root / "skills" / "action-speaks" / "SKILL.md").write_text("# skill\n")
-    (root / "skills" / "action-speaks" / "scripts" / "action-speaks").write_text("#!/bin/sh\n")
     (root / "mcp").mkdir()
     (root / "mcp" / "copilot-mcp-config.json").write_text(json.dumps(TEMPLATE))
     home = tmp_path / "my home"

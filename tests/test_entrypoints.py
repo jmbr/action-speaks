@@ -64,12 +64,20 @@ def installed(path: Path, hint: str) -> Path:
     return path
 
 
-def test_skill_wrapper_runs_without_a_virtualenv() -> None:
-    wrapper = installed(
-        ROOT / "skills" / "action-speaks" / "scripts" / "action-speaks", "the skill wrapper"
-    )
-    done = run([str(wrapper), "log", "-n", "1"])
+def test_console_script_runs_without_a_virtualenv() -> None:
+    """The skill tells agents to run this, so it has to work from a stripped environment."""
+    script = installed(ROOT / ".venv" / "bin" / "action-speaks", "the console script")
+    done = run([str(script), "log", "-n", "1"])
     assert done.returncode == 0, f"rc={done.returncode}\n{done.stdout}\n{done.stderr}"
+
+
+def test_every_subcommand_is_reachable() -> None:
+    """The removed skill wrapper kept its own allowlist, which silently fell behind the CLI:
+    `serve` and `project` shipped and were never added. There is one command surface now."""
+    script = installed(ROOT / ".venv" / "bin" / "action-speaks", "the console script")
+    for command in ("doctor", "verify", "statement", "search", "close", "log", "serve", "project"):
+        done = run([str(script), command, "--help"])
+        assert done.returncode == 0, f"{command}: rc={done.returncode}\n{done.stderr}"
 
 
 def test_mcp_server_runs_without_a_virtualenv() -> None:

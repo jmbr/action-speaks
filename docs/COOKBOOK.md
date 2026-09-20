@@ -10,7 +10,7 @@ Each `-- expect:` line specifies the expected result. Some examples intentionall
 ## Two interfaces, same verifier
 
 Examples use the installed CLI. Agents with MCP support can use tools with the same names;
-other agents can use the shell wrapper supplied by the skill.
+other agents run the same command through the skill.
 
 | Operation                               | CLI                 | MCP tool    |
 |-----------------------------------------|---------------------|-------------|
@@ -34,8 +34,7 @@ The corresponding MCP `verify` arguments are:
  "tag": "paper-draft", "require_nontrivial": true}
 ```
 
-Both interfaces write to the configured ledger. The skill wrapper has different argument
-syntax; see [agent setup](SETUP-AGENTS.md#shell-wrapper-syntax).
+Both interfaces write to the configured ledger.
 
 ## The shape of a useful check
 

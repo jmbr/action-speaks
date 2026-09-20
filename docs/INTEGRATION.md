@@ -191,8 +191,6 @@ For `verify`, exit code 0 means verified, 1 means not verified, and 2 indicates 
 configuration or command-line error. Use `--no-log` to avoid reading or writing the ledger.
 
 The installed `action-speaks` command takes a **file path** after `verify`; use `-` for stdin.
-The skill's `scripts/action-speaks` wrapper has different syntax: it takes a claim and reads the
-proof from stdin, or from `-f FILE`.
 
 ## Session daemon
 

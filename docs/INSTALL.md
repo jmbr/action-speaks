@@ -25,8 +25,8 @@ action-speaks has no required Python dependencies. Use an **editable install** (
 driver expects the built `lean/` project beside its source. It is not a standalone PyPI
 package.
 
-Without installing, you can run `python3 -m action_speaks.cli` from the repository root, or
-use `skills/action-speaks/scripts/action-speaks` from another directory.
+Without installing, you can run `python3 -m action_speaks.cli` from the repository root. The
+skill needs the installed `action-speaks` command, so create the virtualenv before using it.
 
 ## Build Lean and the libraries
 

@@ -24,7 +24,7 @@ State what you intend to prove before writing Lean.
 ### 2. Check the statement
 
 ```bash
-~/.agents/skills/action-speaks/scripts/action-speaks statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+action-speaks statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
 ```
 
 This returns the *elaborated statement*: what Lean interpreted after resolving notation
@@ -37,16 +37,16 @@ equivalent theorem. A previous tactic failure is a reason to try another approac
 give up. A detected contradiction or unnecessary assumption calls for reviewing the
 statement.
 
-The commands below use `scripts/action-speaks` relative to this skill directory. Use the full path
-above when working elsewhere. For wording-based ledger recall, run
-`scripts/action-speaks log --recall TEXT`.
+`action-speaks` is on PATH after installation; if it is not, invoke it by full path, which
+`python3 install.py` reports. For wording-based ledger recall, run
+`action-speaks log --recall TEXT`.
 
 ### 3. Find lemmas
 
 ```bash
-scripts/action-speaks search 'sum of two even numbers is even'
-scripts/action-speaks search '|- Irrational (Real.sqrt _)' --backend loogle
-scripts/action-speaks close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
+action-speaks search 'sum of two even numbers is even'
+action-speaks search '|- Irrational (Real.sqrt _)' --backend loogle
+action-speaks close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
 ```
 
 Local Loogle searches the installed Mathlib, Physlib, and Cslib. `close` asks the installed
@@ -61,9 +61,9 @@ it uses a different Mathlib revision and does not cover Physlib or Cslib.
 When you need an earlier proof, use local ledger shape search, not just library search:
 
 ```bash
-scripts/action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger
-scripts/action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
-scripts/action-speaks log --id 123 --json
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+action-speaks log --id 123 --json
 ```
 
 `ledger` searches only earlier targets; `--include-ledger` adds a separate group alongside
@@ -86,7 +86,7 @@ results; retrieve stable ledger references with `log`'s `ref` argument.
 ### 4. Verify the proof
 
 ```bash
-scripts/action-speaks verify "if n > 5 then n squared exceeds 25" --require-nontrivial <<'EOF'
+action-speaks verify - -c "if n > 5 then n squared exceeds 25" --require-nontrivial <<'EOF'
 theorem main (n : ℕ) (h : 5 < n) : 25 < n * n := by nlinarith
 EOF
 ```
@@ -96,8 +96,7 @@ configuration error. Keep `--require-nontrivial` enabled: it rejects the proof i
 can establish the conclusion after removing propositional assumptions. It does not prove
 that each assumption is necessary.
 
-The wrapper takes a claim and reads source from stdin or `-f FILE`. The installed CLI uses
-`action-speaks verify FILE -c "claim"` instead.
+`verify` takes a file, or `-` to read the proof from stdin.
 
 ### 5. Report the result
 

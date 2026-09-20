@@ -9,8 +9,8 @@
     python3 install.py --dry-run    show what would change
 
 Everything is wired with absolute paths, so no virtualenv has to be activated: the MCP
-server names the interpreter the package was installed into, the skill wrapper finds it
-through its own symlink, and the CLI symlink points at a wrapper that hard-codes it.
+server names the interpreter the package was installed into, and the CLI symlink points at a
+console script that hard-codes it.
 
 The skill is symlinked rather than copied, so editing it in the repository takes effect at
 once and there is only one copy to maintain.
@@ -25,7 +25,6 @@ import argparse
 import json
 import os
 import shutil
-import stat
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -82,15 +81,6 @@ class Remove(Op):
 
     def apply(self) -> None:
         self.path.unlink(missing_ok=True)
-
-
-@dataclass
-class MakeExecutable(Op):
-    path: Path
-
-    def apply(self) -> None:
-        mode = self.path.stat().st_mode
-        self.path.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 @dataclass
@@ -196,10 +186,12 @@ class Installer:
         plan.do(
             Symlink(f"link {self.skill_dst} -> {self.skill_src}", self.skill_src, self.skill_dst)
         )
-        wrapper = self.skill_src / "scripts" / SERVER
-        if wrapper.exists():
-            plan.do(MakeExecutable(f"chmod +x {wrapper}", wrapper))
         plan.say("  ok (pi and Copilot both read ~/.agents/skills)")
+        if not os.access(self.cli_src, os.X_OK):
+            # The skill instructs agents to run `action-speaks`; without it the skill is
+            # installed but unusable, and saying so here is cheaper than the agent finding out.
+            plan.say(f"  note: the skill needs the `{SERVER}` command, which is not installed")
+            plan.say("        run without --skill, or create the virtualenv first")
         self.plan_legacy(plan)
 
     def plan_legacy(self, plan: Plan) -> None:
@@ -335,7 +327,7 @@ class Installer:
                 step(plan)
         if not dry and not uninstall:
             plan.say("")
-            plan.say(f"Next: ./skills/{SERVER}/scripts/{SERVER} doctor")
+            plan.say(f"Next: {SERVER} doctor")
             plan.say("      (checks Lean, Mathlib and that the verifier discriminates correctly)")
         return plan
 

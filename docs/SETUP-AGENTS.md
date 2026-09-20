@@ -20,8 +20,8 @@ Restart Copilot after installing the MCP entry.
 | CLI | Runs checks from a shell |
 
 Use both the skill and MCP where supported. For agents without MCP, such as the pi setup
-described here, use the skill's shell wrapper. For a Python application or batch job, use
-[`Harness`](INTEGRATION.md#python) directly.
+described here, the skill instructs the agent to run the `action-speaks` command. For a
+Python application or batch job, use [`Harness`](INTEGRATION.md#python) directly.
 
 You can install components separately:
 
@@ -42,8 +42,7 @@ The skill is installed at `~/.agents/skills/action-speaks`, which pi and Copilot
 ```text
 skills/action-speaks/
 ├── SKILL.md               # When to use action-speaks and the verification workflow
-├── references/GUIDE.md    # Error reference and worked examples
-└── scripts/action-speaks        # Shell wrapper
+└── references/GUIDE.md    # Error reference and worked examples
 ```
 
 The skill description tells the agent which tasks should trigger verification. The full
@@ -69,22 +68,17 @@ pi can also read additional directories through its settings:
 {"skills": ["~/.claude/skills", "~/.codex/skills"]}
 ```
 
-### Shell wrapper syntax
+### Running checks
 
-The skill wrapper resolves the checkout through its symlink, so it works from any directory:
-
-```bash
-~/.agents/skills/action-speaks/scripts/action-speaks verify "My claim" < proof.lean
-```
-
-This differs from the installed CLI:
+The skill tells the agent to run the installed command, which works from any directory:
 
 ```bash
 action-speaks verify proof.lean -c "My claim"
+printf '%s\n' "$SRC" | action-speaks verify - -c "My claim"
 ```
 
-Both use the same verifier and configured ledger. Each shell invocation starts a new Lean
-session; use MCP or the Python API for repeated checks.
+Each invocation starts a new Lean session unless the daemon is running; see
+[the session daemon](INTEGRATION.md#session-daemon).
 
 ## MCP server for Copilot
 
@@ -113,7 +107,7 @@ session open to avoid reloading the libraries for every request.
 
 Run `action-speaks doctor` to check paths, library versions, and basic verification behavior.
 If it fails, use its error message to identify the missing build or configuration.
-`ACTION_SPEAKS_ROOT` can point the wrapper at a different built checkout.
+`ACTION_SPEAKS_ROOT` can point the command at a different built checkout.
 
 If an agent cannot find the tools, check its skill directory or MCP configuration and restart
 the client. See the [integration guide](INTEGRATION.md) for direct Python, HTTP, and CLI use.
