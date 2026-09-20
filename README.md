@@ -323,6 +323,23 @@ a stability this project has not offered yet. Scopes are optional and free-form.
 Only the subject is constrained. Keep the body short: why the change is right, not what the
 diff already shows.
 
+### Releases
+
+`python-semantic-release` reads the history and decides the version; Commitizen never bumps.
+
+```bash
+.venv/bin/semantic-release --noop version --print   # what the next version would be
+GITEA_SERVER_URL=https://your-gitea .venv/bin/semantic-release version
+```
+
+`feat` gives a minor bump, `fix` a patch one. Below 1.0 a breaking change stays minor. The
+version lives in `nullius/__init__.py` and nowhere else; `CHANGELOG.md` is generated. Tags
+are `vX.Y.Z`, starting from `v0.1.0`, which marks where Conventional Commits were adopted.
+
+Releasing is manual: this Gitea has no Actions runner registered, so a workflow would not
+run. `GITEA_SERVER_URL` sets the host used for changelog links; a plain-HTTP instance also
+needs semantic-release's `insecure` flag, which is deliberately not committed.
+
 ## Related tools
 
 - [SafeVerify](https://github.com/GasStationManager/SafeVerify) checks proofs against a supplied

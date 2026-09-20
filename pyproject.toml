@@ -30,9 +30,15 @@ dependencies = []
 [project.optional-dependencies]
 # `prek` runs the commit hooks in `.pre-commit-config.yaml`; `nox` runs the wider sessions in
 # noxfile.py, each in its own environment; `pytest` runs the suite itself; `commitizen`
-# validates commit messages. Only contributors need any of them — none is imported by the
-# package, so the trusted computing base above is unaffected.
-dev = ["prek>=0.2", "nox>=2025.5", "pytest>=8.0", "commitizen>=4.0"]
+# validates commit messages; `python-semantic-release` cuts releases. Only contributors need
+# any of them — none is imported by the package, so the trusted computing base is unaffected.
+dev = [
+    "prek>=0.2",
+    "nox>=2025.5",
+    "pytest>=8.0",
+    "commitizen>=4.0",
+    "python-semantic-release>=10.0",
+]
 
 [project.scripts]
 nullius = "nullius.cli:main"
@@ -68,6 +74,36 @@ major_version_zero = true
 # Scopes are optional and free-form. A fixed list would go stale against a codebase that
 # gains modules like `daemon` and `project_check` as it grows, and a scope nobody can
 # remember gets guessed rather than chosen.
+
+[tool.semantic_release]
+# The sole version and changelog engine. Commitizen validates messages and must never bump:
+# two engines produce disagreeing tags.
+commit_parser = "conventional"
+# `nullius/__init__.py` is the one version source; pyproject reads it via `attr` above.
+version_variables = ["nullius/__init__.py:__version__"]
+tag_format = "v{version}"
+# Below 1.0 a breaking change is a minor bump, matching `major_version_zero` for Commitizen.
+allow_zero_version = true
+major_on_zero = false
+# Not a PyPI distribution: the driver needs the built `lean/` beside its source, so there is
+# nothing to build or upload here.
+build_command = ""
+upload_to_vcs_release = false
+# The release commit has to pass our own commit-msg hook, and `chore` releases nothing, so
+# it cannot trigger a second release.
+commit_message = "chore(release): v{version}"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.remote]
+# Gitea is the authoritative origin; GitHub is a mirror and is not released to. The web host
+# is not hardcoded: it differs per deployment, and a plain-HTTP one would need `insecure`,
+# which is not a default worth committing. Supply GITEA_SERVER_URL when releasing.
+type = "gitea"
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = ["^chore(\\(.*\\))?: ", "^ci(\\(.*\\))?: ", "^style(\\(.*\\))?: "]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
