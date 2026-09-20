@@ -118,6 +118,10 @@ what failed without claiming a proof.
 - Search Cslib for computation topics such as automata, type systems, and verified algorithms
   before defining your own model.
 
+## Writing style
+
+Use American spelling and vocabulary in code, comments, claims, and documentation.
+
 ## Rejection rules
 
 | Construct or condition | Reason |

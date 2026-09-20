@@ -3,7 +3,7 @@
 These are deliberately hostile submissions. Each one attempts to obtain a `verified` verdict
 for a false or empty claim. The static guard would stop most of them on sight, so the first
 pass here *disables the guard* in order to prove that the Lean-side audit is an independent
-line of defence rather than a formality.
+line of defense rather than a formality.
 """
 
 from __future__ import annotations

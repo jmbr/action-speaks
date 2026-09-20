@@ -262,7 +262,7 @@ def _drift(row: dict[str, Any], current: dict[str, str] | None) -> list[str]:
     """Which pinned revisions have moved since this row was written.
 
     Returns the names only; what the drift *means* depends on the verdict, and that
-    judgement belongs to `Recollection.advice`.
+    judgment belongs to `Recollection.advice`.
     """
     if not current:
         return []
@@ -514,7 +514,7 @@ class Ledger:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_ver_origin "
             "ON verifications(origin_ledger_uuid, origin_row_id)"
         )
-        # Backfill the normalised statement for rows written before the column existed,
+        # Backfill the normalized statement for rows written before the column existed,
         # so recall works on existing history rather than only on new entries.
         pending = c.execute(
             "SELECT id, statement FROM verifications "

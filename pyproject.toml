@@ -8,7 +8,7 @@ description = "Machine-checked backing for an agent's mathematical claims, via L
 readme = "README.md"
 requires-python = ">=3.10"
 # Apache 2.0 to match the whole stack this sits on — Lean 4, Mathlib, Physlib, Cslib and Loogle are
-# all Apache 2.0 — so there is no licence seam anywhere in the dependency graph, and results
+# all Apache 2.0 — so there is no license seam anywhere in the dependency graph, and results
 # proved here can be contributed upstream to Mathlib without relicensing.
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -66,7 +66,7 @@ ignore = [
     # `_harness`, `_local_loogle`). A Lean session costs ~3 s and half a gigabyte, so it is
     # created once per process and reused; that is the design, not an oversight.
     "PLW0603",
-    # The same judgement as the PLR0912/PLR0915 exclusions above, applied to the rest of the
+    # The same judgment as the PLR0912/PLR0915 exclusions above, applied to the rest of the
     # family: the verification pipeline and the MCP dispatcher are wide by nature, and
     # splitting them to satisfy a counter would obscure the sequence of checks.
     "PLR0911", "PLR0913", "PLR0917",

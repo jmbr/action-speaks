@@ -292,7 +292,7 @@ Commit hooks run the checks selected by `.pre-commit-config.yaml`. Use
 nullius focuses on claims whose statements are written by the agent, rather than supplied
 as a fixed specification.
 
-## Licence and authorship
+## License and authorship
 
 Apache 2.0; see [LICENSE](LICENSE). Lean, Mathlib, Physlib, Cslib, and Loogle also use Apache 2.0.
 Coding agents contributed under human direction and review; commit trailers identify

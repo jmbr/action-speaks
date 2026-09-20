@@ -31,7 +31,7 @@ without Singular.
 
 The helper retains upstream's algorithm for producing certificates, including the
 radical-membership method in [section 2.2 of this paper](https://arxiv.org/pdf/1007.3615.pdf).
-The code is under Apache 2.0; see the source headers and repository licence.
+The code is under Apache 2.0; see the source headers and repository license.
 
 ## Setup
 

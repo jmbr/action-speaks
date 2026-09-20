@@ -56,7 +56,7 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "implemented_by",
         _rx(r"@\[\s*(?:[^\]]*,\s*)?implemented_by\b"),
-        "replaces a definition's runtime behaviour with unverified code",
+        "replaces a definition's runtime behavior with unverified code",
     ),
     Rule(
         "extern",

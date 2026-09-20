@@ -65,7 +65,7 @@ def tryTactic (goal : Expr) (tacStr : String) (heartbeats : Nat := 200000) :
   match Parser.runParserCategory env `tactic tacStr with
   | .error _ => return false
   | .ok tacStx =>
-    -- Probes are diagnostics, not part of the artefact: never let their warnings or errors
+    -- Probes are diagnostics, not part of the artifact: never let their warnings or errors
     -- leak into the message log the driver parses.
     let savedLog ← Core.getMessageLog
     let result ←
@@ -143,7 +143,7 @@ the kernel. They need not have been: `set_option debug.skipKernelTC true` admits
 declaration without checking it, and metaprogramming can insert constants into the
 environment directly. Both produce an environment in which a false theorem looks impeccable.
 
-The defence, taken from `lean4checker` and `SafeVerify`, is to re-check with the kernel
+The defense, taken from `lean4checker` and `SafeVerify`, is to re-check with the kernel
 rather than to trust the elaborator's environment. `Kernel.Environment.addDecl` is the
 primitive those tools are built on; running every declaration the submission added back
 through it re-establishes the guarantee. Declarations are replayed under fresh names because
