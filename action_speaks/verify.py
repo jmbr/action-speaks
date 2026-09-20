@@ -139,6 +139,9 @@ class Verdict:
             cslib = self.provenance.get("cslib_rev") or ""
             if cslib:
                 prov += f" cslib: {cslib[:12]}"
+            floatlib = self.provenance.get("floatlib_rev") or ""
+            if floatlib:
+                prov += f" floatlib: {floatlib[:12]}"
             lines.append(prov)
         lines.append(f"  elapsed: {self.elapsed:.2f}s")
         return "\n".join(lines)
