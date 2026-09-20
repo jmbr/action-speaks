@@ -12,6 +12,9 @@ Use nullius for mathematical facts that need more than inspection to justify. It
 proofs, rejects unfinished proofs and untrusted axioms, and looks for problems in assumptions.
 It cannot check that a formal statement matches an English claim; you must compare them.
 
+Checks are answered one at a time, so a slow verification delays whatever you ask for next.
+Prefer one substantial check to a burst of speculative ones.
+
 ## Workflow
 
 ### 1. Write the claim in English

@@ -167,6 +167,17 @@ The tools are `verify`, `statement`, `search`, `close`, and `log`. Give the agen
 [workflow instructions](../AGENTS.md), or install the skill as described in
 [agent setup](SETUP-AGENTS.md).
 
+Requests are handled **one at a time**, over a single Lean session held for the life of the
+process: the server reads a line from stdin, answers it, and only then reads the next. So a
+long verification delays whatever the agent asks for next, and `NULLIUS_POOL_SIZE` has no
+effect here — there is no pool on this path.
+
+The MCP server also does not use the [session daemon](#session-daemon). It keeps its own
+session warm for as long as it runs, so it pays Lean startup once per process rather than
+once per request, but a second agent gets a second server and a second copy of the libraries.
+That is the current behavior, not a commitment: a concurrent MCP server would have to change
+how sessions are owned, and is not planned here.
+
 ## CLI
 
 ```bash
@@ -304,7 +315,7 @@ or write the ledger.
 | `NULLIUS_LEDGER_REFRESH_TIMEOUT` | 900 seconds |
 | `NULLIUS_LOOGLE_BIN` | `<root>/vendor/loogle/.lake/build/bin/loogle`, if built |
 | `NULLIUS_LOOGLE_MODULE` | `NulliusAll` |
-| `NULLIUS_POOL_SIZE` | 2 |
+| `NULLIUS_POOL_SIZE` | 2; ignored by the MCP server, which is single-session |
 | `NULLIUS_COMMAND_TIMEOUT` | 120 seconds |
 | `NULLIUS_STARTUP_TIMEOUT` | 300 seconds |
 | `NULLIUS_LEAN_THREADS` | 4 |
