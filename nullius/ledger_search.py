@@ -76,8 +76,15 @@ def _remaining(deadline: float) -> float:
     return remaining
 
 
-def _run(command: list[str], cwd: Path, deadline: float, config: Config) -> str:
-    env = dict(os.environ, ELAN_TOOLCHAIN=config.toolchain())
+def _run(
+    command: list[str],
+    cwd: Path,
+    deadline: float,
+    config: Config,
+    *,
+    environment: dict[str, str] | None = None,
+) -> str:
+    env = {**os.environ, **(environment or {}), "ELAN_TOOLCHAIN": config.toolchain()}
     env.setdefault("LEAN_NUM_THREADS", str(config.lean_threads))
     with subprocess.Popen(
         command,
@@ -131,30 +138,62 @@ def _loogle_dir(config: Config) -> Path:
 
 def _package_paths(config: Config) -> list[tuple[dict[str, Any], Path]]:
     manifest = _read_json(config.lean_dir / "lake-manifest.json")
+    if not isinstance(manifest.get("packages"), list):
+        raise LedgerSearchError("invalid Lake manifest: packages must be a list")
     packages = []
     for package in manifest["packages"]:
+        if (
+            not isinstance(package, dict)
+            or not isinstance(package.get("name"), str)
+            or package.get("type") not in ("path", "git")
+        ):
+            raise LedgerSearchError("invalid dependency entry in Lake manifest")
         if package["type"] == "path":
+            if not isinstance(package.get("dir"), str):
+                raise LedgerSearchError("path dependency is missing its directory")
             path = config.lean_dir / package["dir"]
         else:
-            path = config.lean_dir / manifest["packagesDir"] / package["name"].strip("«»")
+            package_dir = manifest.get("packagesDir")
+            if not isinstance(package_dir, str):
+                raise LedgerSearchError("Lake manifest is missing packagesDir")
+            path = config.lean_dir / package_dir / package["name"].strip("«»")
             if package.get("subDir"):
+                if not isinstance(package["subDir"], str):
+                    raise LedgerSearchError("dependency subDir must be a path")
                 path /= package["subDir"]
         if not path.is_dir():
             raise LedgerSearchError(f"missing built dependency: {path}")
+        package = dict(package)
+        package.setdefault(
+            "configFile", "lakefile.toml" if (path / "lakefile.toml").is_file() else "lakefile.lean"
+        )
         packages.append((package, path.resolve()))
     return packages
 
 
-def _environment_key(config: Config) -> str:
-    """Include file state as well as pins, so local library edits invalidate snapshots."""
-    roots = [config.lean_dir.resolve(), _loogle_dir(config)]
-    roots += [path for _, path in _package_paths(config)]
+def _tree_states(roots: list[Path]) -> list[tuple[str, int, int, int]]:
     states = []
     for root in sorted(set(roots)):
         for directory, children, files in os.walk(root):
-            children[:] = sorted(n for n in children if n not in (".git", ".lake", "__pycache__"))
+            children[:] = sorted(
+                n
+                for n in children
+                if n
+                not in (
+                    ".git",
+                    ".lake",
+                    ".nullius",
+                    ".venv",
+                    "__pycache__",
+                    "build",
+                    "dist",
+                )
+            )
             for name in sorted(files):
-                if name.endswith(".lean") or name in ("lean-toolchain", "lake-manifest.json"):
+                if (
+                    name.endswith((".lean", ".toml", ".json", ".py", ".sh", ".c", ".h"))
+                    or name == "lean-toolchain"
+                ):
                     path = Path(directory) / name
                     stat = path.stat()
                     states.append((str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
@@ -169,6 +208,14 @@ def _environment_key(config: Config) -> str:
                         path = Path(directory) / name
                         stat = path.stat()
                         states.append((str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+    return states
+
+
+def _environment_key(config: Config) -> str:
+    """Include file state as well as pins, so local library edits invalidate snapshots."""
+    roots = [config.lean_dir.resolve(), _loogle_dir(config)]
+    roots += [path for _, path in _package_paths(config)]
+    states = _tree_states(roots)
     policy = [
         _file_hash(ROOT / file)
         for file in (
@@ -208,8 +255,8 @@ def _cache_dir(config: Config) -> Path:
 def _session_owner(config: Config) -> tuple[str, ...]:
     return (
         str(config.lean_dir.resolve()),
-        str(config.ledger_path.resolve()),
-        str(_cache_dir(config)),
+        config.project_id or str(config.ledger_path.resolve()),
+        "project" if config.project_id else str(_cache_dir(config)),
         str(config.loogle_bin),
     )
 
@@ -546,10 +593,12 @@ def _query(
     snapshot: dict[str, Any],
 ) -> SearchResult:
     owner = _session_owner(config)
-    key = (*owner, snapshot["generation"])
+    scope = snapshot.get("scope", "snippet")
+    family = (*owner, scope)
+    key = (*family, snapshot["generation"])
     with _session_lock:
         for previous in list(_sessions):
-            if previous[:-1] == owner and previous != key:
+            if previous[:-1] == family and previous != key:
                 _sessions.pop(previous).close()
         if key not in _sessions:
             env = {**os.environ, **snapshot["runtime_env"]}
@@ -581,9 +630,15 @@ def search_ledger(
 ) -> SearchResult:
     try:
         config = config or Config.discover()
-        rows = read_verified_rows(config.ledger_path)
+        if config.project_id:
+            from .ledger_transfer import read_project_rows
+
+            rows = read_project_rows(config.ledger_path)
+        else:
+            rows = read_verified_rows(config.ledger_path)
+        rows = [r for r in rows if (r.get("record_kind") or "snippet") == "snippet"]
         if not rows:
-            return SearchResult(query, "loogle-ledger", note="No verified ledger entries.")
+            return SearchResult(query, "loogle-ledger", note="No verified snippet entries.")
         groups = _group_rows(rows)
         cache = _cache_dir(config)
         snapshot = (
@@ -613,6 +668,9 @@ def search_ledger(
             hit.name = latest["target"]
             hit.ledger = {
                 "ids": [r["id"] for r in matching_rows],
+                "references": [r["reference"] for r in matching_rows if r.get("reference")],
+                "project_id": config.project_id,
+                "record_kind": "snippet",
                 "target": latest["target"],
                 "claim": latest.get("claim"),
                 "tag": latest.get("tag"),
@@ -656,5 +714,5 @@ def search_ledger(
 def close_ledger_sessions(config: Config | None = None) -> None:
     with _session_lock:
         for key in list(_sessions):
-            if config is None or key[:-1] == _session_owner(config):
+            if config is None or key[:-2] == _session_owner(config):
                 _sessions.pop(key).close()

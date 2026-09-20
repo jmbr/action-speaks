@@ -29,7 +29,15 @@ from typing import Any, Callable
 
 from . import search as S
 from .config import Config
-from .ledger import Ledger, LedgerReadError, read_ledger_row
+from .harness import (
+    filter_project_rows,
+    project_history_stats,
+    validate_derived_from,
+    validate_module_request,
+)
+from .ledger import Ledger, LedgerReadError, Recollection, read_ledger_row
+from .ledger_transfer import read_entry_reference, read_project_rows
+from .project_check import verify_project
 from .repl import ReplError, Session
 from .verify import Verifier
 
@@ -83,7 +91,9 @@ TOOLS: list[dict[str, Any]] = [
             "rejected unless it (a) compiles with no errors, (b) contains no `sorry`, "
             "(c) depends only on Mathlib's standard axioms, (d) has non-contradictory "
             "hypotheses. A theorem with contradictory hypotheses is vacuously true and "
-            "supports no claim, so it is rejected even though Lean accepts it."
+            "supports no claim, so it is rejected even though Lean accepts it. "
+            "For a registered, trusted project, supply project, module and target instead "
+            "of source to audit its current checkout. Builds require explicit build: true."
         ),
         "inputSchema": {
             "type": "object",
@@ -95,6 +105,24 @@ TOOLS: list[dict[str, Any]] = [
                         "already imported. Declare helper lemmas first and the main theorem "
                         "last."
                     ),
+                },
+                "project": {
+                    "type": "string",
+                    "description": (
+                        "Registered project name, UUID or root; never registers or trusts."
+                    ),
+                },
+                "module": {
+                    "type": "string",
+                    "description": "Current project module to audit instead of source.",
+                },
+                "build": {
+                    "type": "boolean",
+                    "description": "Explicitly build the project module; omitted means no build.",
+                },
+                "derived_from": {
+                    "type": "string",
+                    "description": "Prior UUID:ID reference in the project's ledger or links.",
                 },
                 "claim": {
                     "type": "string",
@@ -125,7 +153,22 @@ TOOLS: list[dict[str, Any]] = [
                     ),
                 },
             },
-            "required": ["source"],
+            "anyOf": [
+                {
+                    "required": ["source"],
+                    "not": {
+                        "anyOf": [
+                            {"required": ["module"]},
+                            {"required": ["build"]},
+                            {"required": ["derived_from"]},
+                        ]
+                    },
+                },
+                {
+                    "required": ["project", "module", "target"],
+                    "not": {"required": ["source"]},
+                },
+            ],
         },
     },
     {
@@ -171,6 +214,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
+                "project": {"type": "string", "description": "Registered project selector."},
                 "backend": {
                     "type": "string",
                     "enum": list(S.BACKENDS),
@@ -220,12 +264,19 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "List past verification results recorded by this verifier, or search them with "
             "`recall` to find work already done on a claim. Use `id` alone to retrieve one "
-            "entry read-only, including its source and target. A hit is a pointer to "
-            "re-verify, never proof in itself."
+            "entry read-only, including its source and target, or `ref` for a UUID:ID "
+            "origin. Optional `project` selects project history, including linked entries. "
+            "Project records reference a module and target, not a source snapshot. "
+            "A hit is a pointer to re-verify, never proof in itself."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
+                "project": {"type": "string", "description": "Registered project selector."},
+                "ref": {
+                    "type": "string",
+                    "description": "Retrieve a UUID:ID origin; exclusive with id/listing options.",
+                },
                 "id": {
                     "type": "integer",
                     "minimum": 1,
@@ -252,18 +303,66 @@ TOOLS: list[dict[str, Any]] = [
 
 
 def tool_verify(args: dict[str, Any]) -> str:
-    source = args.get("source", "")
-    if not source.strip():
-        return "error: `source` is empty"
-    # Cheap, and a rejected twin carries a reason that is actionable before the retry.
-    prior = ledger().recall(source=source, current=config().provenance())
-    verdict = verifier().verify(
-        source,
-        target=args.get("target"),
-        claim=args.get("claim"),
-        require_nontrivial=bool(args.get("require_nontrivial", False)),
-    )
-    row = ledger().record(verdict, source, tag=args.get("tag") or "mcp")
+    module_mode = "module" in args
+    if module_mode:
+        if "source" in args or "check_vacuity" in args or "no_vacuity" in args:
+            raise ValueError("module verification cannot use source or vacuity overrides")
+        if "project" not in args or "target" not in args:
+            raise ValueError("module verification requires project, module and target")
+    else:
+        if "build" in args or "derived_from" in args:
+            raise ValueError("build and derived_from require module verification")
+        source = args.get("source")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("`source` must be a nonempty string")
+    for key in ("build", "require_nontrivial"):
+        if key in args and not isinstance(args[key], bool):
+            raise ValueError(f"{key} must be a boolean")
+    if "derived_from" in args and not isinstance(args["derived_from"], str):
+        raise ValueError("derived_from must be a UUID:ID string")
+    cfg = _selected_config(args)
+    if module_mode:
+        validate_module_request(cfg, args["module"], args["target"])
+    origin = validate_derived_from(cfg, args.get("derived_from"), log=True)
+    lg = ledger() if "project" not in args else Ledger(cfg.ledger_path)
+    if cfg.project_id is not None:
+        lg.bind_project(cfg.project_id)
+    prior = []
+    if module_mode:
+        verdict = verify_project(
+            cfg,
+            args["module"],
+            args["target"],
+            claim=args.get("claim"),
+            require_nontrivial=args.get("require_nontrivial", False),
+            build=args.get("build", False),
+        )
+        row = lg.record(
+            verdict,
+            "",
+            tag=args.get("tag") or "mcp",
+            record_kind="project",
+            project_id=cfg.project_id,
+            module=args["module"],
+            environment_id=verdict.provenance.get("environment_id"),
+            derived_from=origin,
+        )
+    else:
+        source = args["source"]
+        prior = lg.recall(source=source, current=cfg.provenance())
+        vf = verifier() if "project" not in args else Verifier(session(), cfg)
+        verdict = vf.verify(
+            source,
+            target=args.get("target"),
+            claim=args.get("claim"),
+            require_nontrivial=args.get("require_nontrivial", False),
+        )
+        if cfg.project_id is None:
+            row = lg.record(verdict, source, tag=args.get("tag") or "mcp")
+        else:
+            row = lg.record(
+                verdict, source, tag=args.get("tag") or "mcp", project_id=cfg.project_id
+            )
     out = [verdict.render(), f"\nledger entry: #{row}"]
     if prior:
         out.append("\nseen before:\n" + "\n".join(h.render() for h in prior))
@@ -278,6 +377,16 @@ def tool_verify(args: dict[str, Any]) -> str:
             "resubmit."
         )
     return "\n".join(out)
+
+
+def _selected_config(args: dict[str, Any]) -> Config:
+    cfg = config()
+    if "project" in args:
+        project = args["project"]
+        if not isinstance(project, str) or not project.strip():
+            raise ValueError("project must be a nonempty registered selector")
+        cfg = cfg.for_project(project)
+    return cfg
 
 
 def tool_statement(args: dict[str, Any]) -> str:
@@ -319,10 +428,10 @@ def tool_search(args: dict[str, Any]) -> str:
         backend=backend,
         include_ledger=args.get("include_ledger", False),
         refresh_ledger=args.get("refresh_ledger", False),
-        config=_config,
+        config=_selected_config(args) if "project" in args else _config,
     )
     text = "\n\n".join(r.render(limit) for r in results) or "no results"
-    if any(r.error and r.backend == "loogle-ledger" for r in results):
+    if any(r.error and r.backend in ("loogle-ledger", "project-ledger") for r in results):
         raise ValueError(text)
     return text
 
@@ -336,16 +445,44 @@ def tool_close(args: dict[str, Any]) -> str:
 
 
 def tool_log(args: dict[str, Any]) -> str:
-    if "id" in args:
-        row_id = args["id"]
-        if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id <= 0:
-            raise ValueError("ledger ID must be a positive integer")
+    if "id" in args or "ref" in args:
+        if "id" in args and "ref" in args:
+            raise ValueError("id and ref are mutually exclusive")
         if any(key in args for key in ("limit", "status", "tag", "recall", "stats")):
-            raise ValueError("id cannot be combined with limit, status, tag, recall or stats")
-        row = read_ledger_row(config().ledger_path, row_id)
+            raise ValueError("id/ref cannot be combined with limit, status, tag, recall or stats")
+        if "id" in args:
+            row_id = args["id"]
+            if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id <= 0:
+                raise ValueError("ledger ID must be a positive integer")
+        cfg = _selected_config(args)
+        row = (
+            read_entry_reference(cfg.ledger_path, args["ref"])
+            if "ref" in args
+            else read_ledger_row(cfg.ledger_path, args["id"])
+        )
         if row is None:
-            raise ValueError(f"ledger entry #{row_id} not found")
+            label = args["ref"] if "ref" in args else f"#{args['id']}"
+            raise ValueError(f"ledger entry {label} not found")
         return json.dumps(row, indent=2, ensure_ascii=False)
+    if "project" in args:
+        cfg = _selected_config(args)
+        history = read_project_rows(cfg.ledger_path, verified_only=False)
+        if args.get("stats"):
+            return json.dumps(project_history_stats(history, cfg.ledger_path), indent=2)
+        rows = filter_project_rows(
+            history,
+            limit=args.get("limit", 10),
+            status=args.get("status"),
+            tag=args.get("tag"),
+            recall=args.get("recall"),
+        )
+        if args.get("recall") is not None:
+            if not rows:
+                return f"nothing recorded resembling {args['recall']!r}"
+            return "\n".join(Recollection(row, "text", []).render() for row in rows)
+        if not rows:
+            return "ledger is empty"
+        return "\n".join(_render_log_rows(rows))
     lg = ledger()
     if args.get("stats"):
         return json.dumps(lg.stats(), indent=2)
@@ -363,16 +500,27 @@ def tool_log(args: dict[str, Any]) -> str:
     )
     if not rows:
         return "ledger is empty"
+    return "\n".join(_render_log_rows(rows))
+
+
+def _render_log_rows(rows: list[dict[str, Any]]) -> list[str]:
     lines = []
     for r in rows:
         mark = "verified" if r["verified"] else r["status"]
         lines.append(f"#{r['id']} [{mark}] {r['created_iso']} {r['target'] or '-'}")
+        if r.get("origin") or r.get("reference"):
+            lines.append(f"    ref: {r.get('origin') or r['reference']}")
+        if r.get("record_kind") == "project":
+            lines.append(
+                f"    module: {r.get('module')} (current checkout; no source snapshot)\n"
+                "    historical verdict: reverify in the intended project before citing"
+            )
         if r["claim"]:
             lines.append(f"    claim: {r['claim']}")
         fails = json.loads(r["failures"])
         if fails:
             lines.append(f"    failed: {', '.join(fails)}")
-    return "\n".join(lines)
+    return lines
 
 
 HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
@@ -424,6 +572,10 @@ def handle(req: dict[str, Any]) -> dict[str, Any] | None:
         if fn is None:
             return _error(req_id, -32601, f"unknown tool: {name}")
         try:
+            if any(key in args for key in ("trust", "relocate")):
+                raise ValueError("register and trust projects through the CLI or Python API")
+            if "project" in args and name not in ("verify", "search", "log"):
+                raise ValueError("project is supported only by verify, search and log")
             text = fn(args)
             is_error = False
         except ReplError as exc:

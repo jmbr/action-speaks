@@ -69,6 +69,12 @@ an export failure is not evidence of unprovability. See
 The tools are `verify`, `statement`, `search`, `close`, and `log`. Clients may prefix their
 names with the server name, for example `nullius-search`.
 
+For a registered project, use `verify` with `project`, `module`, and `target` instead of
+copying the project's definitions into a snippet. Set `build: true` only when you intend
+to build the module. Project search and log calls also accept `project`. A hit may link to
+older history; compare its current statement and reverify before reuse. Project names can
+change, but project and ledger UUIDs remain stable. See [project-backed proofs](docs/PROJECTS.md).
+
 ### 4. Verify the proof
 
 ```text

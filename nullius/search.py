@@ -33,6 +33,7 @@ import math
 import os
 import queue
 import re
+import shlex
 import signal
 import subprocess
 import threading
@@ -72,8 +73,19 @@ class Hit:
         tail = f"    [{self.source}{(' / ' + self.module) if self.module else ''}]"
         if self.ledger:
             ids = ", ".join(f"#{i}" for i in self.ledger["ids"])
-            tail += f"\n    ledger {ids}; retrieve with log --id {self.ledger['ids'][0]}"
-            tail += "\n    Not preloaded: retrieve the source and verify any new submission."
+            refs = self.ledger.get("references", [])
+            scope = (
+                f" --project {self.ledger['project_id']}" if self.ledger.get("project_id") else ""
+            )
+            selector = f"--ref {refs[0]}" if refs else f"--id {self.ledger['ids'][0]}"
+            tail += f"\n    ledger {ids}; retrieve with log{scope} {selector}"
+            if self.ledger.get("record_kind") == "project":
+                tail += (
+                    f"\n    Current project declaration: verify{scope}"
+                    f" --module {self.ledger['module']} -t {shlex.quote(self.name)}"
+                )
+            else:
+                tail += "\n    Not preloaded: retrieve the source and verify any new submission."
         return head + "\n" + tail
 
 
@@ -89,6 +101,8 @@ class SearchResult:
     def render(self, limit: int = 10) -> str:
         if self.error:
             return f"{self.backend} search failed: {self.error}"
+        if self.index is not None and self.index.get("query_applicable") is False:
+            return f"{self.backend}: query not applicable in this environment\n  {self.note}"
         if not self.hits:
             text = f"{self.backend}: no results for {self.query!r}"
             return text + (f"\n  ({self.note})" if self.note else "")
@@ -611,4 +625,30 @@ def search(
                 query, limit=limit, timeout=timeout, refresh=refresh_ledger, config=config
             )
         )
+        if config is not None and config.project_id:
+            from .project_search import search_project_ledger
+
+            out.append(
+                search_project_ledger(
+                    query,
+                    limit,
+                    timeout,
+                    refresh=refresh_ledger,
+                    config=config,
+                )
+            )
+            scoped = [r for r in out if r.backend in ("loogle-ledger", "project-ledger")]
+            if any(r.error is None and r.index is not None for r in scoped):
+                for result in scoped:
+                    if result.error and result.error.lower().startswith(
+                        ("unknown identifier", "unknown constant")
+                    ):
+                        # Project-local names need not exist in the snippet environment.
+                        detail, result.error = result.error, None
+                        result.note = detail
+                        result.index = {
+                            **(result.index or {}),
+                            "query_applicable": False,
+                            "query_error": detail,
+                        }
     return out

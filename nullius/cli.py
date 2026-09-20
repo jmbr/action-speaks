@@ -6,6 +6,7 @@
     nullius search QUERY                find Mathlib lemmas
     nullius close 'GOAL' -b '(n : Nat)' ask Lean which lemma closes a goal
     nullius log                         show recent verifications
+    nullius project register PATH       register a project (execution needs --trust)
 
 Subcommand names match the MCP tool names exactly, so a workflow written against one
 interface transfers unchanged to the other.
@@ -18,10 +19,20 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from . import search as S
 from .config import Config, ConfigError
-from .ledger import Ledger, LedgerReadError, read_ledger_row
+from .harness import (
+    filter_project_rows,
+    project_history_stats,
+    validate_derived_from,
+    validate_module_request,
+)
+from .ledger import Ledger, LedgerReadError, Recollection, read_ledger_row
+from .ledger_transfer import read_entry_reference, read_project_rows, transfer_entries
+from .project_check import verify_project
+from .projects import list_projects, register_project, rename_project, resolve_project
 from .repl import ReplError, Session
 from .verify import Verifier
 
@@ -87,26 +98,79 @@ def _print_recall(hits: list, header: str) -> None:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
+    project = getattr(args, "project", None)
+    module = getattr(args, "module", None)
+    build = getattr(args, "build", False)
+    derived_from = getattr(args, "derived_from", None)
+    if module is not None:
+        if not project or not args.target:
+            raise ValueError("module verification requires --project, --module and --target")
+        if args.file is not None or args.no_vacuity:
+            raise ValueError("module verification cannot use FILE or --no-vacuity")
+    else:
+        if build or derived_from is not None:
+            raise ValueError("--build and --derived-from require module verification")
+        if args.file is None:
+            raise ValueError("provide FILE, or --project, --module and --target together")
+    if derived_from is not None and args.no_log:
+        raise ValueError("--derived-from requires ledger access; cannot use --no-log")
     cfg = Config.discover()
-    src = sys.stdin.read() if args.file == "-" else Path(args.file).read_text()
+    if project is not None:
+        cfg = cfg.for_project(project)
+    if module is not None:
+        validate_module_request(cfg, module, args.target)
+    origin = validate_derived_from(cfg, derived_from, log=not args.no_log)
+    src = ""
+    if module is None:
+        assert isinstance(args.file, str)
+        src = sys.stdin.read() if args.file == "-" else Path(args.file).read_text()
     # Constructed only when logging is on: `Ledger` creates the database file, and
     # `--no-log` promises to leave it alone.
     ledger = None if args.no_log else Ledger(cfg.ledger_path)
+    if ledger is not None and cfg.project_id is not None:
+        ledger.bind_project(cfg.project_id)
     # Cheap, and a rejected twin carries a reason that is actionable before the retry.
-    prior = ledger.recall(source=src, current=cfg.provenance()) if ledger else []
-    s = _session(cfg)
-    verdict = Verifier(s).verify(
-        src,
-        target=args.target,
-        claim=args.claim,
-        require_nontrivial=args.require_nontrivial,
-        check_vacuity=not args.no_vacuity,
-        timeout=args.timeout,
-    )
-    s.close()
+    prior = ledger.recall(source=src, current=cfg.provenance()) if ledger and src else []
+    if module is not None:
+        verdict = verify_project(
+            cfg,
+            module,
+            args.target,
+            claim=args.claim,
+            require_nontrivial=args.require_nontrivial,
+            build=build,
+            timeout=args.timeout,
+        )
+    else:
+        s = _session(cfg)
+        try:
+            verdict = Verifier(s).verify(
+                src,
+                target=args.target,
+                claim=args.claim,
+                require_nontrivial=args.require_nontrivial,
+                check_vacuity=not args.no_vacuity,
+                timeout=args.timeout,
+            )
+        finally:
+            s.close()
 
     if ledger is not None:
-        row = ledger.record(verdict, src, tag=args.tag)
+        if module is not None:
+            row = ledger.record(
+                verdict,
+                "",
+                tag=args.tag,
+                record_kind="project",
+                project_id=cfg.project_id,
+                module=module,
+                environment_id=verdict.provenance.get("environment_id"),
+                derived_from=origin,
+            )
+        elif cfg.project_id is not None:
+            row = ledger.record(verdict, src, tag=args.tag, project_id=cfg.project_id)
+        else:
+            row = ledger.record(verdict, src, tag=args.tag)
         if not args.json:
             print(f"(ledger #{row})")
     if args.json:
@@ -156,6 +220,10 @@ def cmd_search(args: argparse.Namespace) -> int:
     query = " ".join(args.query)
     include_ledger = getattr(args, "include_ledger", False)
     refresh_ledger = getattr(args, "refresh_ledger", False)
+    project = getattr(args, "project", None)
+    selected: dict[str, Any] = (
+        {"config": Config.discover().for_project(project)} if project is not None else {}
+    )
     try:
         results = S.search(
             query,
@@ -163,9 +231,13 @@ def cmd_search(args: argparse.Namespace) -> int:
             backend=args.backend,
             include_ledger=include_ledger,
             refresh_ledger=refresh_ledger,
+            **selected,
         )
     finally:
-        S.close_sessions()
+        if selected:
+            S.close_sessions(selected["config"])
+        else:
+            S.close_sessions()
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2, ensure_ascii=False))
     else:
@@ -173,7 +245,12 @@ def cmd_search(args: argparse.Namespace) -> int:
             print(r.render(limit=args.limit))
             print()
     if args.backend == "ledger" or include_ledger or refresh_ledger:
-        return int(any(r.error and r.backend in ("ledger", "loogle-ledger") for r in results))
+        return int(
+            any(
+                r.error and r.backend in ("ledger", "loogle-ledger", "project-ledger")
+                for r in results
+            )
+        )
     return 0
 
 
@@ -188,9 +265,13 @@ def cmd_close(args: argparse.Namespace) -> int:
 
 def cmd_log(args: argparse.Namespace) -> int:
     row_id = getattr(args, "id", None)
+    reference = getattr(args, "ref", None)
+    if row_id is not None and reference is not None:
+        raise ValueError("--id and --ref are mutually exclusive")
     if row_id is not None:
         if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id <= 0:
             raise ValueError("ledger ID must be a positive integer")
+    if row_id is not None or reference is not None:
         if (
             args.limit is not None
             or args.status is not None
@@ -199,35 +280,59 @@ def cmd_log(args: argparse.Namespace) -> int:
             or args.stats
         ):
             raise ValueError(
-                "--id cannot be combined with --limit, --status, --tag, --recall or --stats"
+                "--id/--ref cannot be combined with --limit, --status, --tag, --recall or --stats"
             )
     cfg = Config.discover()
-    if row_id is not None:
-        row = read_ledger_row(cfg.ledger_path, row_id)
+    project = getattr(args, "project", None)
+    if project is not None:
+        cfg = cfg.for_project(project)
+    if row_id is not None or reference is not None:
+        if reference is not None:
+            row = read_entry_reference(cfg.ledger_path, reference)
+        else:
+            assert row_id is not None
+            row = read_ledger_row(cfg.ledger_path, row_id)
         if row is None:
-            print(f"ledger entry #{row_id} not found", file=sys.stderr)
+            print(f"ledger entry {reference or f'#{row_id}'} not found", file=sys.stderr)
             return 1
         if args.json:
             print(json.dumps(row, indent=2, ensure_ascii=False))
         else:
             print(f"ledger #{row['id']} [{row['status']}]")
             print(f"target: {row['target'] or '-'}")
+            _print_row_reference(row)
             print(f"source:\n{row['source']}")
         return 0
     limit = args.limit if args.limit is not None else 20
-    ledger = Ledger(cfg.ledger_path)
-    if args.stats:
-        print(json.dumps(ledger.stats(), indent=2))
-        return 0
-    if args.recall:
-        hits = ledger.recall(text=args.recall, limit=limit, current=cfg.provenance())
-        if not hits:
-            print(f"nothing recorded resembling {args.recall!r}")
-            return 1
-        for h in hits:
-            print(h.render())
-        return 0
-    rows = ledger.recent(limit=limit, status=args.status, tag=args.tag)
+    if cfg.project_id is not None:
+        history = read_project_rows(cfg.ledger_path, verified_only=False)
+        if args.stats:
+            print(json.dumps(project_history_stats(history, cfg.ledger_path), indent=2))
+            return 0
+        rows = filter_project_rows(
+            history, limit=limit, status=args.status, tag=args.tag, recall=args.recall
+        )
+        if args.recall is not None and not args.json:
+            if not rows:
+                print(f"nothing recorded resembling {args.recall!r}")
+                return 1
+            for row in rows:
+                print(Recollection(row, "text", []).render())
+            return 0
+    else:
+        ledger = Ledger(cfg.ledger_path)
+        if args.stats:
+            print(json.dumps(ledger.stats(), indent=2))
+            return 0
+        if args.recall:
+            hits = ledger.recall(text=args.recall, limit=limit, current=cfg.provenance())
+            if not hits:
+                print(f"nothing recorded resembling {args.recall!r}")
+                return 1
+            for h in hits:
+                print(h.render())
+            return 0
+        rows = ledger.recent(limit=limit, status=args.status, tag=args.tag)
     if args.json:
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return 0
@@ -237,11 +342,62 @@ def cmd_log(args: argparse.Namespace) -> int:
     for r in rows:
         mark = "OK  " if r["verified"] else "FAIL"
         print(f"#{r['id']:<5} {mark} {r['created_iso']}  {r['target'] or '-'}")
+        _print_row_reference(r)
         if r["claim"]:
             print(f"        claim: {r['claim']}")
         fails = json.loads(r["failures"])
         if fails:
             print(f"        failed: {', '.join(fails)}")
+    return 0
+
+
+def _print_row_reference(row: dict) -> None:
+    if row.get("reference") or row.get("origin"):
+        print(f"        ref: {row.get('origin') or row['reference']}")
+    if row.get("record_kind") == "project":
+        print(
+            f"        module: {row.get('module')} (current checkout; no source snapshot)\n"
+            "        historical verdict: reverify in the intended project before citing"
+        )
+
+
+def cmd_project(args: argparse.Namespace) -> int:
+    if args.project_action == "register":
+        result = register_project(
+            Path(args.path), args.name, trust=args.trust, relocate=args.relocate
+        ).to_dict()
+    elif args.project_action == "rename":
+        result = rename_project(args.selector, args.name).to_dict()
+    elif args.project_action == "list":
+        projects = [p.to_dict() for p in list_projects()]
+        if args.json:
+            print(json.dumps(projects, indent=2, ensure_ascii=False))
+        elif not projects:
+            print("no registered projects")
+        else:
+            for project in projects:
+                trust = "trusted" if project["trusted"] else "untrusted"
+                print(f"{project['name']} [{project['id']}] {project['root']} ({trust})")
+        return 0
+    else:
+        project = resolve_project(args.selector)
+        result = transfer_entries(
+            Path(args.from_ledger),
+            project.ledger_path,
+            ids=args.id,
+            tag=args.tag,
+            mode=args.project_action,
+            dry_run=args.dry_run,
+        )
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif args.project_action in ("link", "import"):
+        print(f"{result['action']}: {result['count']} entries -> {result['destination']}")
+        for note in result.get("notes", []):
+            print(note)
+    else:
+        trust = "trusted" if result["trusted"] else "untrusted"
+        print(f"{result['name']} [{result['id']}] {result['root']} ({trust})")
     return 0
 
 
@@ -255,7 +411,11 @@ def build_parser() -> argparse.ArgumentParser:
     d.set_defaults(func=cmd_doctor)
 
     v = sub.add_parser("verify", help="verify a Lean file")
-    v.add_argument("file", help="path to a .lean file, or - for stdin")
+    v.add_argument("file", nargs="?", help="path to a .lean file, or - for stdin")
+    v.add_argument("--project", help="registered project name, UUID or path")
+    v.add_argument("--module", help="audit a module in the project's current checkout")
+    v.add_argument("--build", action="store_true", help="explicitly build the selected module")
+    v.add_argument("--derived-from", metavar="UUID:ID", help="prior entry in project history")
     v.add_argument("-t", "--target", help="declaration to audit (default: last theorem)")
     v.add_argument("-c", "--claim", help="the informal claim this proof is meant to support")
     v.add_argument(
@@ -278,6 +438,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     se = sub.add_parser("search", help="find Mathlib lemmas")
     se.add_argument("query", nargs="+")
+    se.add_argument("--project", help="registered project name, UUID or path")
     se.add_argument(
         "-b",
         "--backend",
@@ -305,6 +466,8 @@ def build_parser() -> argparse.ArgumentParser:
     lg = sub.add_parser("log", help="show recent verifications")
     lg.add_argument("-n", "--limit", type=int, help="maximum recent entries (default: 20)")
     lg.add_argument("--id", type=int, help="retrieve one entry, including its source, read-only")
+    lg.add_argument("--project", help="registered project name, UUID or path")
+    lg.add_argument("--ref", metavar="UUID:ID", help="retrieve a local, imported or linked origin")
     lg.add_argument("--status", choices=("verified", "rejected", "error"))
     lg.add_argument("--tag", help="only entries recorded with this --tag")
     lg.add_argument(
@@ -315,6 +478,32 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--stats", action="store_true")
     lg.add_argument("--json", action="store_true")
     lg.set_defaults(func=cmd_log)
+
+    pr = sub.add_parser("project", help="register projects and associate ledger history")
+    pr.add_argument("--json", action="store_true", help="emit JSON")
+    actions = pr.add_subparsers(dest="project_action", required=True)
+    register = actions.add_parser("register", help="register a checkout; trust is explicit")
+    register.add_argument("path")
+    register.add_argument("--name")
+    register.add_argument("--trust", action="store_true")
+    register.add_argument("--relocate", action="store_true")
+    rename = actions.add_parser("rename", help="rename a project, retaining its old alias")
+    rename.add_argument("selector")
+    rename.add_argument("name")
+    listing = actions.add_parser("list", help="list registered projects")
+    for parser in (register, rename, listing):
+        parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        parser.set_defaults(func=cmd_project)
+    for mode in ("link", "import"):
+        transfer = actions.add_parser(mode, help=f"{mode} selected history into a project")
+        transfer.add_argument("selector")
+        transfer.add_argument("--from-ledger", required=True)
+        selection = transfer.add_mutually_exclusive_group(required=True)
+        selection.add_argument("--id", type=int, action="append")
+        selection.add_argument("--tag")
+        transfer.add_argument("--dry-run", action="store_true")
+        transfer.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        transfer.set_defaults(func=cmd_project)
 
     return p
 
@@ -331,6 +520,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except LedgerReadError as exc:
         print(f"ledger error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"file error: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 130

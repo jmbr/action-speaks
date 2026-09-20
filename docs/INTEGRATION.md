@@ -256,6 +256,11 @@ or write the ledger.
 
 ## Reporting results
 
+For registered Lean projects, see [project-backed proofs](PROJECTS.md). The project owns its
+modules and dependencies; its ledger records module references, environment fingerprints,
+and history without source snapshots. Use `Harness(project=...)` and `verify_module(...)`,
+or the corresponding project arguments on the CLI and MCP tools.
+
 Display `verdict.statement` beside the informal claim. Verification checks the formal proof;
 it does not check that the formalization expresses the intended claim. The contradiction
 and unnecessary-assumption probes can miss problems, so they do not replace this comparison.

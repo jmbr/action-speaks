@@ -42,6 +42,10 @@ SOURCES = ["nullius", "tests", "examples", "noxfile.py"]
 # gracefully when an optional piece (Loogle, an installed entry point) is absent.
 TEST_SCRIPTS = [
     "tests/check_names.py",
+    "tests/test_projects.py",
+    "tests/test_ledger_projects.py",
+    "tests/test_project_interfaces.py",
+    "tests/test_project_check.py",
     "tests/test_ledger_readonly.py",
     "tests/test_ledger_interfaces.py",
     "tests/test_ledger_search.py",

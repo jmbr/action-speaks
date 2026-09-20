@@ -19,6 +19,7 @@ The name comes from *nullius in verba*: "on the word of no one."
 | Use Python, HTTP, MCP, or the CLI | [Integration guide](docs/INTEGRATION.md) |
 | Work through mathematical examples | [Cookbook](docs/COOKBOOK.md) |
 | Follow the agent workflow | [AGENTS.md](AGENTS.md) |
+| Keep proofs in a Lean project | [Project-backed proofs](docs/PROJECTS.md) |
 
 Once installed:
 

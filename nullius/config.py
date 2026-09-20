@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,6 +50,25 @@ class Config:
     pool_size: int = 2
     ledger_index_dir: Path | None = None
     ledger_refresh_timeout: float = 900.0
+    project_id: str | None = None
+    project_name: str | None = None
+    project_root: Path | None = None
+    project_trusted: bool = False
+
+    def for_project(self, selector: str | Path) -> "Config":
+        """Select a registered project's ledger without changing snippet imports."""
+        from .projects import resolve_project
+
+        project = resolve_project(selector)
+        return replace(
+            self,
+            ledger_path=project.ledger_path,
+            ledger_index_dir=project.index_dir,
+            project_id=project.id,
+            project_name=project.name,
+            project_root=project.root,
+            project_trusted=project.trusted,
+        )
 
     @classmethod
     def discover(cls) -> "Config":
@@ -208,4 +227,12 @@ class Config:
         rev = self.loogle_rev()
         if rev:
             prov["loogle_rev"] = rev
+        if self.project_id is not None:
+            prov.update(
+                {
+                    "project_id": self.project_id,
+                    "project_name": self.project_name or "",
+                    "project_root": str(self.project_root),
+                }
+            )
         return prov

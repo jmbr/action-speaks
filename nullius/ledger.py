@@ -14,12 +14,16 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import sqlite3
+import stat
+import tempfile
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
+from uuid import UUID, uuid4
 
 from .verify import Verdict
 
@@ -28,18 +32,84 @@ class LedgerReadError(RuntimeError):
     """An existing ledger cannot be read without changing it."""
 
 
-def _read_rows(path: Path, row_id: int | None = None) -> list[dict[str, Any]]:
+def _uuid(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a UUID string")
+    try:
+        return str(UUID(value))
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a UUID string") from exc
+
+
+def _entry_reference(reference: str) -> tuple[str, int]:
+    if not isinstance(reference, str):
+        raise ValueError("entry reference must be UUID:positive-ID")
+    parts = reference.split(":")
+    if len(parts) != 2 or not re.fullmatch(r"[1-9][0-9]*", parts[1]):
+        raise ValueError("entry reference must be UUID:positive-ID")
+    return _uuid(parts[0], "entry ledger UUID"), int(parts[1])
+
+
+def _ledger_file_state(path: Path) -> list[tuple[int, int, int, int, int] | None]:
+    states = []
+    for suffix in ("", "-wal", "-journal"):
+        file = Path(str(path) + suffix)
+        try:
+            info = file.stat()
+        except FileNotFoundError:
+            states.append(None)
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            raise LedgerReadError(f"ledger file is not a regular file: {file}")
+        states.append((info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns))
+    return states
+
+
+@contextmanager
+def _ledger_snapshot(path: Path) -> Iterator[Path]:
+    """Let SQLite read journaled data without writing the source's WAL read marks."""
+    # mode=ro still creates/updates -shm; immutable=1 silently ignores committed WAL.
+    # Copy a stable file set, then let SQLite recover/index only the private copy.
+    with tempfile.TemporaryDirectory(prefix="nullius-ledger-read-") as directory:
+        for attempt in range(3):
+            before = _ledger_file_state(path)
+            if before[0] is None:
+                raise LedgerReadError(f"ledger disappeared while reading: {path}")
+            snapshot = Path(directory) / f"snapshot-{attempt}.sqlite3"
+            try:
+                for suffix, state in zip(("", "-wal", "-journal"), before):
+                    if state is not None:
+                        shutil.copyfile(Path(str(path) + suffix), Path(str(snapshot) + suffix))
+            except FileNotFoundError:
+                # A checkpoint may remove a sidecar while the snapshot is being copied.
+                time.sleep(0.01)
+                continue
+            if before == _ledger_file_state(path):
+                yield snapshot
+                return
+            time.sleep(0.01)
+    raise LedgerReadError(f"ledger changed repeatedly while reading a snapshot: {path}; retry")
+
+
+@contextmanager
+def _read_connection(path: Path) -> Iterator[sqlite3.Connection | None]:
+    """Read a private snapshot without modifying source files or upgrading their schema."""
     path = Path(path).absolute()
     try:
-        path.stat()
+        path = path.resolve(strict=True)
     except FileNotFoundError:
-        return []
-    except OSError as exc:
+        yield None
+        return
+    except (OSError, RuntimeError) as exc:
         raise LedgerReadError(f"cannot access ledger {path}: {exc}") from exc
     required = {"id", "source", "target", "status", "verified", "source_sha256", "statement"}
     try:
-        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=30)) as conn:
+        with (
+            _ledger_snapshot(path) as snapshot,
+            closing(sqlite3.connect(snapshot.as_uri() + "?mode=rw", uri=True, timeout=30)) as conn,
+        ):
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA query_only=ON")
             conn.execute("BEGIN")
             columns = {r[1] for r in conn.execute("PRAGMA table_info(verifications)")}
             missing = required - columns
@@ -47,18 +117,72 @@ def _read_rows(path: Path, row_id: int | None = None) -> list[dict[str, Any]]:
                 raise LedgerReadError(
                     f"ledger {path} is missing columns: {', '.join(sorted(missing))}"
                 )
-            if row_id is None:
-                query = (
-                    "SELECT * FROM verifications WHERE status = 'verified' "
-                    "AND verified = 1 ORDER BY id"
-                )
-                args = ()
-            else:
-                query = "SELECT * FROM verifications WHERE id = ?"
-                args = (row_id,)
-            return [dict(row) for row in conn.execute(query, args)]
-    except sqlite3.Error as exc:
+            yield conn
+    except (sqlite3.Error, OSError) as exc:
         raise LedgerReadError(f"cannot read ledger {path}: {exc}") from exc
+
+
+def _read_identity(conn: sqlite3.Connection) -> dict[str, Any]:
+    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'ledger_metadata'").fetchone()
+    if not exists:
+        return {"ledger_uuid": None, "project_id": None}
+    rows = conn.execute("SELECT singleton, ledger_uuid, project_id FROM ledger_metadata").fetchall()
+    if len(rows) != 1 or rows[0]["singleton"] != 1:
+        raise LedgerReadError("ledger metadata must contain exactly one identity")
+    row = rows[0]
+    try:
+        ledger_uuid = _uuid(row["ledger_uuid"], "ledger UUID")
+        project_id = (
+            _uuid(row["project_id"], "project ID") if row["project_id"] is not None else None
+        )
+    except ValueError as exc:
+        raise LedgerReadError(f"invalid ledger identity: {exc}") from exc
+    return {"ledger_uuid": ledger_uuid, "project_id": project_id}
+
+
+def read_ledger_identity(path: Path) -> dict[str, Any] | None:
+    """Read identity without migrations; an existing legacy ledger has no UUID yet."""
+    with _read_connection(path) as conn:
+        return _read_identity(conn) if conn is not None else None
+
+
+def _enrich_row(row: dict[str, Any], identity: dict[str, Any]) -> dict[str, Any]:
+    ledger_uuid = identity["ledger_uuid"]
+    if ledger_uuid is None:
+        return row
+    origin_uuid, origin_id = row.get("origin_ledger_uuid"), row.get("origin_row_id")
+    if origin_uuid is None and origin_id is None:
+        origin_uuid, origin_id = ledger_uuid, row["id"]
+    try:
+        origin_uuid = _uuid(origin_uuid, "origin ledger UUID")
+        if isinstance(origin_id, bool) or not isinstance(origin_id, int) or origin_id <= 0:
+            raise ValueError("origin row ID must be a positive integer")
+    except ValueError as exc:
+        raise LedgerReadError(f"invalid origin for ledger row {row['id']}: {exc}") from exc
+    row.update(
+        ledger_uuid=ledger_uuid,
+        origin_ledger_uuid=origin_uuid,
+        origin_row_id=origin_id,
+        origin=f"{origin_uuid}:{origin_id}",
+        reference=f"{origin_uuid}:{origin_id}",
+    )
+    return row
+
+
+def _read_rows(path: Path, row_id: int | None = None) -> list[dict[str, Any]]:
+    with _read_connection(path) as conn:
+        if conn is None:
+            return []
+        identity = _read_identity(conn)
+        if row_id is None:
+            query = (
+                "SELECT * FROM verifications WHERE status = 'verified' AND verified = 1 ORDER BY id"
+            )
+            args = ()
+        else:
+            query = "SELECT * FROM verifications WHERE id = ?"
+            args = (row_id,)
+        return [_enrich_row(dict(row), identity) for row in conn.execute(query, args)]
 
 
 def read_verified_rows(path: Path) -> list[dict[str, Any]]:
@@ -189,6 +313,40 @@ class Recollection:
         """True when the recorded failure was a defect of the statement itself."""
         return any(f in STATEMENT_LEVEL_CHECKS for f in self.failures)
 
+    def _project_advice(self) -> str:
+        recheck = (
+            f"Recheck module {self.row.get('module') or '?'} "
+            f"target {self.row.get('target') or '?'} in the intended project environment; "
+            "this entry is a target reference, not a stored source snapshot."
+        )
+        if self.kind == "text":
+            return (
+                "Related earlier project work, matched on wording alone (candidate only). "
+                "It may be a different theorem and is not evidence for your claim. " + recheck
+            )
+        if self.verified:
+            moved = (
+                f" Recorded library revisions differ ({', '.join(self.drift)})."
+                if self.stale
+                else ""
+            )
+            return (
+                "Historical project verification, not a current proof. Matching statement "
+                "text does not establish identical project definitions or environments."
+                f"{moved} {recheck}"
+            )
+        if self.statement_level:
+            fails = ", ".join(f for f in self.failures if f in STATEMENT_LEVEL_CHECKS)
+            return (
+                f"The recorded project STATEMENT was rejected ({fails}). This does not "
+                "establish the same defect in a different project environment. " + recheck
+            )
+        fails = ", ".join(self.failures) or self.row.get("status", "not verified")
+        return (
+            f"A previous project ATTEMPT failed ({fails}); that does not establish "
+            "that the claim is unprovable. " + recheck
+        )
+
     def advice(self) -> str:
         """What this row means for the attempt about to be made.
 
@@ -197,6 +355,8 @@ class Recollection:
         rejection it *strengthens* the case for trying again: libraries gain lemmas, and
         Physlib completes results that were placeholders when the rejection was recorded.
         """
+        if self.row.get("record_kind") == "project":
+            return self._project_advice()
         if self.kind == "text":
             # Matched on wording, so this may be a different theorem entirely. Saying
             # "proved before" here would be the very error the verifier exists to catch.
@@ -240,10 +400,25 @@ class Recollection:
     def render(self, width: int = 110) -> str:
         r = self.row
         mark = "verified" if self.verified else (r.get("status") or "rejected")
+        project = r.get("record_kind") == "project"
+        if project and self.verified:
+            mark = "verified (historical)"
         head = f"#{r['id']} [{mark}] {r.get('created_iso', '')} {r.get('target') or '-'}"
         if r.get("tag"):
             head += f"  tag: {r['tag']}"
-        lines = [head, f"    matched: {self.KIND_LABEL.get(self.kind, self.kind)}"]
+        match_label = self.KIND_LABEL.get(self.kind, self.kind)
+        if project and self.kind == "statement":
+            match_label = "matching elaborated statement text (project context may differ)"
+        elif project and self.kind == "source":
+            match_label = "matching source fingerprint (historical project target)"
+        lines = [head, f"    matched: {match_label}"]
+        if project:
+            lines.append(f"    project: {r.get('project_id') or 'unknown'}")
+            lines.append(
+                f"    module: {r.get('module') or 'unknown'}  "
+                f"environment: {r.get('environment_id') or 'unavailable'}"
+            )
+            lines.append(f"    ref: {r.get('reference') or r.get('origin') or 'unavailable'}")
         if r.get("claim"):
             claim = str(r["claim"])
             lines.append(f"    claim: {claim[:width]}{'...' if len(claim) > width else ''}")
@@ -261,9 +436,53 @@ class Ledger:
     def __post_init__(self) -> None:
         self.path = Path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._conn() as c:
-            c.executescript(SCHEMA)
-            self._migrate(c)
+        with closing(self._conn()) as c, c:
+            c.execute("BEGIN IMMEDIATE")
+            self._initialize(c)
+
+    @classmethod
+    def _initialize(cls, c: sqlite3.Connection) -> None:
+        # executescript commits an existing transaction. Execute the static DDL separately
+        # so concurrent opens cannot race on column migration or UUID assignment.
+        for command in SCHEMA.split(";"):
+            if command.strip():
+                c.execute(command)
+        cls._migrate(c)
+        cls._ensure_identity(c)
+
+    @staticmethod
+    def _ensure_identity(c: sqlite3.Connection) -> dict[str, Any]:
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE name = 'ledger_metadata'").fetchone():
+            c.execute(
+                "CREATE TABLE ledger_metadata (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), "
+                "ledger_uuid TEXT NOT NULL, project_id TEXT)"
+            )
+            c.execute(
+                "INSERT INTO ledger_metadata(singleton, ledger_uuid) VALUES (1, ?)",
+                (str(uuid4()),),
+            )
+        return _read_identity(c)
+
+    def identity(self) -> dict[str, Any]:
+        """The stable database identity, independent of its path or project name."""
+        with closing(self._conn()) as c:
+            return _read_identity(c)
+
+    def bind_project(self, project_id: str) -> None:
+        """Bind an unbound ledger once; never overwrite a different project identity."""
+        project_id = _uuid(project_id, "project ID")
+        with closing(self._conn()) as c, c:
+            c.execute("BEGIN IMMEDIATE")
+            identity = _read_identity(c)
+            if identity["project_id"] is not None and identity["project_id"] != project_id:
+                raise ValueError(
+                    f"ledger is already bound to project {identity['project_id']}, not {project_id}"
+                )
+            if identity["project_id"] is None:
+                c.execute(
+                    "UPDATE ledger_metadata SET project_id = ? WHERE singleton = 1",
+                    (project_id,),
+                )
 
     @staticmethod
     def _migrate(c: sqlite3.Connection) -> None:
@@ -279,10 +498,22 @@ class Ledger:
             ("physlib_rev", "TEXT"),
             ("cslib_rev", "TEXT"),
             ("statement_norm", "TEXT"),
+            ("record_kind", "TEXT DEFAULT 'snippet'"),
+            ("project_id", "TEXT"),
+            ("module", "TEXT"),
+            ("environment_id", "TEXT"),
+            ("provenance", "TEXT"),
+            ("origin_ledger_uuid", "TEXT"),
+            ("origin_row_id", "INTEGER"),
+            ("derived_from", "TEXT"),
         ):
             if col not in have:
                 c.execute(f"ALTER TABLE verifications ADD COLUMN {col} {decl}")
         c.execute("CREATE INDEX IF NOT EXISTS idx_ver_stmt ON verifications(statement_norm)")
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ver_origin "
+            "ON verifications(origin_ledger_uuid, origin_row_id)"
+        )
         # Backfill the normalised statement for rows written before the column existed,
         # so recall works on existing history rather than only on new entries.
         pending = c.execute(
@@ -334,19 +565,58 @@ class Ledger:
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.path), timeout=30)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        return conn
+        deadline = time.monotonic() + 30
+        try:
+            while True:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    return conn
+                except sqlite3.OperationalError as exc:
+                    # A concurrent first open can make the journal-mode lock upgrade fail
+                    # immediately, bypassing SQLite's busy timeout.
+                    if str(exc) != "database is locked" or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.01)
+        except sqlite3.Error:
+            conn.close()
+            raise
 
-    def record(self, verdict: Verdict, source: str, tag: str | None = None) -> int:
+    def record(
+        self,
+        verdict: Verdict,
+        source: str,
+        tag: str | None = None,
+        *,
+        record_kind: str = "snippet",
+        project_id: str | None = None,
+        module: str | None = None,
+        environment_id: str | None = None,
+        derived_from: str | None = None,
+    ) -> int:
+        if record_kind not in ("snippet", "project"):
+            raise ValueError("record_kind must be 'snippet' or 'project'")
+        if project_id is not None:
+            project_id = _uuid(project_id, "project ID")
+        if record_kind == "project":
+            if project_id is None or not isinstance(module, str) or not module.strip():
+                raise ValueError("project entries require project_id and module")
+            if verdict.verified and (
+                not isinstance(environment_id, str) or not environment_id.strip()
+            ):
+                raise ValueError("verified project entries require environment_id")
+        if derived_from is not None:
+            origin_uuid, origin_id = _entry_reference(derived_from)
+            derived_from = f"{origin_uuid}:{origin_id}"
         now = time.time()
         failures = [c.name for c in verdict.checks if not c.passed and c.fatal]
-        with self._conn() as c:
+        with closing(self._conn()) as c, c:
             cur = c.execute(
                 """INSERT INTO verifications
                    (created_at, created_iso, status, verified, target, claim, statement,
                     source, source_sha256, axioms, checks, failures, toolchain, mathlib_rev,
-                    physlib_rev, cslib_rev, elapsed, tag, statement_norm)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    physlib_rev, cslib_rev, elapsed, tag, statement_norm, record_kind,
+                    project_id, module, environment_id, provenance, derived_from)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
@@ -377,6 +647,12 @@ class Ledger:
                     verdict.elapsed,
                     tag,
                     normalize_statement(verdict.statement),
+                    record_kind,
+                    project_id,
+                    module,
+                    environment_id,
+                    json.dumps(verdict.provenance),
+                    derived_from,
                 ),
             )
             row_id = int(cur.lastrowid or 0)
@@ -452,6 +728,8 @@ class Ledger:
                     d = dict(r)
                     if d["id"] in seen or len(out) >= limit:
                         continue
+                    if d.get("record_kind") == "project":
+                        d = _enrich_row(d, _read_identity(c))
                     seen.add(d["id"])
                     out.append(Recollection(d, kind, _drift(d, current)))
 

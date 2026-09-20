@@ -14,20 +14,97 @@ the Mathlib import is paid once per pooled session, not once per call.
 
 For a repair loop, feed `v.feedback()` back to the model and resubmit; `prove` does exactly
 that for you given a callable that produces Lean source.
+
+`Harness(project="name")` selects a registered project's ledger without changing snippet
+imports. `verify_module("Module", "target")` audits the current checkout instead; builds
+require an explicit `build=True` and a trusted registration.
 """
 
 from __future__ import annotations
 
+import re
 import threading
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from . import search as S
 from .config import Config
 from .ledger import Ledger
+from .ledger_transfer import read_entry_reference
+from .project_check import verify_project
 from .repl import SessionPool, borrow
 from .verify import Verdict, Verifier
+
+
+def validate_module_request(config: Config, module: str, target: str) -> None:
+    """Reject incomplete or untrusted project execution before opening a ledger."""
+    if config.project_id is None:
+        raise ValueError("module verification requires a registered project")
+    if not config.project_trusted:
+        raise ValueError("project is untrusted; register it with --trust before executing Lean")
+    if not isinstance(module, str) or not module.strip():
+        raise ValueError("module must be a nonempty Lean module name")
+    if not isinstance(target, str) or not target.strip():
+        raise ValueError("module verification requires a target declaration")
+
+
+def validate_derived_from(config: Config, reference: str | None, *, log: bool) -> str | None:
+    """Resolve a prior entry to its stable origin without creating or migrating a ledger."""
+    if reference is None:
+        return None
+    if not log:
+        raise ValueError("derived_from requires ledger access, which is disabled (log=False)")
+    if config.project_id is None:
+        raise ValueError("derived_from requires a registered project")
+    row = read_entry_reference(config.ledger_path, reference)
+    if row is None:
+        raise ValueError(f"ledger reference {reference!r} not found in this project")
+    return row.get("reference") or row.get("origin") or reference
+
+
+def filter_project_rows(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int,
+    status: str | None = None,
+    tag: str | None = None,
+    recall: str | None = None,
+) -> list[dict[str, Any]]:
+    """Filter merged history in memory, keeping project log reads migration-free."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError("limit must be a positive integer")
+    if status is not None and status not in ("verified", "rejected", "error"):
+        raise ValueError("status must be verified, rejected or error")
+    if tag is not None and not isinstance(tag, str):
+        raise ValueError("tag must be a string")
+    if recall is not None and not isinstance(recall, str):
+        raise ValueError("recall must be a string")
+    words = re.findall(r"\w+", recall.casefold())[:12] if recall is not None else []
+    selected = []
+    for row in rows:
+        if status is not None and row["status"] != status:
+            continue
+        if tag is not None and row.get("tag") != tag:
+            continue
+        if recall is not None:
+            text = f"{row.get('claim') or ''} {row.get('statement') or ''}".casefold()
+            if not row["verified"] or not any(word in text for word in words):
+                continue
+        selected.append(row)
+    selected.sort(key=lambda row: (row.get("created_at") or 0, row["id"]), reverse=True)
+    return selected[:limit]
+
+
+def project_history_stats(rows: list[dict[str, Any]], path: Path) -> dict[str, Any]:
+    return {
+        "total": len(rows),
+        "verified": sum(bool(row["verified"]) for row in rows),
+        "by_status": dict(Counter(row["status"] for row in rows)),
+        "path": str(path),
+    }
 
 
 @dataclass
@@ -48,10 +125,16 @@ class Harness:
         config: Config | None = None,
         log: bool = True,
         tag: str | None = None,
+        *,
+        project: str | Path | None = None,
     ):
         self.config = config or Config.discover()
-        self.pool = SessionPool(self.config, size=pool_size)
+        if project is not None:
+            self.config = self.config.for_project(project)
         self.ledger = Ledger(self.config.ledger_path) if log else None
+        if self.ledger is not None and self.config.project_id is not None:
+            self.ledger.bind_project(self.config.project_id)
+        self.pool = SessionPool(self.config, size=pool_size)
         self.tag = tag
         self._lock = threading.Lock()
 
@@ -98,7 +181,50 @@ class Harness:
             )
         if self.ledger is not None:
             with self._lock:
-                self.ledger.record(verdict, source, tag=tag or self.tag)
+                if self.config.project_id is None:
+                    self.ledger.record(verdict, source, tag=tag or self.tag)
+                else:
+                    self.ledger.record(
+                        verdict, source, tag=tag or self.tag, project_id=self.config.project_id
+                    )
+        return verdict
+
+    def verify_module(
+        self,
+        module: str,
+        target: str,
+        *,
+        claim: str | None = None,
+        require_nontrivial: bool = False,
+        build: bool = False,
+        timeout: float | None = None,
+        tag: str | None = None,
+        derived_from: str | None = None,
+    ) -> Verdict:
+        """Audit a target in the current project checkout; building is opt-in."""
+        validate_module_request(self.config, module, target)
+        origin = validate_derived_from(self.config, derived_from, log=self.ledger is not None)
+        verdict = verify_project(
+            self.config,
+            module,
+            target,
+            claim=claim,
+            require_nontrivial=require_nontrivial,
+            build=build,
+            timeout=timeout,
+        )
+        if self.ledger is not None:
+            with self._lock:
+                self.ledger.record(
+                    verdict,
+                    "",
+                    tag=tag or self.tag,
+                    record_kind="project",
+                    project_id=self.config.project_id,
+                    module=module,
+                    environment_id=verdict.provenance.get("environment_id"),
+                    derived_from=origin,
+                )
         return verdict
 
     def verify_many(
@@ -236,5 +362,7 @@ def verify_once(source: str, claim: str | None = None, **kwargs: Any) -> Verdict
     Named `verify_once` rather than `verify` so that it does not shadow the `nullius.verify`
     module when re-exported from the package.
     """
-    with Harness(pool_size=1, **{k: kwargs.pop(k) for k in ("config", "log") if k in kwargs}) as h:
+    with Harness(
+        pool_size=1, **{k: kwargs.pop(k) for k in ("config", "log", "project") if k in kwargs}
+    ) as h:
         return h.verify(source, claim=claim, **kwargs)

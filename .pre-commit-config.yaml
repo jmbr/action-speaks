@@ -21,6 +21,34 @@ repos:
 
   - repo: local
     hooks:
+      - id: nullius-projects
+        name: project identities and ledger history remain stable
+        entry: python3 tests/test_projects.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/(projects|ledger|ledger_transfer)\.py|tests/test_projects\.py)$
+
+      - id: nullius-project-history
+        name: ledger links and imports preserve origins
+        entry: python3 tests/test_ledger_projects.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/(projects|ledger|ledger_transfer)\.py|tests/test_ledger_projects\.py)$
+
+      - id: nullius-project-interfaces
+        name: project-scoped interfaces preserve defaults
+        entry: python3 tests/test_project_interfaces.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/.*\.py|tests/test_project_interfaces\.py)$
+
+      - id: nullius-project-check
+        name: project targets undergo complete declaration replay
+        entry: python3 tests/test_project_check.py
+        language: system
+        pass_filenames: false
+        files: ^(nullius/.*\.py|scripts/(project_audit|ledger_index)\.lean|lean/Nullius/.*\.lean|tests/test_project_check\.py)$
+
       - id: nullius-ledger-readonly
         name: ledger reads do not create or migrate databases
         entry: python3 tests/test_ledger_readonly.py

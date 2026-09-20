@@ -7,7 +7,11 @@ private def buildIndex (targets : Array String) (depHash : String)
   let mut relation : Loogle.NameRel := {}
   let mut trie : Loogle.Find.SuffixTrie := .empty
   for target in targets do
-    let name := target.toName
+    let stx ← match Parser.runParserCategory (← getEnv) `term target with
+      | .ok s => pure s
+      | .error e => throwError "{e}"
+    unless stx.isIdent do throwError "expected a target name"
+    let name := stx.getId
     let ci ← getConstInfo name
     let isTheorem := match ci with | .thmInfo _ => true | _ => false
     unless isTheorem && (`NulliusLedgerResults).isPrefixOf name do

@@ -110,6 +110,12 @@ or `close`. Reading the index or a source row does not create, migrate, or write
 
 ## Worked example: claim to verdict
 
+For results that belong to a registered Lean project, use project-backed module verification.
+It keeps the original module's structures and dependencies rather than exporting a snippet.
+The project ledger stores references and fingerprints, not source snapshots. Project labels
+and paths may change; UUIDs and historical entries do not. See `docs/PROJECTS.md` in the
+verifier repository for registration, history association/import, and source promotion.
+
 Claim: *the arithmetic mean of two nonnegative reals is at least their geometric mean.*
 
 ```bash

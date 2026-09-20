@@ -74,6 +74,12 @@ a fresh submission. Do not cite generated aliases or assume earlier proofs are p
 Read [export limitations](references/GUIDE.md#ledger-search-limits) before interpreting
 missing results.
 
+For a registered Lean project, check a module target rather than copying its structures into
+a snippet: MCP `verify` accepts `project`, `module`, and `target`, with `build: true` for
+an explicit build. Project `search` and `log` calls use the same selector. Registration and
+trust approval must already exist. Keep historical verdicts separate from current-checkout
+results; retrieve stable ledger references with `log`'s `ref` argument.
+
 ### 4. Verify the proof
 
 ```bash
