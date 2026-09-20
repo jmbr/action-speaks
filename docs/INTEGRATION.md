@@ -231,7 +231,9 @@ or write the ledger.
 ## Operation and configuration
 
 - **Pool size:** each concurrent check needs a Lean process. Increase the pool only as
-  needed and measure memory use.
+  needed and measure memory use. The pool bounds the whole server, including requests that
+  name a project: those reuse the same warm sessions, since selecting a project changes the
+  ledger rather than the verifier tree. Requests beyond the pool wait for a free session.
 - **Isolation:** each submission starts from the preloaded library environment. Definitions
   from earlier submissions are not retained for later ones.
 - **Timeouts:** a timed-out Lean process is killed. A later call starts a replacement.

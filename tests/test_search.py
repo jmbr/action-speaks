@@ -13,16 +13,20 @@ Two properties matter and neither is covered elsewhere:
   contents describe a different Mathlib. The hosted service stays reachable, but only when
   asked for by name.
 
-Skipped (exit 0) when no local Loogle is built, so this is safe in a commit hook.
+Skipped when no local Loogle is built, so this is safe in a commit hook.
 """
 
 from __future__ import annotations
 
-import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+pytestmark = pytest.mark.lean
 
 from nullius import search as S  # noqa: E402
 from nullius.config import Config  # noqa: E402
@@ -30,73 +34,58 @@ from nullius.config import Config  # noqa: E402
 # One declaration from each library in the prelude, to prove a single index spans all three.
 # Neither Physlib's nor Cslib's root module imports all of Mathlib, so indexing any one of
 # them alone leaves a hole; `lean/NulliusAll.lean` exists precisely to close it.
-PHYSLIB_QUERY = "ClassicalMechanics.FreeParticle.linearMomentum"
-MATHLIB_QUERY = "|- Irrational (Real.sqrt _)"
-CSLIB_QUERY = "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluence_beta"
+LIBRARIES = [
+    ("physlib", "ClassicalMechanics.FreeParticle.linearMomentum", "Physlib."),
+    ("mathlib", "|- Irrational (Real.sqrt _)", "Mathlib."),
+    ("cslib", "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluence_beta", "Cslib."),
+]
 
 
-def main() -> int:
+@pytest.fixture(scope="module")
+def config() -> Config:
     try:
-        cfg = Config.discover()
-    except Exception as exc:
-        print(f"cannot read configuration: {exc}")
-        return 1
+        return Config.discover()
+    except Exception as exc:  # pragma: no cover - environment specific
+        pytest.fail(f"cannot read configuration: {exc}")
 
-    if not cfg.loogle_bin or not Path(cfg.loogle_bin).exists():
-        print("no local loogle built (scripts/build-loogle.sh) — skipping")
-        return 0
 
-    failures: list[str] = []
+@pytest.fixture(scope="module")
+def session(config: Config) -> Iterator[S.LoogleSession]:
+    if not config.loogle_bin or not Path(config.loogle_bin).exists():
+        pytest.skip("no local loogle built (scripts/build-loogle.sh)")
     session = S.local_loogle_session()
-
-    for label, query, expect_module in (
-        ("physlib", PHYSLIB_QUERY, "Physlib."),
-        ("mathlib", MATHLIB_QUERY, "Mathlib."),
-        ("cslib", CSLIB_QUERY, "Cslib."),
-    ):
-        res = session.query(query, limit=5)
-        modules = [h.module for h in res.hits]
-        ok = bool(res.hits) and any(m.startswith(expect_module) for m in modules)
-        print(f"  {'ok  ' if ok else 'FAIL'}  {label:8s} {len(res.hits)} hit(s)  {query}")
-        if not ok:
-            failures.append(
-                f"{label}: expected a hit from {expect_module}*, got {modules or res.error}"
-            )
-
+    yield session
     session.close()
 
-    # With no binary, shape search must say so rather than answering from a different
-    # library. The hosted service has to be asked for by name.
-    os.environ["NULLIUS_LOOGLE_BIN"] = "/nonexistent/loogle"
-    S._local_loogle = None  # force rediscovery with the patched environment
-    absent = S.loogle("Nat.succ_le_succ", limit=1)
-    ok = not absent.hits and bool(absent.error) and "loogle-remote" in (absent.error or "")
-    print(f"  {'ok  ' if ok else 'FAIL'}  absent binary reports, does not substitute")
-    if not ok:
-        failures.append(
-            "an absent local index should report itself and point at backend='loogle-remote', "
-            f"got backend={absent.backend} hits={len(absent.hits)} error={absent.error!r}"
-        )
 
-    # ...and the hosted service must still be reachable when named explicitly. A network
-    # failure is not this test's business, so only the routing is asserted.
-    explicit = S.search("Nat.succ_le_succ", limit=1, backend="loogle-remote")
-    ok = len(explicit) == 1 and explicit[0].backend == "loogle"
-    print(f"  {'ok  ' if ok else 'FAIL'}  explicit remote routes to the hosted service")
-    if not ok:
-        failures.append(f"backend='loogle-remote' should query the hosted service, got {explicit}")
-
-    print()
-    if failures:
-        print(f"FAILED ({len(failures)}):")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print(
-        "Local shape search covers Mathlib, Physlib and Cslib; the hosted index is never implicit."
+@pytest.mark.parametrize(
+    ("label", "query", "expect_module"), LIBRARIES, ids=[x[0] for x in LIBRARIES]
+)
+def test_local_index_reaches_every_prelude_library(
+    session: S.LoogleSession, label: str, query: str, expect_module: str
+) -> None:
+    result = session.query(query, limit=5)
+    modules = [hit.module for hit in result.hits]
+    assert result.hits, f"{label}: no hits for {query}: {result.error}"
+    assert any(module.startswith(expect_module) for module in modules), (
+        f"{label}: expected a hit from {expect_module}*, got {modules or result.error}"
     )
-    return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def test_absent_binary_reports_itself_rather_than_substituting(monkeypatch) -> None:
+    """With no binary, shape search must say so rather than answering from another library."""
+    monkeypatch.setenv("NULLIUS_LOOGLE_BIN", "/nonexistent/loogle")
+    monkeypatch.setattr(S, "_local_loogle", None)  # force rediscovery with the patched environment
+    absent = S.loogle("Nat.succ_le_succ", limit=1)
+    assert not absent.hits
+    assert absent.error and "loogle-remote" in absent.error, (
+        "an absent local index should report itself and point at backend='loogle-remote', "
+        f"got backend={absent.backend} hits={len(absent.hits)} error={absent.error!r}"
+    )
+
+
+def test_explicit_remote_routes_to_the_hosted_service() -> None:
+    """A network failure is not this test's business, so only the routing is asserted."""
+    explicit = S.search("Nat.succ_le_succ", limit=1, backend="loogle-remote")
+    assert len(explicit) == 1
+    assert explicit[0].backend == "loogle"

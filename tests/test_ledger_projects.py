@@ -8,13 +8,15 @@ import shutil
 import sqlite3
 import sys
 import tempfile
-import unittest
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 from threading import Barrier
 from unittest.mock import patch
 from uuid import UUID, uuid4
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -75,14 +77,15 @@ def legacy(path: Path) -> None:
         )
 
 
-class LedgerProjectTests(unittest.TestCase):
-    def setUp(self) -> None:
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        self.root = Path(directory.name)
-        self.source = self.root / "source.sqlite3"
-        self.destination = self.root / "destination.sqlite3"
-        self.project_id = str(uuid4())
+class TestLedgerProject:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> Iterator[None]:
+        with tempfile.TemporaryDirectory() as directory:
+            self.root = Path(directory)
+            self.source = self.root / "source.sqlite3"
+            self.destination = self.root / "destination.sqlite3"
+            self.project_id = str(uuid4())
+            yield
 
     def history(self, path: Path | None = None) -> Ledger:
         ledger = Ledger(path or self.source)
@@ -120,38 +123,36 @@ class LedgerProjectTests(unittest.TestCase):
         return ledger
 
     def assert_payload(self, originals: list[dict], copies: list[dict]) -> None:
-        self.assertEqual(len(originals), len(copies))
+        assert len(originals) == len(copies)
         for original, copy in zip(originals, copies):
             for key, value in original.items():
                 if key not in ("id", "origin_ledger_uuid", "origin_row_id"):
-                    self.assertEqual(value, copy[key], key)
+                    assert value == copy[key], key
 
     def test_identity_binding_and_rename(self) -> None:
         ledger = self.history()
         identity = ledger.identity()
-        self.assertEqual(str(UUID(identity["ledger_uuid"])), identity["ledger_uuid"])
-        self.assertIsNone(identity["project_id"])
-        self.assertEqual(Ledger(self.source).identity(), identity)
+        assert str(UUID(identity["ledger_uuid"])) == identity["ledger_uuid"]
+        assert identity["project_id"] is None
+        assert Ledger(self.source).identity() == identity
         before = saved_rows(self.source)
         ledger.bind_project(self.project_id)
         ledger.bind_project(self.project_id.upper())
-        with self.assertRaisesRegex(ValueError, "already bound"):
+        with pytest.raises(ValueError, match="already bound"):
             ledger.bind_project(str(uuid4()))
         for invalid in ("not a uuid", "", None, True, 4):
-            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 ledger.bind_project(invalid)
         renamed = self.root / "renamed.sqlite3"
         self.source.rename(renamed)
-        self.assertEqual(Ledger(renamed).identity()["ledger_uuid"], identity["ledger_uuid"])
-        self.assertEqual(read_ledger_identity(renamed)["project_id"], self.project_id)
-        self.assertEqual(saved_rows(renamed), before)
+        assert Ledger(renamed).identity()["ledger_uuid"] == identity["ledger_uuid"]
+        assert read_ledger_identity(renamed)["project_id"] == self.project_id
+        assert saved_rows(renamed) == before
         row = read_ledger_row(renamed, 1)
-        self.assertEqual(row["origin"], f"{identity['ledger_uuid']}:1")
-        self.assertEqual(row["reference"], row["origin"])
-        self.assertEqual(read_verified_rows(renamed)[0]["reference"], row["reference"])
-        self.assertEqual(
-            read_entry_reference(renamed, row["origin"])["source"], before[0]["source"]
-        )
+        assert row["origin"] == f"{identity['ledger_uuid']}:1"
+        assert row["reference"] == row["origin"]
+        assert read_verified_rows(renamed)[0]["reference"] == row["reference"]
+        assert read_entry_reference(renamed, row["origin"])["source"] == before[0]["source"]
 
     def test_concurrent_new_and_legacy_initialization(self) -> None:
         for existing in (False, True):
@@ -166,11 +167,9 @@ class LedgerProjectTests(unittest.TestCase):
 
             with ThreadPoolExecutor(max_workers=6) as pool:
                 identities = list(pool.map(open_ledger, range(6)))
-            self.assertEqual(len(set(identities)), 1)
+            assert len(set(identities)) == 1
             with closing(sqlite3.connect(path)) as conn:
-                self.assertEqual(
-                    conn.execute("SELECT COUNT(*) FROM ledger_metadata").fetchone()[0], 1
-                )
+                assert conn.execute("SELECT COUNT(*) FROM ledger_metadata").fetchone()[0] == 1
 
     def test_concurrent_project_binding_never_overwrites(self) -> None:
         ledger = Ledger(self.source)
@@ -187,52 +186,48 @@ class LedgerProjectTests(unittest.TestCase):
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             successes = [result for result in pool.map(bind, projects) if result is not None]
-        self.assertEqual(len(successes), 1)
-        self.assertEqual(ledger.identity()["project_id"], successes[0])
+        assert len(successes) == 1
+        assert ledger.identity()["project_id"] == successes[0]
 
     def test_legacy_readonly_and_additive_migration(self) -> None:
-        self.assertIsNone(read_ledger_identity(self.source))
-        self.assertEqual(read_project_rows(self.source), [])
-        self.assertIsNone(read_entry_reference(self.source, f"{uuid4()}:1"))
-        self.assertFalse(self.source.exists())
+        assert read_ledger_identity(self.source) is None
+        assert read_project_rows(self.source) == []
+        assert read_entry_reference(self.source, f"{uuid4()}:1") is None
+        assert not self.source.exists()
         legacy(self.source)
         before, original_schema, original = (
             fingerprint(self.source),
             schema(self.source),
             saved_rows(self.source),
         )
-        self.assertEqual(
-            read_ledger_identity(self.source), {"ledger_uuid": None, "project_id": None}
-        )
-        self.assertNotIn("ledger_uuid", read_ledger_row(self.source, 1))
-        self.assertEqual(read_verified_rows(self.source), original)
-        self.assertEqual(read_project_rows(self.source)[0]["source"], "original source")
-        self.assertEqual(fingerprint(self.source), before)
-        self.assertEqual(schema(self.source), original_schema)
+        assert read_ledger_identity(self.source) == {"ledger_uuid": None, "project_id": None}
+        assert "ledger_uuid" not in read_ledger_row(self.source, 1)
+        assert read_verified_rows(self.source) == original
+        assert read_project_rows(self.source)[0]["source"] == "original source"
+        assert fingerprint(self.source) == before
+        assert schema(self.source) == original_schema
         identity = Ledger(self.source).identity()
         migrated = saved_rows(self.source)[0]
         for key, value in original[0].items():
-            self.assertEqual(migrated[key], value)
-        self.assertEqual(migrated["record_kind"], "snippet")
-        self.assertIsNone(migrated["provenance"])
-        self.assertEqual(migrated["statement_norm"], normalize_statement(migrated["statement"]))
-        self.assertIsNone(migrated["origin_row_id"])
-        self.assertEqual(
-            read_verified_rows(self.source)[0]["origin"], f"{identity['ledger_uuid']}:1"
-        )
+            assert migrated[key] == value
+        assert migrated["record_kind"] == "snippet"
+        assert migrated["provenance"] is None
+        assert migrated["statement_norm"] == normalize_statement(migrated["statement"])
+        assert migrated["origin_row_id"] is None
+        assert read_verified_rows(self.source)[0]["origin"] == f"{identity['ledger_uuid']}:1"
 
     def test_readonly_access_never_creates_or_modifies_sidecars(self) -> None:
         ledger = self.history()
         identity = ledger.identity()
         before = directory_state(self.root)
         for _ in range(2):
-            self.assertEqual(read_ledger_identity(self.source), identity)
-            self.assertEqual(len(read_verified_rows(self.source)), 1)
-            self.assertEqual(read_ledger_row(self.source, 2)["record_kind"], "project")
-            self.assertEqual(len(read_project_rows(self.source)), 1)
-            self.assertIsNotNone(read_entry_reference(self.source, f"{identity['ledger_uuid']}:2"))
+            assert read_ledger_identity(self.source) == identity
+            assert len(read_verified_rows(self.source)) == 1
+            assert read_ledger_row(self.source, 2)["record_kind"] == "project"
+            assert len(read_project_rows(self.source)) == 1
+            assert read_entry_reference(self.source, f"{identity['ledger_uuid']}:2") is not None
             transfer_entries(self.source, self.destination, ids=[1], dry_run=True)
-            self.assertEqual(directory_state(self.root), before)
+            assert directory_state(self.root) == before
 
     def test_readonly_access_sees_committed_active_wal_without_mutating_it(self) -> None:
         with closing(sqlite3.connect(self.source)) as writer:
@@ -241,22 +236,22 @@ class LedgerProjectTests(unittest.TestCase):
             ledger = self.history()
             ledger.bind_project(self.project_id)
             identity = ledger.identity()
-            self.assertGreater(Path(str(self.source) + "-wal").stat().st_size, 0)
+            assert Path(str(self.source) + "-wal").stat().st_size > 0
             alias = self.root / "alias.sqlite3"
             alias.symlink_to(self.source)
             before = directory_state(self.root)
             for path in (self.source, alias):
-                self.assertEqual(read_ledger_identity(path), identity)
-                self.assertEqual(len(read_verified_rows(path)), 1)
-                self.assertEqual(read_ledger_row(path, 2)["record_kind"], "project")
-                self.assertEqual(len(read_project_rows(path, verified_only=False)), 3)
+                assert read_ledger_identity(path) == identity
+                assert len(read_verified_rows(path)) == 1
+                assert read_ledger_row(path, 2)["record_kind"] == "project"
+                assert len(read_project_rows(path, verified_only=False)) == 3
                 transfer_entries(path, self.destination, tag="history", dry_run=True)
-                self.assertEqual(directory_state(self.root), before)
+                assert directory_state(self.root) == before
             writer.execute("BEGIN IMMEDIATE")
             writer.execute("UPDATE ledger_metadata SET project_id = ?", (str(uuid4()),))
             before_uncommitted = directory_state(self.root)
-            self.assertEqual(read_ledger_identity(self.source), identity)
-            self.assertEqual(directory_state(self.root), before_uncommitted)
+            assert read_ledger_identity(self.source) == identity
+            assert directory_state(self.root) == before_uncommitted
             writer.rollback()
 
     def test_readonly_access_recovers_only_private_rollback_journal(self) -> None:
@@ -265,10 +260,10 @@ class LedgerProjectTests(unittest.TestCase):
             writer.execute("PRAGMA cache_size=1")
             writer.execute("BEGIN IMMEDIATE")
             writer.execute("UPDATE verifications SET source = hex(randomblob(100000))")
-            self.assertTrue(Path(str(self.source) + "-journal").exists())
+            assert Path(str(self.source) + "-journal").exists()
             before = directory_state(self.root)
-            self.assertEqual(read_ledger_row(self.source, 1)["source"], "original source")
-            self.assertEqual(directory_state(self.root), before)
+            assert read_ledger_row(self.source, 1)["source"] == "original source"
+            assert directory_state(self.root) == before
             writer.rollback()
 
     def test_snapshot_retries_concurrent_file_changes(self) -> None:
@@ -286,8 +281,8 @@ class LedgerProjectTests(unittest.TestCase):
 
         with patch("nullius.ledger.shutil.copyfile", side_effect=copy_and_change):
             rows = read_verified_rows(self.source)
-        self.assertTrue(changed)
-        self.assertEqual([row["id"] for row in rows], [1, 4])
+        assert changed
+        assert [row["id"] for row in rows] == [1, 4]
 
     def test_snapshot_repeated_changes_fail_explicitly(self) -> None:
         ledger = self.history()
@@ -301,23 +296,23 @@ class LedgerProjectTests(unittest.TestCase):
 
         with (
             patch("nullius.ledger.shutil.copyfile", side_effect=copy_and_change),
-            self.assertRaisesRegex(LedgerReadError, "changed repeatedly"),
+            pytest.raises(LedgerReadError, match="changed repeatedly"),
         ):
             read_verified_rows(self.source)
 
     def test_malformed_identity_errors(self) -> None:
         self.source.write_text("not sqlite")
-        with self.assertRaises(LedgerReadError):
+        with pytest.raises(LedgerReadError):
             read_ledger_identity(self.source)
-        with self.assertRaises(LedgerReadError):
+        with pytest.raises(LedgerReadError):
             read_ledger_identity(self.root)
         loop = self.root / "symlink-loop"
         loop.symlink_to(loop)
-        with self.assertRaises(LedgerReadError):
+        with pytest.raises(LedgerReadError):
             read_ledger_identity(loop)
         empty = self.root / "empty.sqlite3"
         empty.touch()
-        with self.assertRaises(LedgerReadError):
+        with pytest.raises(LedgerReadError):
             read_ledger_identity(empty)
         for number, bad_sql in enumerate(
             (
@@ -327,22 +322,21 @@ class LedgerProjectTests(unittest.TestCase):
                 "DROP TABLE ledger_metadata; CREATE TABLE ledger_metadata (bad TEXT)",
             )
         ):
-            with self.subTest(bad_sql=bad_sql):
-                path = self.root / f"malformed-{number}.sqlite3"
-                Ledger(path)
-                with closing(sqlite3.connect(path)) as conn, conn:
-                    for command in bad_sql.split(";"):
-                        conn.execute(command)
-                with self.assertRaises(LedgerReadError):
-                    read_ledger_identity(path)
+            path = self.root / f"malformed-{number}.sqlite3"
+            Ledger(path)
+            with closing(sqlite3.connect(path)) as conn, conn:
+                for command in bad_sql.split(";"):
+                    conn.execute(command)
+            with pytest.raises(LedgerReadError):
+                read_ledger_identity(path)
 
     def test_record_project_fields_and_validation(self) -> None:
         ledger = self.history()
         rows = saved_rows(self.source)
-        self.assertEqual(rows[1]["record_kind"], "project")
-        self.assertEqual(rows[1]["source"], "")
-        self.assertEqual(rows[1]["module"], "Original.Module")
-        self.assertEqual(json.loads(rows[1]["provenance"])["extra"], "retained extra provenance")
+        assert rows[1]["record_kind"] == "project"
+        assert rows[1]["source"] == ""
+        assert rows[1]["module"] == "Original.Module"
+        assert json.loads(rows[1]["provenance"])["extra"] == "retained extra provenance"
         verdict = Verdict("verified", "main", "claim")
         for keywords in (
             {"record_kind": "unknown"},
@@ -358,9 +352,9 @@ class LedgerProjectTests(unittest.TestCase):
             {"derived_from": f"{uuid4()}:0"},
             {"derived_from": "local:1"},
         ):
-            with self.subTest(keywords=keywords), self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 ledger.record(verdict, "", **keywords)
-        self.assertEqual(saved_rows(self.source), rows)
+        assert saved_rows(self.source) == rows
 
     def test_failed_project_attempts_can_omit_environment(self) -> None:
         ledger = Ledger(self.source)
@@ -381,18 +375,18 @@ class LedgerProjectTests(unittest.TestCase):
                 module="Original.Module",
             )
             row = read_ledger_row(self.source, row_id)
-            self.assertEqual(row["status"], status)
-            self.assertEqual(row["verified"], 0)
-            self.assertIsNone(row["environment_id"])
-            self.assertEqual(json.loads(row["provenance"]), verdict.provenance)
-            self.assertEqual(json.loads(row["failures"]), ["project_environment"])
+            assert row["status"] == status
+            assert row["verified"] == 0
+            assert row["environment_id"] is None
+            assert json.loads(row["provenance"]) == verdict.provenance
+            assert json.loads(row["failures"]) == ["project_environment"]
             for project_id, module in ((None, "Original.Module"), (self.project_id, None)):
-                with self.assertRaises(ValueError):
+                with pytest.raises(ValueError):
                     ledger.record(
                         verdict, "", record_kind="project", project_id=project_id, module=module
                     )
         for environment_id in (None, "", " "):
-            with self.subTest(environment_id=environment_id), self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 ledger.record(
                     Verdict("verified", "Original.target", "successful attempt"),
                     "",
@@ -402,7 +396,7 @@ class LedgerProjectTests(unittest.TestCase):
                     environment_id=environment_id,
                 )
         original = saved_rows(self.source)
-        self.assertEqual(len(original), 2)
+        assert len(original) == 2
         for mode in ("link", "import"):
             destination = self.root / f"early-failure-{mode}.sqlite3"
             transfer_entries(self.source, destination, tag="early-failure", mode=mode)
@@ -444,56 +438,56 @@ class LedgerProjectTests(unittest.TestCase):
             "not a current proof",
             "Recheck module Original.Module target Original.target",
         ):
-            self.assertIn(context, rendered)
-        self.assertNotIn("these exact revisions", rendered)
-        self.assertNotIn("re-verify the recorded source", rendered)
+            assert context in rendered
+        assert "these exact revisions" not in rendered
+        assert "re-verify the recorded source" not in rendered
         fuzzy = ledger.recall(text="recollection needle")[0]
-        self.assertEqual(fuzzy.kind, "text")
-        self.assertIn("candidate only", fuzzy.advice())
-        self.assertIn("not evidence", fuzzy.advice())
-        self.assertIn("Recheck module", fuzzy.advice())
+        assert fuzzy.kind == "text"
+        assert "candidate only" in fuzzy.advice()
+        assert "not evidence" in fuzzy.advice()
+        assert "Recheck module" in fuzzy.advice()
         copied = self.root / "recalled-copy.sqlite3"
         transfer_entries(self.source, copied, ids=[row_id], mode="import")
         copied_hit = Ledger(copied).recall(statement=verdict.statement)[0]
-        self.assertEqual(copied_hit.row["reference"], hit.row["reference"])
-        self.assertIn(hit.row["reference"], copied_hit.render())
+        assert copied_hit.row["reference"] == hit.row["reference"]
+        assert hit.row["reference"] in copied_hit.render()
         stale = Recollection(hit.row, "statement", ["mathlib"])
-        self.assertIn("Recorded library revisions differ (mathlib)", stale.advice())
+        assert "Recorded library revisions differ (mathlib)" in stale.advice()
 
     def test_project_failure_recollection_keeps_rejection_scope(self) -> None:
         ledger = self.history()
         row = read_ledger_row(self.source, 2)
         attempt = Recollection(row, "statement", [])
-        self.assertIn("ATTEMPT failed", attempt.advice())
-        self.assertIn("Recheck module Original.Module", attempt.advice())
+        assert "ATTEMPT failed" in attempt.advice()
+        assert "Recheck module Original.Module" in attempt.advice()
         statement = Recollection({**row, "failures": '["not_vacuous"]'}, "statement", [])
-        self.assertIn("recorded project STATEMENT was rejected", statement.advice())
-        self.assertIn("different project environment", statement.advice())
-        self.assertNotIn("recorded source", statement.advice())
+        assert "recorded project STATEMENT was rejected" in statement.advice()
+        assert "different project environment" in statement.advice()
+        assert "recorded source" not in statement.advice()
         snippet = Recollection(read_ledger_row(self.source, 1), "statement", [])
-        self.assertIn("these exact revisions", snippet.advice())
-        self.assertIn("re-verify the recorded source", snippet.advice())
-        self.assertNotIn("    project:", snippet.render())
-        self.assertEqual(ledger.stats()["total"], 3)
+        assert "these exact revisions" in snippet.advice()
+        assert "re-verify the recorded source" in snippet.advice()
+        assert "    project:" not in snippet.render()
+        assert ledger.stats()["total"] == 3
 
     def test_link_all_statuses_idempotent_and_verified_filter(self) -> None:
         source = self.history()
         originals, before = saved_rows(self.source), fingerprint(self.source)
         result = transfer_entries(self.source, self.destination, tag="history")
-        self.assertEqual((result["count"], result["added"]), (3, 3))
-        self.assertEqual(saved_rows(self.destination), [])
+        assert (result["count"], result["added"]) == (3, 3)
+        assert saved_rows(self.destination) == []
         linked = read_project_rows(self.destination, verified_only=False)
         self.assert_payload(originals, linked)
-        self.assertEqual({r["ledger_uuid"] for r in linked}, {source.identity()["ledger_uuid"]})
-        self.assertEqual({r["ledger_path"] for r in linked}, {str(self.source)})
-        self.assertEqual(len(read_project_rows(self.destination)), 1)
-        self.assertEqual(transfer_entries(self.source, self.destination, ids=[1, 2, 3])["added"], 0)
-        self.assertEqual(len(read_project_rows(self.destination, verified_only=False)), 3)
+        assert {r["ledger_uuid"] for r in linked} == {source.identity()["ledger_uuid"]}
+        assert {r["ledger_path"] for r in linked} == {str(self.source)}
+        assert len(read_project_rows(self.destination)) == 1
+        assert transfer_entries(self.source, self.destination, ids=[1, 2, 3])["added"] == 0
+        assert len(read_project_rows(self.destination, verified_only=False)) == 3
         for row in linked:
-            self.assertEqual(row["reference"], row["origin"])
-            self.assertEqual(read_entry_reference(self.destination, row["reference"]), row)
-        self.assertEqual(fingerprint(self.source), before)
-        self.assertEqual(saved_rows(self.source), originals)
+            assert row["reference"] == row["origin"]
+            assert read_entry_reference(self.destination, row["reference"]) == row
+        assert fingerprint(self.source) == before
+        assert saved_rows(self.source) == originals
 
     def test_import_preserves_payload_origin_chain_and_recall(self) -> None:
         source = self.history()
@@ -505,65 +499,58 @@ class LedgerProjectTests(unittest.TestCase):
         destination.recall(text="unrelated")
         result = transfer_entries(self.source, self.destination, ids=[1, 2, 3], mode="import")
         copies = saved_rows(self.destination)[1:]
-        self.assertEqual((result["count"], result["added"]), (3, 3))
+        assert (result["count"], result["added"]) == (3, 3)
         self.assert_payload(original, copies)
-        self.assertEqual([row["id"] for row in copies], [2, 3, 4])
-        self.assertEqual(copies[1]["project_id"], self.project_id)
-        self.assertEqual(destination.identity()["project_id"], destination_project)
+        assert [row["id"] for row in copies] == [2, 3, 4]
+        assert copies[1]["project_id"] == self.project_id
+        assert destination.identity()["project_id"] == destination_project
         copied_row = read_ledger_row(self.destination, 2)
-        self.assertEqual(copied_row["reference"], f"{source.identity()['ledger_uuid']}:1")
-        self.assertEqual(copied_row["ledger_uuid"], destination.identity()["ledger_uuid"])
-        self.assertEqual(
-            {row["origin_ledger_uuid"] for row in copies}, {source.identity()["ledger_uuid"]}
+        assert copied_row["reference"] == f"{source.identity()['ledger_uuid']}:1"
+        assert copied_row["ledger_uuid"] == destination.identity()["ledger_uuid"]
+        assert {row["origin_ledger_uuid"] for row in copies} == {source.identity()["ledger_uuid"]}
+        assert (
+            transfer_entries(self.source, self.destination, tag="history", mode="import")["added"]
+            == 0
         )
-        self.assertEqual(
-            transfer_entries(self.source, self.destination, tag="history", mode="import")["added"],
-            0,
-        )
-        self.assertTrue(destination.recall(source=original[0]["source"]))
-        self.assertTrue(destination.recall(statement=original[0]["statement"]))
-        self.assertTrue(destination.recall(text="historical needle"))
+        assert destination.recall(source=original[0]["source"])
+        assert destination.recall(statement=original[0]["statement"])
+        assert destination.recall(text="historical needle")
         third = self.root / "third.sqlite3"
         transfer_entries(self.destination, third, ids=[2, 3, 4], mode="import")
         third_rows = saved_rows(third)
         self.assert_payload(original, third_rows)
-        self.assertEqual(
-            [(row["origin_ledger_uuid"], row["origin_row_id"]) for row in copies],
-            [(row["origin_ledger_uuid"], row["origin_row_id"]) for row in third_rows],
-        )
+        assert [(row["origin_ledger_uuid"], row["origin_row_id"]) for row in copies] == [
+            (row["origin_ledger_uuid"], row["origin_row_id"]) for row in third_rows
+        ]
         for row in read_project_rows(third, verified_only=False):
-            self.assertEqual(row["reference"], row["origin"])
-            self.assertEqual(row["ledger_uuid"], read_ledger_identity(third)["ledger_uuid"])
-            self.assertEqual(read_entry_reference(third, row["reference"]), row)
+            assert row["reference"] == row["origin"]
+            assert row["ledger_uuid"] == read_ledger_identity(third)["ledger_uuid"]
+            assert read_entry_reference(third, row["reference"]) == row
         local_ref = f"{destination.identity()['ledger_uuid']}:2"
-        self.assertEqual(
-            read_entry_reference(self.destination, local_ref)["source"], original[0]["source"]
-        )
-        self.assertEqual(fingerprint(self.source), before)
-        self.assertEqual(saved_rows(self.source), original)
+        assert read_entry_reference(self.destination, local_ref)["source"] == original[0]["source"]
+        assert fingerprint(self.source) == before
+        assert saved_rows(self.source) == original
 
     def test_import_deduplicates_native_origin_and_links(self) -> None:
         self.history()
         transfer_entries(self.source, self.destination, tag="history", mode="import")
-        self.assertEqual(
-            transfer_entries(self.destination, self.source, tag="history", mode="import")["added"],
-            0,
+        assert (
+            transfer_entries(self.destination, self.source, tag="history", mode="import")["added"]
+            == 0
         )
         linked = self.root / "linked.sqlite3"
         transfer_entries(self.destination, linked, tag="history")
         for row in read_project_rows(linked, verified_only=False):
-            self.assertEqual(
-                row["ledger_uuid"], read_ledger_identity(self.destination)["ledger_uuid"]
+            assert row["ledger_uuid"] == read_ledger_identity(self.destination)["ledger_uuid"]
+            assert (
+                row["reference"]
+                == f"{read_ledger_identity(self.source)['ledger_uuid']}:{row['origin_row_id']}"
             )
-            self.assertEqual(
-                row["reference"],
-                f"{read_ledger_identity(self.source)['ledger_uuid']}:{row['origin_row_id']}",
-            )
-            self.assertEqual(read_entry_reference(linked, row["reference"]), row)
-        self.assertEqual(transfer_entries(self.source, linked, tag="history")["added"], 0)
+            assert read_entry_reference(linked, row["reference"]) == row
+        assert transfer_entries(self.source, linked, tag="history")["added"] == 0
         transfer_entries(self.source, linked, tag="history", mode="import")
-        self.assertEqual(len(read_project_rows(linked, verified_only=False)), 3)
-        self.assertEqual(saved_rows(self.source)[0]["origin_ledger_uuid"], None)
+        assert len(read_project_rows(linked, verified_only=False)) == 3
+        assert saved_rows(self.source)[0]["origin_ledger_uuid"] is None
 
     def test_legacy_transfer_only_assigns_source_uuid(self) -> None:
         legacy(self.source)
@@ -575,18 +562,16 @@ class LedgerProjectTests(unittest.TestCase):
             conn.execute("INSERT INTO snapshots VALUES ('private snapshot')")
         old_schema = schema(self.source)
         result = transfer_entries(self.source, self.destination, ids=[1], mode="import")
-        self.assertEqual(result["count"], 1)
-        self.assertEqual(saved_rows(self.source), original)
-        self.assertEqual(
-            [entry for entry in schema(self.source) if entry[0] != "ledger_metadata"], old_schema
+        assert result["count"] == 1
+        assert saved_rows(self.source) == original
+        assert [
+            entry for entry in schema(self.source) if entry[0] != "ledger_metadata"
+        ] == old_schema
+        assert (
+            saved_rows(self.destination)[0]["origin_ledger_uuid"]
+            == read_ledger_identity(self.source)["ledger_uuid"]
         )
-        self.assertEqual(
-            saved_rows(self.destination)[0]["origin_ledger_uuid"],
-            read_ledger_identity(self.source)["ledger_uuid"],
-        )
-        self.assertFalse(
-            {"projects", "snapshots"} & {entry[0] for entry in schema(self.destination)}
-        )
+        assert not {"projects", "snapshots"} & {entry[0] for entry in schema(self.destination)}
 
     def test_dry_run_no_writes_and_legacy_uuid_preview(self) -> None:
         legacy(self.source)
@@ -599,16 +584,14 @@ class LedgerProjectTests(unittest.TestCase):
                 preview = transfer_entries(
                     self.source, destination, ids=[1], mode=mode, dry_run=True
                 )
-                self.assertEqual(preview["count"], 1)
-                self.assertEqual(preview["action"], f"would-{mode}")
-                self.assertEqual(preview["origins"], [None])
-                self.assertTrue(preview["would_assign_uuid"])
-                self.assertIn("would-assign-UUID: source", preview["notes"])
-                self.assertFalse(absent.parent.exists())
-        self.assertEqual((fingerprint(self.source), schema(self.source)), source_before)
-        self.assertEqual(
-            (fingerprint(self.destination), schema(self.destination)), destination_before
-        )
+                assert preview["count"] == 1
+                assert preview["action"] == f"would-{mode}"
+                assert preview["origins"] == [None]
+                assert preview["would_assign_uuid"]
+                assert "would-assign-UUID: source" in preview["notes"]
+                assert not absent.parent.exists()
+        assert (fingerprint(self.source), schema(self.source)) == source_before
+        assert (fingerprint(self.destination), schema(self.destination)) == destination_before
 
     def test_identified_dry_run_preserves_rows_and_known_origins(self) -> None:
         source = self.history()
@@ -617,23 +600,23 @@ class LedgerProjectTests(unittest.TestCase):
         preview = transfer_entries(
             self.source, self.destination, ids=[2], mode="import", dry_run=True
         )
-        self.assertEqual(preview["origins"], [f"{source.identity()['ledger_uuid']}:2"])
-        self.assertEqual(preview["rows"][0]["status"], "rejected")
-        self.assertFalse(preview["would_assign_uuid"])
-        self.assertEqual(preview["destination_identity"], destination.identity())
-        self.assertEqual(fingerprint(self.source), source_before)
-        self.assertEqual(fingerprint(self.destination), destination_before)
-        self.assertEqual(saved_rows(self.destination), [])
+        assert preview["origins"] == [f"{source.identity()['ledger_uuid']}:2"]
+        assert preview["rows"][0]["status"] == "rejected"
+        assert not preview["would_assign_uuid"]
+        assert preview["destination_identity"] == destination.identity()
+        assert fingerprint(self.source) == source_before
+        assert fingerprint(self.destination) == destination_before
+        assert saved_rows(self.destination) == []
 
     def test_missing_selection_does_not_assign_legacy_uuid(self) -> None:
         legacy(self.source)
         before = fingerprint(self.source), schema(self.source)
         for dry_run in (False, True):
             for options in ({"ids": [1, 2]}, {"tag": "absent"}):
-                with self.assertRaises(ValueError):
+                with pytest.raises(ValueError):
                     transfer_entries(self.source, self.destination, dry_run=dry_run, **options)
-                self.assertFalse(self.destination.exists())
-        self.assertEqual((fingerprint(self.source), schema(self.source)), before)
+                assert not self.destination.exists()
+        assert (fingerprint(self.source), schema(self.source)) == before
 
     def test_concurrent_transfers_are_idempotent(self) -> None:
         legacy(self.source)
@@ -647,10 +630,10 @@ class LedgerProjectTests(unittest.TestCase):
 
             with ThreadPoolExecutor(max_workers=6) as pool:
                 results = list(pool.map(transfer, range(6)))
-            self.assertEqual(sum(result["added"] for result in results), 1)
-            self.assertEqual(len({result["origins"][0] for result in results}), 1)
-            self.assertEqual(len(read_project_rows(destination)), 1)
-        self.assertNotIn("statement_norm", saved_rows(self.source)[0])
+            assert sum(result["added"] for result in results) == 1
+            assert len({result["origins"][0] for result in results}) == 1
+            assert len(read_project_rows(destination)) == 1
+        assert "statement_norm" not in saved_rows(self.source)[0]
 
     def test_missing_moved_replaced_or_changed_link_source_is_explicit(self) -> None:
         self.history()
@@ -662,10 +645,10 @@ class LedgerProjectTests(unittest.TestCase):
             lambda: read_project_rows(self.destination),
             lambda: read_entry_reference(self.destination, reference),
         ):
-            with self.assertRaisesRegex(LedgerReadError, "missing or moved"):
+            with pytest.raises(LedgerReadError, match="missing or moved"):
                 reader()
         replacement = self.history()
-        with self.assertRaisesRegex(LedgerReadError, "identity mismatch"):
+        with pytest.raises(LedgerReadError, match="identity mismatch"):
             read_project_rows(self.destination)
         replacement_uuid = replacement.identity()["ledger_uuid"]
         with closing(sqlite3.connect(self.source)) as conn, conn:
@@ -677,11 +660,11 @@ class LedgerProjectTests(unittest.TestCase):
                 "UPDATE verifications SET origin_ledger_uuid = ?, origin_row_id = 9 WHERE id = 2",
                 (replacement_uuid,),
             )
-        with self.assertRaisesRegex(LedgerReadError, "origin mismatch"):
+        with pytest.raises(LedgerReadError, match="origin mismatch"):
             read_project_rows(self.destination)
         with closing(sqlite3.connect(self.source)) as conn, conn:
             conn.execute("DELETE FROM verifications WHERE id = 2")
-        with self.assertRaisesRegex(LedgerReadError, "row 2 is missing"):
+        with pytest.raises(LedgerReadError, match="row 2 is missing"):
             read_project_rows(self.destination)
 
     def test_relink_repairs_a_moved_source_without_changing_origin(self) -> None:
@@ -691,11 +674,11 @@ class LedgerProjectTests(unittest.TestCase):
         moved = self.root / "relocated.sqlite3"
         self.source.rename(moved)
         repaired = transfer_entries(moved, self.destination, ids=[1])
-        self.assertEqual(repaired["added"], 0)
-        self.assertEqual(repaired["updated_links"], 1)
-        self.assertEqual(repaired["skipped"], 0)
-        self.assertEqual(read_project_rows(self.destination)[0]["reference"], reference)
-        self.assertEqual(transfer_entries(moved, self.destination, ids=[1])["updated_links"], 0)
+        assert repaired["added"] == 0
+        assert repaired["updated_links"] == 1
+        assert repaired["skipped"] == 0
+        assert read_project_rows(self.destination)[0]["reference"] == reference
+        assert transfer_entries(moved, self.destination, ids=[1])["updated_links"] == 0
 
     def test_import_replaces_links_with_self_contained_history(self) -> None:
         self.history()
@@ -704,11 +687,11 @@ class LedgerProjectTests(unittest.TestCase):
             r["reference"] for r in read_project_rows(self.destination, verified_only=False)
         ]
         copied = transfer_entries(self.source, self.destination, tag="history", mode="import")
-        self.assertEqual(copied["removed_links"], 3)
+        assert copied["removed_links"] == 3
         self.source.unlink()
         rows = read_project_rows(self.destination, verified_only=False)
-        self.assertEqual([r["reference"] for r in rows], references)
-        self.assertTrue(all(not r.get("linked") for r in rows))
+        assert [r["reference"] for r in rows] == references
+        assert all(not r.get("linked") for r in rows)
 
     def test_selection_and_reference_validation(self) -> None:
         self.history()
@@ -731,17 +714,17 @@ class LedgerProjectTests(unittest.TestCase):
             {"ids": [1, 99]},
             {"tag": "no matching tag"},
         ):
-            with self.subTest(options=options), self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 transfer_entries(self.source, self.destination, **options)
-            self.assertFalse(self.destination.exists())
-        with self.assertRaises(LedgerReadError):
+            assert not self.destination.exists()
+        with pytest.raises(LedgerReadError):
             transfer_entries(self.root / "missing.sqlite3", self.destination, ids=[1])
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             transfer_entries(self.source, self.source, ids=[1])
         for reference in ("1", "bad:1", f"{uuid4()}:0", f"{uuid4()}:-1", f"{uuid4()}:True", None):
-            with self.subTest(reference=reference), self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 read_entry_reference(self.source, reference)
-        self.assertIsNone(read_entry_reference(self.source, f"{uuid4()}:1"))
+        assert read_entry_reference(self.source, f"{uuid4()}:1") is None
 
     def test_verified_requires_status_and_flag(self) -> None:
         self.history()
@@ -749,8 +732,8 @@ class LedgerProjectTests(unittest.TestCase):
             conn.execute("UPDATE verifications SET verified = 1 WHERE status = 'error'")
             conn.execute("UPDATE verifications SET verified = 0 WHERE status = 'verified'")
         transfer_entries(self.source, self.destination, tag="history")
-        self.assertEqual(read_project_rows(self.destination), [])
-        self.assertEqual(len(read_project_rows(self.destination, verified_only=False)), 3)
+        assert read_project_rows(self.destination) == []
+        assert len(read_project_rows(self.destination, verified_only=False)) == 3
 
     def test_destination_transaction_rolls_back_on_import_failure(self) -> None:
         self.history()
@@ -762,13 +745,11 @@ class LedgerProjectTests(unittest.TestCase):
                 "SELECT RAISE(ABORT, 'fixture refuses second row'); END"
             )
         original, original_schema = saved_rows(self.destination), schema(self.destination)
-        with self.assertRaisesRegex(LedgerReadError, "fixture refuses second row"):
+        with pytest.raises(LedgerReadError, match="fixture refuses second row"):
             transfer_entries(self.source, self.destination, tag="history", mode="import")
-        self.assertEqual(saved_rows(self.destination), original)
-        self.assertEqual(schema(self.destination), original_schema)
-        self.assertEqual(
-            read_ledger_identity(self.destination), {"ledger_uuid": None, "project_id": None}
-        )
+        assert saved_rows(self.destination) == original
+        assert schema(self.destination) == original_schema
+        assert read_ledger_identity(self.destination) == {"ledger_uuid": None, "project_id": None}
 
     def test_destination_links_roll_back_on_failure(self) -> None:
         self.history()
@@ -780,9 +761,9 @@ class LedgerProjectTests(unittest.TestCase):
                 "WHEN NEW.source_row_id = 3 BEGIN "
                 "SELECT RAISE(ABORT, 'fixture refuses third row'); END"
             )
-        with self.assertRaisesRegex(LedgerReadError, "fixture refuses third row"):
+        with pytest.raises(LedgerReadError, match="fixture refuses third row"):
             transfer_entries(self.source, self.destination, ids=[2, 3])
-        self.assertEqual(read_project_rows(self.destination, verified_only=False), before)
+        assert read_project_rows(self.destination, verified_only=False) == before
 
     def test_unknown_history_fields_are_not_silently_dropped(self) -> None:
         self.history()
@@ -791,16 +772,6 @@ class LedgerProjectTests(unittest.TestCase):
             conn.execute("ALTER TABLE verifications ADD COLUMN future_payload TEXT")
             conn.execute("UPDATE verifications SET future_payload = 'preserve this too'")
         before = saved_rows(self.destination), schema(self.destination)
-        with self.assertRaisesRegex(LedgerReadError, "unrecognized verification columns"):
+        with pytest.raises(LedgerReadError, match="unrecognized verification columns"):
             transfer_entries(self.source, self.destination, ids=[1], mode="import")
-        self.assertEqual((saved_rows(self.destination), schema(self.destination)), before)
-
-
-def main() -> int:
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(LedgerProjectTests)
-    result = unittest.TextTestRunner(verbosity=2).run(suite)
-    return 0 if result.wasSuccessful() else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+        assert (saved_rows(self.destination), schema(self.destination)) == before

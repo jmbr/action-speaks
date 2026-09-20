@@ -5,11 +5,13 @@ from __future__ import annotations
 import io
 import json
 import sys
-import unittest
+from collections.abc import Iterator
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -59,10 +61,10 @@ LINKED = {
 }
 
 
-class ProjectInterfaceTests(unittest.TestCase):
-    def setUp(self) -> None:
+class TestProjectInterface:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> Iterator[None]:
         self.stack = ExitStack()
-        self.addCleanup(self.stack.close)
         self.cfg = Config(
             lean_dir=Path("verifier-lean"),
             repl_bin=Path("unused-repl"),
@@ -137,6 +139,7 @@ class ProjectInterfaceTests(unittest.TestCase):
         self.stack.enter_context(patch.object(mcp_server, "_session", None))
         self.http_harness = harness.Harness(config=self.project_cfg, tag="http")
         self.stack.enter_context(patch.object(http_server, "_harness", self.http_harness))
+        self.stack.enter_context(patch.dict(http_server._project_harnesses, {}, clear=True))
         self.ledgers[harness].reset_mock()
         self.pool.reset_mock()
         for name in (
@@ -149,6 +152,9 @@ class ProjectInterfaceTests(unittest.TestCase):
                 patch(name, side_effect=AssertionError(f"unexpected external operation: {name}"))
             )
 
+        yield
+        self.stack.close()
+
     def mock(self, owner, name, **kwargs):
         return self.stack.enter_context(patch.object(owner, name, **kwargs))
 
@@ -159,7 +165,7 @@ class ProjectInterfaceTests(unittest.TestCase):
                 code = cli.main(list(args))
             except SystemExit as exc:
                 code = exc.code
-        self.assertIsInstance(code, int)
+        assert isinstance(code, int)
         return code, out.getvalue(), err.getvalue()
 
     def mcp_call(self, name: str, args: dict) -> dict:
@@ -185,8 +191,8 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_registration_is_explicit_and_does_not_enable_trust(self) -> None:
         code, out, _ = self.cli_call("project", "register", "/unused-demo", "--json")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out), self.project.to_dict())
+        assert code == 0
+        assert json.loads(out) == self.project.to_dict()
         self.register.assert_called_once_with(
             Path("/unused-demo"), None, trust=False, relocate=False
         )
@@ -194,94 +200,86 @@ class ProjectInterfaceTests(unittest.TestCase):
         self.checkers[cli].assert_not_called()
 
     def test_registration_forwards_trust_name_and_relocation(self) -> None:
-        self.assertEqual(
+        assert (
             self.cli_call(
                 "project", "--json", "register", "/copy", "--name", "new", "--trust", "--relocate"
-            )[0],
-            0,
+            )[0]
+            == 0
         )
         self.register.assert_called_once_with(Path("/copy"), "new", trust=True, relocate=True)
 
     def test_rename_and_list_keep_registry_identity(self) -> None:
         code, out, _ = self.cli_call("project", "rename", PROJECT_ID, "new", "--json")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out)["id"], PROJECT_ID)
+        assert code == 0
+        assert json.loads(out)["id"] == PROJECT_ID
         self.rename.assert_called_once_with(PROJECT_ID, "new")
-        self.assertEqual(
-            json.loads(self.cli_call("project", "list", "--json")[1]),
-            [self.project.to_dict()],
-        )
-        self.assertIn(PROJECT_ID, self.cli_call("project", "list")[1])
+        assert json.loads(self.cli_call("project", "list", "--json")[1]) == [self.project.to_dict()]
+        assert PROJECT_ID in self.cli_call("project", "list")[1]
         self.transfer.assert_not_called()
 
     def test_link_and_import_route_explicit_selection_and_dry_run(self) -> None:
         for mode in ("link", "import"):
-            with self.subTest(mode=mode):
-                code, out, _ = self.cli_call(
-                    "project",
-                    mode,
-                    "demo",
-                    "--from-ledger",
-                    "old.db",
-                    "--id",
-                    "7",
-                    "--id",
-                    "8",
-                    "--dry-run",
-                    "--json",
-                )
-                self.assertEqual(code, 0)
-                self.assertEqual(json.loads(out)["count"], 2)
-                self.transfer.assert_called_with(
-                    Path("old.db"),
-                    self.project.ledger_path,
-                    ids=[7, 8],
-                    tag=None,
-                    mode=mode,
-                    dry_run=True,
-                )
-                code, _, _ = self.cli_call(
-                    "project", mode, "demo", "--from-ledger", "old.db", "--tag", "paper"
-                )
-                self.assertEqual(code, 0)
-                self.transfer.assert_called_with(
-                    Path("old.db"),
-                    self.project.ledger_path,
-                    ids=None,
-                    tag="paper",
-                    mode=mode,
-                    dry_run=False,
-                )
+            code, out, _ = self.cli_call(
+                "project",
+                mode,
+                "demo",
+                "--from-ledger",
+                "old.db",
+                "--id",
+                "7",
+                "--id",
+                "8",
+                "--dry-run",
+                "--json",
+            )
+            assert code == 0
+            assert json.loads(out)["count"] == 2
+            self.transfer.assert_called_with(
+                Path("old.db"),
+                self.project.ledger_path,
+                ids=[7, 8],
+                tag=None,
+                mode=mode,
+                dry_run=True,
+            )
+            code, _, _ = self.cli_call(
+                "project", mode, "demo", "--from-ledger", "old.db", "--tag", "paper"
+            )
+            assert code == 0
+            self.transfer.assert_called_with(
+                Path("old.db"),
+                self.project.ledger_path,
+                ids=None,
+                tag="paper",
+                mode=mode,
+                dry_run=False,
+            )
         self.ledgers[cli].assert_not_called()
         self.register.assert_not_called()
 
     def test_transfer_requires_exclusive_selection(self) -> None:
         for extra in ((), ("--id", "7", "--tag", "paper")):
-            with self.subTest(extra=extra):
-                self.assertEqual(
-                    self.cli_call("project", "link", "demo", "--from-ledger", "old.db", *extra)[0],
-                    2,
-                )
+            assert (
+                self.cli_call("project", "link", "demo", "--from-ledger", "old.db", *extra)[0] == 2
+            )
         self.transfer.assert_not_called()
 
     def test_registry_failures_are_clear_without_fallback_or_execution(self) -> None:
         self.select.side_effect = ProjectError("project is not registered")
         self.register.side_effect = ProjectError("different registered root")
-        self.assertIn("different registered root", self.cli_call("project", "register", ".")[2])
-        self.assertEqual(
-            self.cli_call("verify", "--project", "unknown", "--module", "Demo", "-t", "saved")[0],
-            2,
+        assert "different registered root" in self.cli_call("project", "register", ".")[2]
+        assert (
+            self.cli_call("verify", "--project", "unknown", "--module", "Demo", "-t", "saved")[0]
+            == 2
         )
-        self.assertTrue(
-            self.mcp_call("verify", {"project": "unknown", "module": "Demo", "target": "saved"})[
-                "isError"
-            ]
-        )
-        self.assertEqual(
+        assert self.mcp_call("verify", {"project": "unknown", "module": "Demo", "target": "saved"})[
+            "isError"
+        ]
+        assert (
             self.http_call("/verify", {"project": "unknown", "module": "Demo", "target": "saved"})[
                 0
-            ],
-            400,
+            ]
+            == 400
         )
         for checker in self.checkers.values():
             checker.assert_not_called()
@@ -289,9 +287,9 @@ class ProjectInterfaceTests(unittest.TestCase):
     def test_harness_project_selection_preserves_verifier_tree(self) -> None:
         h = harness.Harness(2, self.cfg, True, "paper", project="demo")
         self.select.assert_called_once_with(self.cfg, "demo")
-        self.assertIs(h.config, self.project_cfg)
-        self.assertIsNone(self.cfg.project_id)
-        self.assertEqual(h.config.lean_dir, self.cfg.lean_dir)
+        assert h.config is self.project_cfg
+        assert self.cfg.project_id is None
+        assert h.config.lean_dir == self.cfg.lean_dir
         self.pool.assert_called_once_with(self.project_cfg, size=2)
         self.ledgers[harness].assert_called_once_with(self.project.ledger_path)
         self.ledgers[harness].return_value.bind_project.assert_called_once_with(PROJECT_ID)
@@ -300,14 +298,14 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_harness_rejects_mismatched_ledger_binding(self) -> None:
         self.ledgers[harness].return_value.bind_project.side_effect = ValueError("wrong project")
-        with self.assertRaisesRegex(ValueError, "wrong project"):
+        with pytest.raises(ValueError, match="wrong project"):
             harness.Harness(config=self.cfg, project="demo")
         self.pool.assert_not_called()
         self.ledgers[harness].return_value.record.assert_not_called()
 
     def test_harness_project_snippets_are_not_module_records(self) -> None:
         h = harness.Harness(config=self.cfg, project="demo", tag="paper")
-        self.assertIs(h.verify(SOURCE), self.verdict)
+        assert h.verify(SOURCE) is self.verdict
         self.ledgers[harness].return_value.record.assert_called_once_with(
             self.verdict, SOURCE, tag="paper", project_id=PROJECT_ID
         )
@@ -316,7 +314,7 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_harness_standalone_record_call_remains_compatible(self) -> None:
         h = harness.Harness(config=self.cfg)
-        self.assertIs(h.verify(SOURCE), self.verdict)
+        assert h.verify(SOURCE) is self.verdict
         self.ledgers[harness].return_value.record.assert_called_once_with(
             self.verdict, SOURCE, tag=None
         )
@@ -327,7 +325,7 @@ class ProjectInterfaceTests(unittest.TestCase):
         result = h.verify_module(
             "Demo", "Demo.saved", claim="saved claim", derived_from=COPY_REFERENCE, timeout=9
         )
-        self.assertIs(result, self.verdict)
+        assert result is self.verdict
         self.checkers[harness].assert_called_once_with(
             self.project_cfg,
             "Demo",
@@ -353,8 +351,7 @@ class ProjectInterfaceTests(unittest.TestCase):
     def test_harness_module_requires_registered_trusted_project(self) -> None:
         for cfg in (self.cfg, replace(self.project_cfg, project_trusted=False)):
             with (
-                self.subTest(cfg=cfg),
-                self.assertRaisesRegex(ValueError, "registered project|untrusted"),
+                pytest.raises(ValueError, match="registered project|untrusted"),
             ):
                 harness.Harness(config=cfg, log=False).verify_module("Demo", "Demo.saved")
         self.checkers[harness].assert_not_called()
@@ -367,15 +364,15 @@ class ProjectInterfaceTests(unittest.TestCase):
             if key != "origin"
         }
         self.http_harness.verify_module("Demo", "Demo.saved", derived_from=COPY_REFERENCE)
-        self.assertEqual(
-            self.ledgers[harness].return_value.record.call_args.kwargs["derived_from"], REFERENCE
+        assert (
+            self.ledgers[harness].return_value.record.call_args.kwargs["derived_from"] == REFERENCE
         )
 
     def test_harness_no_log_module_never_reads_or_creates_ledger(self) -> None:
         h = harness.Harness(config=self.cfg, project="demo", log=False)
-        self.assertIs(h.verify_module("Demo", "Demo.saved"), self.verdict)
+        assert h.verify_module("Demo", "Demo.saved") is self.verdict
         h.verify(SOURCE)
-        with self.assertRaisesRegex(ValueError, "log=False"):
+        with pytest.raises(ValueError, match="log=False"):
             h.verify_module("Demo", "Demo.saved", derived_from=REFERENCE)
         self.origins.assert_not_called()
         self.ledgers[harness].assert_not_called()
@@ -383,26 +380,55 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_harness_missing_derivation_blocks_verification(self) -> None:
         self.origins.return_value = None
-        with self.assertRaisesRegex(ValueError, "not found"):
+        with pytest.raises(ValueError, match="not found"):
             self.http_harness.verify_module("Demo", "Demo.saved", derived_from=REFERENCE)
         self.checkers[harness].assert_not_called()
         self.ledgers[harness].return_value.record.assert_not_called()
 
     def test_verify_once_accepts_project_selector(self) -> None:
-        self.assertIs(
-            harness.verify_once(SOURCE, project="demo", config=self.cfg, log=False),
-            self.verdict,
+        assert (
+            harness.verify_once(SOURCE, project="demo", config=self.cfg, log=False) is self.verdict
         )
         self.select.assert_called_once_with(self.cfg, "demo")
         self.ledgers[harness].assert_not_called()
         self.pool.return_value.close.assert_called_once()
 
+    def test_borrowed_pool_is_neither_created_nor_closed(self) -> None:
+        """A harness handed a pool must leave it running for whoever owns it."""
+        pool = self.pool.return_value
+        self.pool.reset_mock()
+        h = harness.Harness(config=self.cfg, pool=pool, log=False)
+        self.pool.assert_not_called()
+        assert h.pool is pool
+        assert not h.owns_pool
+        h.close()
+        pool.close.assert_not_called()
+        assert self.pool.return_value.close.call_count == 0
+
+    def test_project_requests_share_one_pool_rather_than_one_each(self) -> None:
+        """The ceiling on live Lean sessions must not scale with concurrent requests."""
+        self.pool.reset_mock()
+        seen = []
+        for _ in range(4):
+            with http_server._request_harness("demo") as selected:
+                seen.append(selected)
+        # No pool is built per request, and every request reaches the server's own pool.
+        self.pool.assert_not_called()
+        assert all(h.pool is self.http_harness.pool for h in seen)
+        assert len({id(h) for h in seen}) == 1
+        assert seen[0] is not self.http_harness
+        assert seen[0].config is self.project_cfg
+
+    def test_unselected_requests_still_use_the_server_harness(self) -> None:
+        with http_server._request_harness(None) as selected:
+            assert selected is self.http_harness
+
     def test_cli_module_routes_without_snippet_session_or_implicit_build(self) -> None:
         code, out, err = self.cli_call(
             "verify", "--project", "demo", "--module", "Demo", "-t", "Demo.saved", "--json"
         )
-        self.assertEqual((code, err), (0, ""))
-        self.assertEqual(json.loads(out)["recall"], [])
+        assert (code, err) == (0, "")
+        assert json.loads(out)["recall"] == []
         self.checkers[cli].assert_called_once_with(
             self.project_cfg,
             "Demo",
@@ -440,19 +466,17 @@ class ProjectInterfaceTests(unittest.TestCase):
             COPY_REFERENCE,
             "--require-nontrivial",
         )
-        self.assertEqual(code, 0)
-        self.assertTrue(self.checkers[cli].call_args.kwargs["build"])
-        self.assertTrue(self.checkers[cli].call_args.kwargs["require_nontrivial"])
-        self.assertEqual(
-            self.ledgers[cli].return_value.record.call_args.kwargs["derived_from"], REFERENCE
-        )
+        assert code == 0
+        assert self.checkers[cli].call_args.kwargs["build"]
+        assert self.checkers[cli].call_args.kwargs["require_nontrivial"]
+        assert self.ledgers[cli].return_value.record.call_args.kwargs["derived_from"] == REFERENCE
 
     def test_cli_no_log_module_avoids_ledger(self) -> None:
-        self.assertEqual(
+        assert (
             self.cli_call(
                 "verify", "--project", "demo", "--module", "Demo", "-t", "saved", "--no-log"
-            )[0],
-            0,
+            )[0]
+            == 0
         )
         self.ledgers[cli].assert_not_called()
         self.origins.assert_not_called()
@@ -480,19 +504,18 @@ class ProjectInterfaceTests(unittest.TestCase):
             ),
         ]
         for args in cases:
-            with self.subTest(args=args):
-                code, _, err = self.cli_call("verify", *args)
-                self.assertEqual(code, 2)
-                self.assertNotIn("Traceback", err)
+            code, _, err = self.cli_call("verify", *args)
+            assert code == 2
+            assert "Traceback" not in err
         self.discover.assert_not_called()
         self.cli_session.assert_not_called()
         self.ledgers[cli].assert_not_called()
 
     def test_cli_source_logging_retains_snippet_contract(self) -> None:
         for project in (False, True):
-            with self.subTest(project=project), patch.object(sys, "stdin", io.StringIO(SOURCE)):
+            with patch.object(sys, "stdin", io.StringIO(SOURCE)):
                 extra = ("--project", "demo") if project else ()
-                self.assertEqual(self.cli_call("verify", "-", *extra)[0], 0)
+                assert self.cli_call("verify", "-", *extra)[0] == 0
                 expected = {"project_id": PROJECT_ID} if project else {}
                 self.ledgers[cli].return_value.record.assert_called_with(
                     self.verdict, SOURCE, tag=None, **expected
@@ -513,8 +536,8 @@ class ProjectInterfaceTests(unittest.TestCase):
             "--derived-from",
             REFERENCE,
         )
-        self.assertEqual(code, 2)
-        self.assertIn("not found", err)
+        assert code == 2
+        assert "not found" in err
         self.ledgers[cli].assert_not_called()
         self.checkers[cli].assert_not_called()
 
@@ -524,25 +547,25 @@ class ProjectInterfaceTests(unittest.TestCase):
         code, _, err = self.cli_call(
             "verify", "--project", "demo", "--module", "Demo", "-t", "saved"
         )
-        self.assertEqual(code, 2)
-        self.assertIn("wrong project", err)
+        assert code == 2
+        assert "wrong project" in err
         response = self.mcp_call("verify", {"project": "demo", "module": "Demo", "target": "saved"})
-        self.assertTrue(response["isError"])
-        self.assertIn("wrong project", response["content"][0]["text"])
+        assert response["isError"]
+        assert "wrong project" in response["content"][0]["text"]
         self.checkers[cli].assert_not_called()
         self.checkers[mcp_server].assert_not_called()
 
     def test_project_search_routes_config_without_global_mutation(self) -> None:
-        self.assertEqual(self.cli_call("search", "needle", "--project", "demo")[0], 0)
-        self.assertIs(self.search.call_args.kwargs["config"], self.project_cfg)
+        assert self.cli_call("search", "needle", "--project", "demo")[0] == 0
+        assert self.search.call_args.kwargs["config"] is self.project_cfg
         self.close_sessions.assert_called_with(self.project_cfg)
         response = self.mcp_call("search", {"query": "needle", "project": "demo"})
-        self.assertFalse(response["isError"])
-        self.assertIs(self.search.call_args.kwargs["config"], self.project_cfg)
+        assert not response["isError"]
+        assert self.search.call_args.kwargs["config"] is self.project_cfg
         self.http_harness.search("needle")
-        self.assertIs(self.search.call_args.kwargs["config"], self.project_cfg)
-        self.assertIs(mcp_server._config, self.cfg)
-        self.assertIsNone(self.cfg.project_id)
+        assert self.search.call_args.kwargs["config"] is self.project_cfg
+        assert mcp_server._config is self.cfg
+        assert self.cfg.project_id is None
 
     def test_project_search_failure_does_not_report_success(self) -> None:
         self.search.return_value = [
@@ -552,65 +575,61 @@ class ProjectInterfaceTests(unittest.TestCase):
             S.SearchResult("needle", "project-ledger", error="project index needs refresh"),
         ]
         code, out, _ = self.cli_call("search", "needle", "--project", "demo", "--include-ledger")
-        self.assertEqual(code, 1)
-        self.assertIn("library.saved", out)
-        self.assertIn("project index needs refresh", out)
+        assert code == 1
+        assert "library.saved" in out
+        assert "project index needs refresh" in out
         response = self.mcp_call(
             "search", {"query": "needle", "project": "demo", "include_ledger": True}
         )
-        self.assertTrue(response["isError"])
-        self.assertIn("library.saved", response["content"][0]["text"])
-        self.assertIn("project index needs refresh", response["content"][0]["text"])
+        assert response["isError"]
+        assert "library.saved" in response["content"][0]["text"]
+        assert "project index needs refresh" in response["content"][0]["text"]
 
     def test_cli_project_log_listing_includes_links_readonly(self) -> None:
         code, out, _ = self.cli_call("log", "--project", "demo", "--json", "--limit", "1")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out), [LINKED])
+        assert code == 0
+        assert json.loads(out) == [LINKED]
         self.histories[cli].assert_called_once_with(self.project.ledger_path, verified_only=False)
-        self.assertEqual(
-            json.loads(
-                self.cli_call(
-                    "log", "--project", "demo", "--status", "verified", "--tag", "paper", "--json"
-                )[1]
-            ),
-            [LOCAL],
-        )
-        self.assertIn(REFERENCE, self.cli_call("log", "--project", "demo")[1])
+        assert json.loads(
+            self.cli_call(
+                "log", "--project", "demo", "--status", "verified", "--tag", "paper", "--json"
+            )[1]
+        ) == [LOCAL]
+        assert REFERENCE in self.cli_call("log", "--project", "demo")[1]
         stats = json.loads(self.cli_call("log", "--project", "demo", "--stats")[1])
-        self.assertEqual(stats["by_status"], {"verified": 1, "rejected": 1})
+        assert stats["by_status"] == {"verified": 1, "rejected": 1}
         self.ledgers[cli].assert_not_called()
 
     def test_project_recall_is_readonly_and_only_matches_verified_rows(self) -> None:
         code, out, _ = self.cli_call("log", "--project", "demo", "--recall", "saved", "--json")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out), [LOCAL])
+        assert code == 0
+        assert json.loads(out) == [LOCAL]
         response = self.mcp_call("log", {"project": "demo", "recall": "saved"})
-        self.assertFalse(response["isError"])
-        self.assertIn(REFERENCE, response["content"][0]["text"])
-        self.assertNotIn(LINKED["origin"], response["content"][0]["text"])
+        assert not response["isError"]
+        assert REFERENCE in response["content"][0]["text"]
+        assert LINKED["origin"] not in response["content"][0]["text"]
         self.ledgers[cli].assert_not_called()
         self.ledgers[mcp_server].assert_not_called()
 
     def test_project_recall_preserves_candidate_and_project_context_warnings(self) -> None:
         code, text, _ = self.cli_call("log", "--project", "demo", "--recall", "saved")
-        self.assertEqual(code, 0)
+        assert code == 0
         response = self.mcp_call("log", {"project": "demo", "recall": "saved"})
-        self.assertFalse(response["isError"])
+        assert not response["isError"]
         for rendered in (text, response["content"][0]["text"]):
-            self.assertIn("candidate only", rendered)
-            self.assertIn("not a stored source snapshot", rendered)
-            self.assertIn(PROJECT_ID, rendered)
-            self.assertIn(REFERENCE, rendered)
-            self.assertIn("verified (historical)", rendered)
+            assert "candidate only" in rendered
+            assert "not a stored source snapshot" in rendered
+            assert PROJECT_ID in rendered
+            assert REFERENCE in rendered
+            assert "verified (historical)" in rendered
         self.ledgers[cli].assert_not_called()
         self.ledgers[mcp_server].assert_not_called()
 
     def test_cli_project_reference_and_local_id_reads(self) -> None:
         for flag, value in (("--ref", REFERENCE), ("--id", "42")):
-            with self.subTest(flag=flag):
-                code, out, _ = self.cli_call("log", "--project", "demo", flag, value, "--json")
-                self.assertEqual(code, 0)
-                self.assertEqual(json.loads(out), LOCAL)
+            code, out, _ = self.cli_call("log", "--project", "demo", flag, value, "--json")
+            assert code == 0
+            assert json.loads(out) == LOCAL
         self.references[cli].assert_called_once_with(self.project.ledger_path, REFERENCE)
         self.reads[cli].assert_called_once_with(self.project.ledger_path, 42)
         self.ledgers[cli].assert_not_called()
@@ -624,26 +643,25 @@ class ProjectInterfaceTests(unittest.TestCase):
             ("--stats",),
             ("--status", "verified"),
         ):
-            with self.subTest(extra=extra):
-                self.assertEqual(self.cli_call("log", "--ref", REFERENCE, *extra)[0], 2)
+            assert self.cli_call("log", "--ref", REFERENCE, *extra)[0] == 2
         self.references[cli].assert_not_called()
         self.discover.assert_not_called()
 
     def test_mcp_schema_has_five_tools_and_typed_project_modes(self) -> None:
         tools = {tool["name"]: tool["inputSchema"] for tool in mcp_server.TOOLS}
-        self.assertEqual(set(tools), {"verify", "statement", "search", "close", "log"})
-        self.assertEqual(
-            [variant["required"] for variant in tools["verify"]["anyOf"]],
-            [["source"], ["project", "module", "target"]],
-        )
+        assert set(tools) == {"verify", "statement", "search", "close", "log"}
+        assert [variant["required"] for variant in tools["verify"]["anyOf"]] == [
+            ["source"],
+            ["project", "module", "target"],
+        ]
         for key, kind in (
             ("project", "string"),
             ("module", "string"),
             ("build", "boolean"),
             ("derived_from", "string"),
         ):
-            self.assertEqual(tools["verify"]["properties"][key]["type"], kind)
-        self.assertNotIn("trust", tools["verify"]["properties"])
+            assert tools["verify"]["properties"][key]["type"] == kind
+        assert "trust" not in tools["verify"]["properties"]
 
     def test_mcp_module_uses_project_ledger_and_no_implicit_build(self) -> None:
         global_ledger = Mock()
@@ -657,7 +675,7 @@ class ProjectInterfaceTests(unittest.TestCase):
                 "derived_from": COPY_REFERENCE,
             },
         )
-        self.assertFalse(response["isError"])
+        assert not response["isError"]
         self.checkers[mcp_server].assert_called_once_with(
             self.project_cfg,
             "Demo",
@@ -684,7 +702,7 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_mcp_project_source_keeps_fixed_prelude(self) -> None:
         response = self.mcp_call("verify", {"source": SOURCE, "project": "demo"})
-        self.assertFalse(response["isError"])
+        assert not response["isError"]
         self.verifiers[mcp_server].assert_called_once_with(
             self.mcp_session.return_value, self.project_cfg
         )
@@ -692,11 +710,11 @@ class ProjectInterfaceTests(unittest.TestCase):
             self.verdict, SOURCE, tag="mcp", project_id=PROJECT_ID
         )
         self.checkers[mcp_server].assert_not_called()
-        self.assertIs(mcp_server._config, self.cfg)
-        self.assertIsNone(mcp_server._ledger)
+        assert mcp_server._config is self.cfg
+        assert mcp_server._ledger is None
 
     def test_mcp_standalone_source_record_signature_unchanged(self) -> None:
-        self.assertFalse(self.mcp_call("verify", {"source": SOURCE})["isError"])
+        assert not self.mcp_call("verify", {"source": SOURCE})["isError"]
         self.mcp_verifier.return_value.verify.assert_called_once_with(
             SOURCE, target=None, claim=None, require_nontrivial=False
         )
@@ -722,19 +740,17 @@ class ProjectInterfaceTests(unittest.TestCase):
             {"module": "Demo", "project": "demo", "target": "saved", "derived_from": None},
             {"module": "Demo", "project": "demo", "target": "saved", "derived_from": True},
         ):
-            with self.subTest(args=args):
-                response = self.mcp_call("verify", args)
-                self.assertTrue(response["isError"])
-                self.assertNotIn("Traceback", response["content"][0]["text"])
+            response = self.mcp_call("verify", args)
+            assert response["isError"]
+            assert "Traceback" not in response["content"][0]["text"]
         self.checkers[mcp_server].assert_not_called()
         self.ledgers[mcp_server].assert_not_called()
 
     def test_mcp_unsupported_tools_do_not_ignore_project_selector(self) -> None:
         for name in ("statement", "close"):
-            with self.subTest(name=name):
-                response = self.mcp_call(name, {"project": "demo"})
-                self.assertTrue(response["isError"])
-                self.assertNotIn("Traceback", response["content"][0]["text"])
+            response = self.mcp_call(name, {"project": "demo"})
+            assert response["isError"]
+            assert "Traceback" not in response["content"][0]["text"]
         self.mcp_verifier.assert_not_called()
         self.mcp_session.assert_not_called()
 
@@ -742,15 +758,14 @@ class ProjectInterfaceTests(unittest.TestCase):
         args = {"project": "demo", "module": "Demo", "target": "saved"}
         for key in ("build", "require_nontrivial"):
             for value in ("false", "true", 0, 1, None, [], {}):
-                with self.subTest(key=key, value=value):
-                    response = self.mcp_call("verify", {**args, key: value})
-                    self.assertTrue(response["isError"])
-                    self.assertIn("must be a boolean", response["content"][0]["text"])
-                    code, out = self.http_call(
-                        "/verify", {"module": "Demo", "target": "saved", key: value}
-                    )
-                    self.assertEqual(code, 400)
-                    self.assertIn("must be a boolean", out["error"])
+                response = self.mcp_call("verify", {**args, key: value})
+                assert response["isError"]
+                assert "must be a boolean" in response["content"][0]["text"]
+                code, out = self.http_call(
+                    "/verify", {"module": "Demo", "target": "saved", key: value}
+                )
+                assert code == 400
+                assert "must be a boolean" in out["error"]
         self.checkers[mcp_server].assert_not_called()
         self.checkers[harness].assert_not_called()
 
@@ -763,36 +778,33 @@ class ProjectInterfaceTests(unittest.TestCase):
         code, out, _ = self.cli_call(
             "verify", "--project", "demo", "--module", "Demo", "-t", "saved", "--build", "--json"
         )
-        self.assertEqual(code, 1)
-        self.assertEqual(json.loads(out)["status"], "error")
+        assert code == 1
+        assert json.loads(out)["status"] == "error"
         response = self.mcp_call(
             "verify", {"project": "demo", "module": "Demo", "target": "saved", "build": True}
         )
-        self.assertFalse(response["isError"])
-        self.assertIn("NOT verified", response["content"][0]["text"])
+        assert not response["isError"]
+        assert "NOT verified" in response["content"][0]["text"]
         code, out = self.http_call("/verify", {"module": "Demo", "target": "saved", "build": True})
-        self.assertEqual(code, 200)
-        self.assertEqual(out["status"], "error")
-        self.assertFalse(out["verified"])
+        assert code == 200
+        assert out["status"] == "error"
+        assert not out["verified"]
         for lg in self.ledgers.values():
             lg.return_value.record.assert_called_once()
-            self.assertEqual(lg.return_value.record.call_args.args, (failed, ""))
-            self.assertEqual(
-                lg.return_value.record.call_args.kwargs["environment_id"], "failed-environment"
-            )
-            self.assertEqual(lg.return_value.record.call_args.kwargs["record_kind"], "project")
+            assert lg.return_value.record.call_args.args == (failed, "")
+            assert lg.return_value.record.call_args.kwargs["environment_id"] == "failed-environment"
+            assert lg.return_value.record.call_args.kwargs["record_kind"] == "project"
 
     def test_checker_registration_errors_are_not_recorded_as_verdicts(self) -> None:
         for checker in self.checkers.values():
             checker.side_effect = ValueError("project registration no longer matches")
-        self.assertEqual(
-            self.cli_call("verify", "--project", "demo", "--module", "Demo", "-t", "saved")[0],
-            2,
+        assert (
+            self.cli_call("verify", "--project", "demo", "--module", "Demo", "-t", "saved")[0] == 2
         )
         response = self.mcp_call("verify", {"project": "demo", "module": "Demo", "target": "saved"})
-        self.assertTrue(response["isError"])
-        self.assertIn("registration no longer matches", response["content"][0]["text"])
-        self.assertEqual(self.http_call("/verify", {"module": "Demo", "target": "saved"})[0], 400)
+        assert response["isError"]
+        assert "registration no longer matches" in response["content"][0]["text"]
+        assert self.http_call("/verify", {"module": "Demo", "target": "saved"})[0] == 400
         for lg in self.ledgers.values():
             lg.return_value.record.assert_not_called()
 
@@ -800,12 +812,10 @@ class ProjectInterfaceTests(unittest.TestCase):
         self.select.return_value = replace(self.project_cfg, project_trusted=False)
         args = {"project": "demo", "module": "Demo", "target": "saved"}
         for extra in ({}, {"trust": True}, {"relocate": True}):
-            with self.subTest(extra=extra):
-                self.assertTrue(self.mcp_call("verify", {**args, **extra})["isError"])
-                self.assertEqual(self.http_call("/verify", {**args, **extra})[0], 400)
-        self.assertEqual(
-            self.cli_call("verify", "--project", "demo", "--module", "Demo", "-t", "saved")[0],
-            2,
+            assert self.mcp_call("verify", {**args, **extra})["isError"]
+            assert self.http_call("/verify", {**args, **extra})[0] == 400
+        assert (
+            self.cli_call("verify", "--project", "demo", "--module", "Demo", "-t", "saved")[0] == 2
         )
         for checker in self.checkers.values():
             checker.assert_not_called()
@@ -813,13 +823,13 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_mcp_project_history_and_reference_are_readonly(self) -> None:
         response = self.mcp_call("log", {"project": "demo", "limit": 1})
-        self.assertFalse(response["isError"])
-        self.assertIn(LINKED["origin"], response["content"][0]["text"])
+        assert not response["isError"]
+        assert LINKED["origin"] in response["content"][0]["text"]
         response = self.mcp_call("log", {"project": "demo", "ref": REFERENCE})
-        self.assertEqual(json.loads(response["content"][0]["text"]), LOCAL)
+        assert json.loads(response["content"][0]["text"]) == LOCAL
         self.references[mcp_server].assert_called_once_with(self.project.ledger_path, REFERENCE)
         response = self.mcp_call("log", {"project": "demo", "id": 42})
-        self.assertFalse(response["isError"])
+        assert not response["isError"]
         self.reads[mcp_server].assert_called_once_with(self.project.ledger_path, 42)
         self.ledgers[mcp_server].assert_not_called()
 
@@ -832,44 +842,43 @@ class ProjectInterfaceTests(unittest.TestCase):
             ("stats", False),
             ("recall", ""),
         ):
-            with self.subTest(key=key):
-                self.assertTrue(self.mcp_call("log", {"ref": REFERENCE, key: value})["isError"])
+            assert self.mcp_call("log", {"ref": REFERENCE, key: value})["isError"]
         self.references[mcp_server].assert_not_called()
 
     def test_reference_resolution_errors_are_explicit(self) -> None:
         for owner in (cli, mcp_server, http_server):
             self.references[owner].return_value = None
-        self.assertEqual(self.cli_call("log", "--project", "demo", "--ref", REFERENCE)[0], 1)
-        self.assertTrue(self.mcp_call("log", {"project": "demo", "ref": REFERENCE})["isError"])
-        self.assertEqual(self.http_call(f"/ledger?ref={REFERENCE}", method="GET")[0], 404)
+        assert self.cli_call("log", "--project", "demo", "--ref", REFERENCE)[0] == 1
+        assert self.mcp_call("log", {"project": "demo", "ref": REFERENCE})["isError"]
+        assert self.http_call(f"/ledger?ref={REFERENCE}", method="GET")[0] == 404
         for owner in (cli, mcp_server, http_server):
             self.references[owner].side_effect = LedgerReadError("linked source is missing")
-        self.assertIn(
-            "linked source is missing",
-            self.cli_call("log", "--project", "demo", "--ref", REFERENCE)[2],
+        assert (
+            "linked source is missing"
+            in self.cli_call("log", "--project", "demo", "--ref", REFERENCE)[2]
         )
         response = self.mcp_call("log", {"project": "demo", "ref": REFERENCE})
-        self.assertTrue(response["isError"])
-        self.assertNotIn("Traceback", response["content"][0]["text"])
-        self.assertEqual(self.http_call(f"/ledger?ref={REFERENCE}", method="GET")[0], 500)
+        assert response["isError"]
+        assert "Traceback" not in response["content"][0]["text"]
+        assert self.http_call(f"/ledger?ref={REFERENCE}", method="GET")[0] == 500
 
     def test_broken_project_history_never_falls_back_to_local_listing(self) -> None:
         for owner in (cli, mcp_server, http_server):
             self.histories[owner].side_effect = LedgerReadError("linked source moved")
-        self.assertEqual(self.cli_call("log", "--project", "demo")[0], 1)
+        assert self.cli_call("log", "--project", "demo")[0] == 1
         response = self.mcp_call("log", {"project": "demo"})
-        self.assertTrue(response["isError"])
-        self.assertIn("linked source moved", response["content"][0]["text"])
+        assert response["isError"]
+        assert "linked source moved" in response["content"][0]["text"]
         code, out = self.http_call("/ledger", method="GET")
-        self.assertEqual(code, 500)
-        self.assertIn("linked source moved", out["error"])
+        assert code == 500
+        assert "linked source moved" in out["error"]
         for lg in self.ledgers.values():
             lg.return_value.recent.assert_not_called()
 
     def test_http_configured_module_and_search_inherit_project(self) -> None:
         code, out = self.http_call("/verify", {"module": "Demo", "target": "saved"})
-        self.assertEqual(code, 200)
-        self.assertIn("feedback", out)
+        assert code == 200
+        assert "feedback" in out
         self.checkers[harness].assert_called_once_with(
             self.project_cfg,
             "Demo",
@@ -880,61 +889,57 @@ class ProjectInterfaceTests(unittest.TestCase):
             timeout=None,
         )
         self.borrow.assert_not_called()
-        self.assertEqual(self.http_call("/search", {"query": "needle"})[0], 200)
-        self.assertIs(self.search.call_args.kwargs["config"], self.project_cfg)
+        assert self.http_call("/search", {"query": "needle"})[0] == 200
+        assert self.search.call_args.kwargs["config"] is self.project_cfg
 
     def test_http_explicit_module_build_and_derivation(self) -> None:
         code, _ = self.http_call(
             "/verify",
             {"module": "Demo", "target": "saved", "build": True, "derived_from": COPY_REFERENCE},
         )
-        self.assertEqual(code, 200)
-        self.assertTrue(self.checkers[harness].call_args.kwargs["build"])
-        self.assertEqual(
-            self.ledgers[harness].return_value.record.call_args.kwargs["derived_from"], REFERENCE
+        assert code == 200
+        assert self.checkers[harness].call_args.kwargs["build"]
+        assert (
+            self.ledgers[harness].return_value.record.call_args.kwargs["derived_from"] == REFERENCE
         )
 
-    def test_http_body_and_query_project_use_temporary_harness(self) -> None:
+    def test_http_body_and_query_project_both_reach_the_project_config(self) -> None:
         base = harness.Harness(config=self.cfg, log=False, tag="http")
         self.stack.enter_context(patch.object(http_server, "_harness", base))
         for path, body in (
             ("/verify", {"project": "demo", "module": "Demo", "target": "saved"}),
             ("/verify?project=demo", {"module": "Demo", "target": "saved"}),
         ):
-            with self.subTest(path=path):
-                self.assertEqual(self.http_call(path, body)[0], 200)
-                self.assertIs(self.checkers[harness].call_args.args[0], self.project_cfg)
-        self.assertIs(http_server._harness, base)
-        self.assertIs(base.config, self.cfg)
-        self.assertIsNone(base.ledger)
+            assert self.http_call(path, body)[0] == 200
+            assert self.checkers[harness].call_args.args[0] is self.project_cfg
+        assert http_server._harness is base
+        assert base.config is self.cfg
+        assert base.ledger is None
         self.ledgers[harness].assert_not_called()
-        self.assertEqual(self.pool.return_value.close.call_count, 2)
-        self.close_sessions.assert_called_with(self.project_cfg)
 
-    def test_http_temporary_harness_closes_before_sending_response(self) -> None:
-        self.pool.return_value.close.side_effect = RuntimeError("close failed")
-        code, out = self.http_call(
-            "/verify", {"project": "demo", "module": "Demo", "target": "saved"}
+    def test_http_project_request_never_closes_the_shared_pool(self) -> None:
+        """The pool outlives the request; only its owner may close it."""
+        assert (
+            self.http_call("/verify", {"project": "demo", "module": "Demo", "target": "saved"})[0]
+            == 200
         )
-        self.assertEqual(code, 500)
-        self.assertIn("close failed", out["error"])
-        self.close_sessions.assert_called_once_with(self.project_cfg)
+        self.pool.return_value.close.assert_not_called()
+        self.close_sessions.assert_not_called()
 
     def test_http_no_log_project_never_reads_ledger(self) -> None:
         h = harness.Harness(config=self.project_cfg, log=False)
         self.stack.enter_context(patch.object(http_server, "_harness", h))
-        self.assertEqual(self.http_call("/verify", {"module": "Demo", "target": "saved"})[0], 200)
-        self.assertEqual(
+        assert self.http_call("/verify", {"module": "Demo", "target": "saved"})[0] == 200
+        assert (
             self.http_call(
                 "/verify", {"module": "Demo", "target": "saved", "derived_from": REFERENCE}
-            )[0],
-            400,
+            )[0]
+            == 400
         )
         for path in ("/ledger", "/ledger/42", f"/ledger?ref={REFERENCE}", "/ledger?project=demo"):
-            with self.subTest(path=path):
-                code, out = self.http_call(path, method="GET")
-                self.assertEqual(code, 400)
-                self.assertIn("log=False", out["error"])
+            code, out = self.http_call(path, method="GET")
+            assert code == 400
+            assert "log=False" in out["error"]
         self.origins.assert_not_called()
         self.references[http_server].assert_not_called()
         self.reads[http_server].assert_not_called()
@@ -943,21 +948,20 @@ class ProjectInterfaceTests(unittest.TestCase):
 
     def test_http_project_readonly_id_reference_and_linked_listing(self) -> None:
         code, out = self.http_call("/ledger/42?project=demo", method="GET")
-        self.assertEqual((code, out), (200, LOCAL))
+        assert (code, out) == (200, LOCAL)
         self.reads[http_server].assert_called_once_with(self.project.ledger_path, 42)
         for path in (
             f"/ledger?ref={REFERENCE}&project=demo",
             f"/ledger/ref/{REFERENCE}?project=demo",
         ):
-            with self.subTest(path=path):
-                self.assertEqual(self.http_call(path, method="GET"), (200, LOCAL))
-                self.references[http_server].assert_called_with(self.project.ledger_path, REFERENCE)
+            assert self.http_call(path, method="GET") == (200, LOCAL)
+            self.references[http_server].assert_called_with(self.project.ledger_path, REFERENCE)
         code, out = self.http_call(
             "/ledger?project=demo&status=rejected&tag=paper&limit=1", method="GET"
         )
-        self.assertEqual(code, 200)
-        self.assertEqual(out["rows"], [LINKED])
-        self.assertEqual(out["stats"]["total"], 2)
+        assert code == 200
+        assert out["rows"] == [LINKED]
+        assert out["stats"]["total"] == 2
         self.ledgers[harness].assert_not_called()
 
     def test_http_bad_project_and_reference_parameters_are_not_ignored(self) -> None:
@@ -969,8 +973,7 @@ class ProjectInterfaceTests(unittest.TestCase):
             "/health?project=demo",
             "/ledger?project=demo&trust=true",
         ):
-            with self.subTest(path=path):
-                self.assertEqual(self.http_call(path, method="GET")[0], 400)
+            assert self.http_call(path, method="GET")[0] == 400
         for path, body in (
             ("/verify?project=demo", {"project": "other", "source": SOURCE}),
             ("/verify", {"project": None, "source": SOURCE}),
@@ -983,8 +986,7 @@ class ProjectInterfaceTests(unittest.TestCase):
             ("/verify", {"module": "Demo", "target": "saved", "require_nontrivial": "false"}),
             ("/verify", {"module": "Demo"}),
         ):
-            with self.subTest(path=path, body=body):
-                self.assertEqual(self.http_call(path, body)[0], 400)
+            assert self.http_call(path, body)[0] == 400
         self.checkers[harness].assert_not_called()
         self.references[http_server].assert_not_called()
 
@@ -992,8 +994,8 @@ class ProjectInterfaceTests(unittest.TestCase):
         h = harness.Harness(config=self.cfg, log=False)
         self.stack.enter_context(patch.object(http_server, "_harness", h))
         code, out = self.http_call("/verify", {"source": SOURCE})
-        self.assertEqual(code, 200)
-        self.assertEqual(out["target"], "Demo.saved")
+        assert code == 200
+        assert out["target"] == "Demo.saved"
         self.verifiers[harness].return_value.verify.assert_called_once_with(
             SOURCE,
             target=None,
@@ -1004,7 +1006,7 @@ class ProjectInterfaceTests(unittest.TestCase):
         )
         self.checkers[harness].assert_not_called()
         self.select.assert_not_called()
-        self.assertEqual(self.http_call("/verify", {"module": "Demo", "target": "saved"})[0], 400)
+        assert self.http_call("/verify", {"module": "Demo", "target": "saved"})[0] == 400
         self.checkers[harness].assert_not_called()
 
     def test_http_server_project_option_passes_through(self) -> None:
@@ -1012,16 +1014,7 @@ class ProjectInterfaceTests(unittest.TestCase):
         server = self.mock(http_server, "ThreadingHTTPServer").return_value
         server.serve_forever.side_effect = KeyboardInterrupt
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(http_server.main(["--project", "demo", "--no-warm", "--no-log"]), 0)
+            assert http_server.main(["--project", "demo", "--no-warm", "--no-log"]) == 0
         factory.assert_called_once_with(pool_size=2, log=False, tag="http", project="demo")
         server.shutdown.assert_called_once()
         self.pool.return_value.close.assert_called_once()
-
-
-def main() -> int:
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(ProjectInterfaceTests)
-    return int(not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful())
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

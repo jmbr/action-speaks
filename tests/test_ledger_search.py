@@ -7,9 +7,12 @@ import re
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -43,7 +46,7 @@ theorem token_eq : LocalToken.token = LocalToken.token := rfl
 QUERY = "|- (_ : Nat) = _"
 
 
-def routing() -> None:
+def test_include_ledger_is_opt_in_for_library_search() -> None:
     with (
         patch.object(S, "loogle", return_value=S.SearchResult("q", "loogle-local")),
         patch.object(LS, "search_ledger") as ledger,
@@ -60,12 +63,8 @@ def routing() -> None:
         {"backend": "ledger", "refresh_ledger": 1},
     ):
         with patch.object(S, "_http_json") as remote:
-            try:
+            with pytest.raises(ValueError):
                 S.search("q", **args)
-            except ValueError:
-                pass
-            else:
-                raise AssertionError("invalid options accepted")
             remote.assert_not_called()
     with (
         patch.object(S, "loogle", return_value=S.SearchResult("q", "loogle-local")),
@@ -77,7 +76,7 @@ def routing() -> None:
         remote.assert_called_once_with("q", limit=10, timeout=20.0)
 
 
-def deadline_test(directory: Path) -> None:
+def test_unresponsive_session_gives_up_without_waiting(directory: Path) -> None:
     binary = directory / "unresponsive"
     binary.write_text(
         f"#!{sys.executable}\nimport time\nprint('Loogle is ready.', flush=True)\ntime.sleep(30)\n"
@@ -102,7 +101,10 @@ def deadline_test(directory: Path) -> None:
         session.close()
 
 
-def integration(config: Config, directory: Path) -> None:
+@pytest.mark.lean
+def test_ledger_search_isolation_refresh_and_retrieval(config: Config, directory: Path) -> None:
+    if not config.loogle_bin or not config.loogle_bin.exists():
+        pytest.skip("no local loogle built (scripts/build-loogle.sh)")
     cfg = replace(
         config,
         ledger_path=directory / "ledger.sqlite3",
@@ -202,43 +204,33 @@ def integration(config: Config, directory: Path) -> None:
         ).verified
     S.close_sessions(cfg)
     assert not LS._sessions
-    print("Ledger shape search, isolation, incremental refresh, and retrieval metadata: OK")
 
 
-def main() -> int:
-    routing()
+@pytest.fixture
+def directory() -> Iterator[Path]:
     with tempfile.TemporaryDirectory(prefix="nullius-ledger-tests-") as temp:
-        directory = Path(temp)
-        deadline_test(directory)
-        config = Config.discover()
-        lock = directory / "lock"
-        with LS._build_lock(lock, time.monotonic() + 5):
-            try:
-                with LS._build_lock(lock, time.monotonic() + 0.05):
-                    raise AssertionError("concurrent writer acquired the lock")
-            except LS.LedgerSearchError:
+        yield Path(temp)
+
+
+@pytest.fixture
+def config() -> Config:
+    return Config.discover()
+
+
+def test_build_lock_excludes_a_concurrent_writer(directory: Path) -> None:
+    lock = directory / "lock"
+    with LS._build_lock(lock, time.monotonic() + 5):
+        with pytest.raises(LS.LedgerSearchError):
+            with LS._build_lock(lock, time.monotonic() + 0.05):
                 pass
-        try:
-            LS._run(
-                [sys.executable, "-c", "import time; time.sleep(30)"],
-                directory,
-                time.monotonic() + 0.1,
-                config,
-            )
-        except LS.LedgerSearchError:
-            pass
-        else:
-            raise AssertionError("build deadline did not stop the process")
-        if not config.loogle_bin or not config.loogle_bin.exists():
-            print("Local Loogle unavailable; integration portion skipped")
-        else:
-            try:
-                integration(config, directory)
-            finally:
-                S.close_sessions()
-    print("Ledger search tests: OK")
-    return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+@pytest.mark.lean
+def test_build_deadline_stops_the_process(directory: Path, config: Config) -> None:
+    with pytest.raises(LS.LedgerSearchError):
+        LS._run(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            directory,
+            time.monotonic() + 0.1,
+            config,
+        )

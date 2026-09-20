@@ -3,10 +3,17 @@
 #   prek install     enable them for this clone
 #   prek run --all-files
 #
-# The Lean-backed hooks need the verifier built (`cd lean && lake exe cache get && lake
-# build`), because they actually run proofs rather than pattern-matching them. They are
-# scoped with `files:` so that editing prose alone does not start a Lean session, and each
-# one is skippable in an emergency with `SKIP=<id> git commit`.
+# Deliberately short. A hook per test script duplicates `noxfile.py`, which already owns the
+# suite, and the duplicate drifts: every new test needed an entry in both places, and the
+# `files:` pattern beside it was a second, subtler thing to get wrong. Test selection now
+# lives in pytest and nox alone.
+#
+# The one test hook runs `nox -s quick`, which is the Lean-free part of the suite and takes
+# about a second. The Lean-backed tests are not run here: they need a built checkout
+# (`cd lean && lake exe cache get && lake build`), take minutes, and belong in
+# `nox -s tests` before pushing rather than on every commit.
+#
+# Skippable in an emergency with `SKIP=nox-quick git commit`.
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -21,118 +28,15 @@ repos:
 
   - repo: local
     hooks:
-      - id: nullius-projects
-        name: project identities and ledger history remain stable
-        entry: python3 tests/test_projects.py
+      - id: nox-quick
+        name: Lean-free tests (nox -s quick)
+        # The checkout's own nox first, then PATH. A hook inherits whatever environment the
+        # commit was made from, which for an agent — or for `.venv/bin/prek run` — need not
+        # have the virtualenv on PATH. `tests/test_entrypoints.py` exists because that
+        # assumption failed before.
+        entry: sh -c 'if [ -x .venv/bin/nox ]; then exec .venv/bin/nox -s quick; fi; exec nox -s quick'
         language: system
         pass_filenames: false
-        files: ^(nullius/(projects|ledger|ledger_transfer)\.py|tests/test_projects\.py)$
-
-      - id: nullius-project-history
-        name: ledger links and imports preserve origins
-        entry: python3 tests/test_ledger_projects.py
-        language: system
-        pass_filenames: false
-        files: ^(nullius/(projects|ledger|ledger_transfer)\.py|tests/test_ledger_projects\.py)$
-
-      - id: nullius-project-interfaces
-        name: project-scoped interfaces preserve defaults
-        entry: python3 tests/test_project_interfaces.py
-        language: system
-        pass_filenames: false
-        files: ^(nullius/.*\.py|tests/test_project_interfaces\.py)$
-
-      - id: nullius-project-check
-        name: project targets undergo complete declaration replay
-        entry: python3 tests/test_project_check.py
-        language: system
-        pass_filenames: false
-        files: ^(nullius/.*\.py|scripts/(project_audit|ledger_index)\.lean|lean/Nullius/.*\.lean|tests/test_project_check\.py)$
-
-      - id: nullius-ledger-readonly
-        name: ledger reads do not create or migrate databases
-        entry: python3 tests/test_ledger_readonly.py
-        language: system
-        pass_filenames: false
-        files: ^(nullius/ledger\.py|tests/test_ledger_readonly\.py)$
-
-      - id: nullius-ledger-interfaces
-        name: optional ledger search interfaces remain compatible
-        entry: python3 tests/test_ledger_interfaces.py
-        language: system
-        pass_filenames: false
-        files: ^(nullius/.*\.py|tests/test_ledger_interfaces\.py)$
-
-      - id: nullius-ledger-search
-        name: ledger targets are searchable without implicit builds
-        entry: python3 tests/test_ledger_search.py
-        language: system
-        pass_filenames: false
-        files: ^(nullius/.*\.py|lean/Nullius/LedgerExport\.lean|scripts/ledger_index\.lean|tests/test_ledger_search\.py)$
-
-      # Instant and Lean-free, so it runs on every commit. Catches the failure mode that
-      # tests cannot: prose that still refers to a renamed tool or a superseded revision.
-      - id: nullius-names
-        name: no stale names or version citations
-        entry: python3 tests/check_names.py
-        language: system
-        pass_filenames: false
+        # Prose can go stale as easily as code — `tests/test_names.py` exists because it did —
+        # so this runs on every commit rather than only when Python changes.
         always_run: true
-
-      # Every Lean example in the documentation is executed. Examples rot silently
-      # otherwise: the refutation example in GUIDE.md stopped elaborating and nothing
-      # noticed until it was read again.
-      - id: nullius-docs
-        name: documented Lean examples still verify
-        entry: python3 tests/test_docs.py
-        language: system
-        pass_filenames: false
-        files: >-
-          ^(docs/COOKBOOK\.md
-          |skills/nullius/(SKILL\.md|references/GUIDE\.md)
-          |nullius/.*\.py
-          |lean/.*\.lean
-          |lean/(lakefile\.toml|lean-toolchain|lake-manifest\.json)
-          |tests/test_docs\.py)$
-
-      # The soundness guarantee itself: attacks must still be rejected and honest proofs
-      # still accepted. Only worth running when the verifier or its Lean side changes.
-      - id: nullius-adversarial
-        name: verifier still rejects attacks and accepts proofs
-        entry: python3 tests/test_adversarial.py
-        language: system
-        pass_filenames: false
-        files: >-
-          ^(nullius/.*\.py
-          |lean/.*\.lean
-          |lean/(lakefile\.toml|lean-toolchain|lake-manifest\.json)
-          |tests/test_adversarial\.py)$
-
-      # Shape search must keep reaching Physlib and Cslib, and must keep degrading to the
-      # hosted service when no local Loogle is built. Skips itself if there is no local binary.
-      - id: nullius-search
-        name: local shape search reaches Mathlib, Physlib and Cslib
-        entry: python3 tests/test_search.py
-        language: system
-        pass_filenames: false
-        files: >-
-          ^(nullius/(search|config)\.py
-          |lean/NulliusAll\.lean
-          |lean/lakefile\.toml
-          |scripts/build-loogle\.sh
-          |tests/test_search\.py)$
-
-      # The entry points must work from an agent's stripped environment — no activated
-      # virtualenv, no PATH to lake. That failure is invisible when testing by hand.
-      - id: nullius-entrypoints
-        name: entry points work without an activated virtualenv
-        entry: python3 tests/test_entrypoints.py
-        language: system
-        pass_filenames: false
-        files: >-
-          ^(nullius/config\.py
-          |install\.sh
-          |pyproject\.toml
-          |mcp/copilot-mcp-config\.json
-          |skills/nullius/scripts/nullius
-          |tests/test_entrypoints\.py)$

@@ -127,6 +127,7 @@ class Harness:
         tag: str | None = None,
         *,
         project: str | Path | None = None,
+        pool: SessionPool | None = None,
     ):
         self.config = config or Config.discover()
         if project is not None:
@@ -134,7 +135,12 @@ class Harness:
         self.ledger = Ledger(self.config.ledger_path) if log else None
         if self.ledger is not None and self.config.project_id is not None:
             self.ledger.bind_project(self.config.project_id)
-        self.pool = SessionPool(self.config, size=pool_size)
+        # A borrowed pool outlives this harness. Selecting a project changes the ledger and
+        # the project metadata, not `lean_dir`, `repl_bin` or the prelude, so a pooled session
+        # is the same session whichever project a caller names, and a server can hand its one
+        # warm pool to every request rather than starting a second set of Lean processes.
+        self.owns_pool = pool is None
+        self.pool = pool if pool is not None else SessionPool(self.config, size=pool_size)
         self.tag = tag
         self._lock = threading.Lock()
 
@@ -147,7 +153,8 @@ class Harness:
 
     def close(self) -> None:
         try:
-            self.pool.close()
+            if self.owns_pool:
+                self.pool.close()
         finally:
             S.close_sessions(self.config)
 

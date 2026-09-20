@@ -29,8 +29,9 @@ dependencies = []
 
 [project.optional-dependencies]
 # `prek` runs the commit hooks in `.pre-commit-config.yaml`; `nox` runs the wider sessions in
-# noxfile.py, each in its own environment. Only contributors need either.
-dev = ["prek>=0.2", "nox>=2025.5"]
+# noxfile.py, each in its own environment; `pytest` runs the suite itself. Only contributors
+# need any of them.
+dev = ["prek>=0.2", "nox>=2025.5", "pytest>=8.0"]
 
 [project.scripts]
 nullius = "nullius.cli:main"
@@ -43,6 +44,16 @@ include = ["nullius*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "nullius.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `lean` marks the tests that need a built `lean/` checkout, whether for a Lean session, a
+# `lake build`, or a local Loogle index. They dominate the runtime, so keeping them behind a
+# marker is what makes a Lean-free run possible at all: `nox -s quick` selects `not lean`
+# and finishes in under a second, while `nox -s tests` runs everything.
+markers = [
+    "lean: requires a built lean/ checkout (Lean session, lake build, or local Loogle)",
+]
 
 [tool.ruff]
 # 100 rather than the usual 80. This codebase is unusually comment-heavy on purpose — the

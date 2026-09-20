@@ -273,12 +273,16 @@ Rebuild the recorded versions and rerun the stored source to reproduce a result.
 .venv/bin/nox -s tests
 ```
 
-Use `nox -s fix` to apply formatting. Tests are standalone Python scripts, not pytest tests:
-run them through nox or directly, for example `python3 tests/test_docs.py`.
-The documentation suite runs the cookbook's Lean blocks and the skill guides' proof examples.
+Use `nox -s fix` to apply formatting. The tests are pytest tests: `nox -s quick` runs the
+Lean-free ones in about a second, and `nox -s tests` runs everything, including the
+documentation suite that verifies the cookbook's Lean blocks and the skill guides' proof
+examples. Tests needing a built `lean/` checkout carry the `lean` marker, so
+`pytest -m "not lean"` selects the rest. Arguments reach pytest after `--`, for example
+`nox -s tests -- -k adversarial`.
 
-Commit hooks run the checks selected by `.pre-commit-config.yaml`. Use
-`.venv/bin/prek run --all-files` to run all hooks.
+Commit hooks are deliberately few: file hygiene, plus `nox -s quick`. The Lean-backed tests
+need a built checkout and take minutes, so run `nox -s tests` before pushing rather than on
+every commit. Use `.venv/bin/prek run --all-files` to run all hooks.
 
 ## Related tools
 

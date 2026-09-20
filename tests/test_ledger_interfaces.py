@@ -5,10 +5,12 @@ from __future__ import annotations
 import io
 import json
 import sys
-import unittest
+from collections.abc import Iterator
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -37,10 +39,10 @@ INVALID_SEARCH_OPTIONS = (
 )
 
 
-class LedgerInterfaceTests(unittest.TestCase):
-    def setUp(self) -> None:
+class TestLedgerInterface:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> Iterator[None]:
         self.stack = ExitStack()
-        self.addCleanup(self.stack.close)
         self.cfg = Config(
             lean_dir=Path("lean"),
             repl_bin=Path("unused-repl"),
@@ -75,6 +77,9 @@ class LedgerInterfaceTests(unittest.TestCase):
                 patch(name, side_effect=AssertionError(f"unexpected external operation: {name}"))
             )
 
+        yield
+        self.stack.close()
+
     def mock(self, owner, name, **kwargs) -> Mock:
         return self.stack.enter_context(patch.object(owner, name, **kwargs))
 
@@ -85,7 +90,7 @@ class LedgerInterfaceTests(unittest.TestCase):
                 code = cli.main(list(args))
             except SystemExit as exc:
                 code = exc.code
-        self.assertIsInstance(code, int)
+        assert isinstance(code, int)
         return code, out.getvalue(), err.getvalue()
 
     def mcp_call(self, name: str, args: dict) -> dict:
@@ -121,9 +126,9 @@ class LedgerInterfaceTests(unittest.TestCase):
 
     def test_cli_default_search_does_not_enable_ledger(self) -> None:
         code, out, err = self.cli_call("search", "needle")
-        self.assertEqual(code, 0)
-        self.assertIn("library.result", out)
-        self.assertFalse(err)
+        assert code == 0
+        assert "library.result" in out
+        assert not err
         self.search.assert_called_once_with(
             "needle", limit=8, backend="both", include_ledger=False, refresh_ledger=False
         )
@@ -138,16 +143,16 @@ class LedgerInterfaceTests(unittest.TestCase):
             S.SearchResult("needle", "loogle-ledger", error="refresh required"),
         ]
         response = self.mcp_call("search", {"query": "needle", "include_ledger": True})
-        self.assertTrue(response["isError"])
-        self.assertIn("library.result", response["content"][0]["text"])
-        self.assertIn("refresh required", response["content"][0]["text"])
+        assert response["isError"]
+        assert "library.result" in response["content"][0]["text"]
+        assert "refresh required" in response["content"][0]["text"]
 
     def test_cli_search_flags_and_json(self) -> None:
         code, out, _ = self.cli_call(
             "search", "needle", "-b", "ledger", "--refresh-ledger", "--json"
         )
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out), [self.library.to_dict()])
+        assert code == 0
+        assert json.loads(out) == [self.library.to_dict()]
         self.search.assert_called_with(
             "needle", limit=8, backend="ledger", include_ledger=False, refresh_ledger=True
         )
@@ -162,15 +167,14 @@ class LedgerInterfaceTests(unittest.TestCase):
             S.SearchResult("needle", "loogle-ledger", error="refresh required"),
         ]
         for extra in ((), ("--json",)):
-            with self.subTest(extra=extra):
-                code, out, _ = self.cli_call("search", "needle", "--include-ledger", *extra)
-                self.assertEqual(code, 1)
-                self.assertIn("library.result", out)
-                self.assertIn("refresh required", out)
+            code, out, _ = self.cli_call("search", "needle", "--include-ledger", *extra)
+            assert code == 1
+            assert "library.result" in out
+            assert "refresh required" in out
         self.search.return_value = [S.SearchResult("needle", "loogle", error="not installed")]
-        self.assertEqual(self.cli_call("search", "needle")[0], 0)
+        assert self.cli_call("search", "needle")[0] == 0
         self.search.return_value = [S.SearchResult("needle", "loogle-ledger", error="unreadable")]
-        self.assertEqual(self.cli_call("search", "needle", "-b", "ledger")[0], 1)
+        assert self.cli_call("search", "needle", "-b", "ledger")[0] == 1
 
     def test_cli_search_closes_on_errors(self) -> None:
         for error, expected in (
@@ -178,16 +182,15 @@ class LedgerInterfaceTests(unittest.TestCase):
             (ConfigError("missing config"), 2),
             (KeyboardInterrupt(), 130),
         ):
-            with self.subTest(error=type(error).__name__):
-                self.search.side_effect = error
-                self.close_sessions.reset_mock()
-                code, _, err = self.cli_call("search", "needle")
-                self.assertEqual(code, expected)
-                self.assertNotIn("Traceback", err)
-                self.close_sessions.assert_called_once_with()
+            self.search.side_effect = error
+            self.close_sessions.reset_mock()
+            code, _, err = self.cli_call("search", "needle")
+            assert code == expected
+            assert "Traceback" not in err
+            self.close_sessions.assert_called_once_with()
         self.search.side_effect = RuntimeError("unexpected failure")
         self.close_sessions.reset_mock()
-        with self.assertRaisesRegex(RuntimeError, "unexpected failure"):
+        with pytest.raises(RuntimeError, match="unexpected failure"):
             self.cli_call("search", "needle")
         self.close_sessions.assert_called_once_with()
 
@@ -199,18 +202,17 @@ class LedgerInterfaceTests(unittest.TestCase):
             ("--refresh-ledger",),
             ("--limit", "0"),
         ):
-            with self.subTest(args=args):
-                code, _, err = self.cli_call("search", "needle", *args)
-                self.assertEqual(code, 2)
-                self.assertIn("error:", err)
-                self.assertNotIn("Traceback", err)
+            code, _, err = self.cli_call("search", "needle", *args)
+            assert code == 2
+            assert "error:" in err
+            assert "Traceback" not in err
         for backend in backends:
             backend.assert_not_called()
 
     def test_harness_search_config_and_positional_compatibility(self) -> None:
         h = harness.Harness(config=self.cfg)
         self.harness_ledger.reset_mock()
-        self.assertEqual(h.search("needle", "loogle", 3), [self.library])
+        assert h.search("needle", "loogle", 3) == [self.library]
         self.search.assert_called_with(
             "needle",
             limit=3,
@@ -243,7 +245,7 @@ class LedgerInterfaceTests(unittest.TestCase):
             {"include_ledger": True},
             {"refresh_ledger": True},
         ):
-            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, "log=False"):
+            with pytest.raises(ValueError, match="log=False"):
                 h.search("needle", **kwargs)
         self.search.assert_not_called()
         self.harness_ledger.assert_not_called()
@@ -251,33 +253,32 @@ class LedgerInterfaceTests(unittest.TestCase):
     def test_harness_cleanup_even_when_pool_close_fails(self) -> None:
         h = harness.Harness(config=self.cfg, log=False)
         self.pool.close.side_effect = RuntimeError("pool close failed")
-        with self.assertRaisesRegex(RuntimeError, "pool close failed"):
+        with pytest.raises(RuntimeError, match="pool close failed"):
             h.close()
         self.close_sessions.assert_called_once_with(self.cfg)
 
     def test_mcp_schema_still_has_five_tools(self) -> None:
         tools = {tool["name"]: tool for tool in mcp_server.TOOLS}
-        self.assertEqual(set(tools), {"verify", "statement", "search", "close", "log"})
+        assert set(tools) == {"verify", "statement", "search", "close", "log"}
         props = tools["search"]["inputSchema"]["properties"]
-        self.assertEqual(props["backend"]["enum"], list(S.BACKENDS))
+        assert props["backend"]["enum"] == list(S.BACKENDS)
         for name in ("include_ledger", "refresh_ledger"):
-            self.assertEqual(props[name]["type"], "boolean")
-            self.assertIs(props[name]["default"], False)
-        self.assertEqual(tools["log"]["inputSchema"]["properties"]["id"]["minimum"], 1)
+            assert props[name]["type"] == "boolean"
+            assert props[name]["default"] is False
+        assert tools["log"]["inputSchema"]["properties"]["id"]["minimum"] == 1
 
     def test_mcp_search_routes_flags_and_config_without_ledger_reads(self) -> None:
         for extra in ({}, {"include_ledger": True, "refresh_ledger": True}, {"backend": "ledger"}):
-            with self.subTest(extra=extra):
-                response = self.mcp_call("search", {"query": "needle", **extra})
-                self.assertFalse(response["isError"])
-                self.search.assert_called_with(
-                    "needle",
-                    limit=8,
-                    backend=extra.get("backend", "both"),
-                    include_ledger=extra.get("include_ledger", False),
-                    refresh_ledger=extra.get("refresh_ledger", False),
-                    config=self.cfg,
-                )
+            response = self.mcp_call("search", {"query": "needle", **extra})
+            assert not response["isError"]
+            self.search.assert_called_with(
+                "needle",
+                limit=8,
+                backend=extra.get("backend", "both"),
+                include_ledger=extra.get("include_ledger", False),
+                refresh_ledger=extra.get("refresh_ledger", False),
+                config=self.cfg,
+            )
         self.mcp_ledger.assert_not_called()
         self.mcp_read.assert_not_called()
         self.close_sessions.assert_not_called()
@@ -285,10 +286,9 @@ class LedgerInterfaceTests(unittest.TestCase):
     def test_mcp_invalid_search_options_are_tool_errors(self) -> None:
         backends = self.use_core_search()
         for options in INVALID_SEARCH_OPTIONS:
-            with self.subTest(options=options):
-                response = self.mcp_call("search", {"query": "needle", **options})
-                self.assertTrue(response["isError"])
-                self.assertNotIn("Traceback", response["content"][0]["text"])
+            response = self.mcp_call("search", {"query": "needle", **options})
+            assert response["isError"]
+            assert "Traceback" not in response["content"][0]["text"]
         for backend in backends:
             backend.assert_not_called()
 
@@ -296,9 +296,8 @@ class LedgerInterfaceTests(unittest.TestCase):
         self.stack.enter_context(patch.object(mcp_server, "_config", None))
         self.use_core_search()
         for backend in ("loogle-remote", "leansearch"):
-            with self.subTest(backend=backend):
-                response = self.mcp_call("search", {"query": "needle", "backend": backend})
-                self.assertFalse(response["isError"])
+            response = self.mcp_call("search", {"query": "needle", "backend": backend})
+            assert not response["isError"]
         self.discover.assert_not_called()
         self.mcp_ledger.assert_not_called()
         self.mcp_read.assert_not_called()
@@ -306,15 +305,15 @@ class LedgerInterfaceTests(unittest.TestCase):
 
     def test_cli_readonly_source_retrieval_human_and_json(self) -> None:
         code, out, err = self.cli_call("log", "--id", "7")
-        self.assertEqual(code, 0)
-        self.assertFalse(err)
-        self.assertIn("target: saved", out)
-        self.assertIn(ROW["source"], out)
-        self.assertIn("rejected", out)
+        assert code == 0
+        assert not err
+        assert "target: saved" in out
+        assert ROW["source"] in out
+        assert "rejected" in out
         self.cli_read.assert_called_with(self.cfg.ledger_path, 7)
         code, out, _ = self.cli_call("log", "--id", "7", "--json")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out), ROW)
+        assert code == 0
+        assert json.loads(out) == ROW
         self.cli_ledger.assert_not_called()
 
     def test_cli_rejects_invalid_ids_and_conflicting_options_before_reading(self) -> None:
@@ -331,10 +330,9 @@ class LedgerInterfaceTests(unittest.TestCase):
             )
         ]
         for args in cases:
-            with self.subTest(args=args):
-                code, _, err = self.cli_call("log", *args)
-                self.assertEqual(code, 2)
-                self.assertNotIn("Traceback", err)
+            code, _, err = self.cli_call("log", *args)
+            assert code == 2
+            assert "Traceback" not in err
         self.cli_read.assert_not_called()
         self.cli_ledger.assert_not_called()
         self.discover.assert_not_called()
@@ -342,27 +340,27 @@ class LedgerInterfaceTests(unittest.TestCase):
     def test_cli_readonly_missing_and_database_error(self) -> None:
         self.cli_read.return_value = None
         code, _, err = self.cli_call("log", "--id", "7")
-        self.assertEqual(code, 1)
-        self.assertIn("not found", err)
+        assert code == 1
+        assert "not found" in err
         self.cli_read.side_effect = LedgerReadError("malformed database")
         code, _, err = self.cli_call("log", "--id", "7")
-        self.assertEqual(code, 1)
-        self.assertIn("malformed database", err)
-        self.assertNotIn("Traceback", err)
+        assert code == 1
+        assert "malformed database" in err
+        assert "Traceback" not in err
         self.cli_ledger.assert_not_called()
 
     def test_cli_listing_default_is_unchanged(self) -> None:
         self.cli_ledger.return_value.recent.return_value = [ROW]
         code, out, _ = self.cli_call("log", "--json")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out), [ROW])
+        assert code == 0
+        assert json.loads(out) == [ROW]
         self.cli_ledger.return_value.recent.assert_called_once_with(limit=20, status=None, tag=None)
         self.cli_read.assert_not_called()
 
     def test_mcp_readonly_source_retrieval(self) -> None:
         response = self.mcp_call("log", {"id": 7})
-        self.assertFalse(response["isError"])
-        self.assertEqual(json.loads(response["content"][0]["text"]), ROW)
+        assert not response["isError"]
+        assert json.loads(response["content"][0]["text"]) == ROW
         self.mcp_read.assert_called_once_with(self.cfg.ledger_path, 7)
         self.mcp_ledger.assert_not_called()
 
@@ -379,45 +377,43 @@ class LedgerInterfaceTests(unittest.TestCase):
             )
         ]
         for args in cases:
-            with self.subTest(args=args):
-                response = self.mcp_call("log", args)
-                self.assertTrue(response["isError"])
-                self.assertNotIn("Traceback", response["content"][0]["text"])
+            response = self.mcp_call("log", args)
+            assert response["isError"]
+            assert "Traceback" not in response["content"][0]["text"]
         self.mcp_read.assert_not_called()
         self.mcp_ledger.assert_not_called()
 
     def test_mcp_missing_rows_and_database_errors_are_explicit(self) -> None:
         self.mcp_read.return_value = None
         response = self.mcp_call("log", {"id": 7})
-        self.assertTrue(response["isError"])
-        self.assertIn("not found", response["content"][0]["text"])
+        assert response["isError"]
+        assert "not found" in response["content"][0]["text"]
         self.mcp_read.side_effect = LedgerReadError("malformed database")
         response = self.mcp_call("log", {"id": 7})
-        self.assertTrue(response["isError"])
-        self.assertIn("malformed database", response["content"][0]["text"])
+        assert response["isError"]
+        assert "malformed database" in response["content"][0]["text"]
         self.mcp_ledger.assert_not_called()
 
     def test_mcp_listing_is_unchanged(self) -> None:
         self.mcp_ledger.return_value.recent.return_value = [ROW]
         response = self.mcp_call("log", {})
-        self.assertFalse(response["isError"])
-        self.assertIn("#7", response["content"][0]["text"])
+        assert not response["isError"]
+        assert "#7" in response["content"][0]["text"]
         self.mcp_ledger.return_value.recent.assert_called_once_with(limit=10, status=None, tag=None)
         self.mcp_read.assert_not_called()
 
     def test_http_search_routes_flags(self) -> None:
         for extra in ({}, {"include_ledger": True, "refresh_ledger": True}, {"backend": "ledger"}):
-            with self.subTest(extra=extra):
-                code, out = self.http_call("/search", {"query": "needle", **extra})
-                self.assertEqual(code, 200)
-                self.assertEqual(out, {"results": [self.library.to_dict()]})
-                self.http_harness.search.assert_called_with(
-                    "needle",
-                    limit=8,
-                    backend=extra.get("backend", "both"),
-                    include_ledger=extra.get("include_ledger", False),
-                    refresh_ledger=extra.get("refresh_ledger", False),
-                )
+            code, out = self.http_call("/search", {"query": "needle", **extra})
+            assert code == 200
+            assert out == {"results": [self.library.to_dict()]}
+            self.http_harness.search.assert_called_with(
+                "needle",
+                limit=8,
+                backend=extra.get("backend", "both"),
+                include_ledger=extra.get("include_ledger", False),
+                refresh_ledger=extra.get("refresh_ledger", False),
+            )
         self.http_read.assert_not_called()
 
     def test_http_search_core_validation_and_config_routing(self) -> None:
@@ -425,60 +421,54 @@ class LedgerInterfaceTests(unittest.TestCase):
         self.stack.enter_context(patch.object(http_server, "_harness", h))
         backends = self.use_core_search()
         code, _ = self.http_call("/search", {"query": "needle"})
-        self.assertEqual(code, 200)
+        assert code == 200
         backends[0].assert_called_once_with("needle", limit=8, timeout=20.0, config=self.cfg)
         backends[3].assert_not_called()
         for options in (*INVALID_SEARCH_OPTIONS, {"limit": None}, {"limit": "bad"}):
-            with self.subTest(options=options):
-                code, out = self.http_call("/search", {"query": "needle", **options})
-                self.assertEqual(code, 400)
-                self.assertIn("error", out)
+            code, out = self.http_call("/search", {"query": "needle", **options})
+            assert code == 400
+            assert "error" in out
         self.http_read.assert_not_called()
 
     def test_http_no_log_prevents_explicit_access_and_reads(self) -> None:
         h = harness.Harness(config=self.cfg, log=False)
         self.stack.enter_context(patch.object(http_server, "_harness", h))
-        self.assertEqual(self.http_call("/search", {"query": "needle"})[0], 200)
+        assert self.http_call("/search", {"query": "needle"})[0] == 200
         self.search.reset_mock()
         for extra in ({"backend": "ledger"}, {"include_ledger": True}, {"refresh_ledger": True}):
-            with self.subTest(extra=extra):
-                code, out = self.http_call("/search", {"query": "needle", **extra})
-                self.assertEqual(code, 400)
-                self.assertIn("log=False", out["error"])
+            code, out = self.http_call("/search", {"query": "needle", **extra})
+            assert code == 400
+            assert "log=False" in out["error"]
         code, out = self.http_call("/ledger/7", method="GET")
-        self.assertEqual(code, 400)
-        self.assertIn("log=False", out["error"])
-        self.assertEqual(
-            self.http_call("/ledger", method="GET"), (200, {"rows": [], "stats": None})
-        )
+        assert code == 400
+        assert "log=False" in out["error"]
+        assert self.http_call("/ledger", method="GET") == (200, {"rows": [], "stats": None})
         self.search.assert_not_called()
         self.http_read.assert_not_called()
         self.harness_ledger.assert_not_called()
 
     def test_http_retrieval_and_explicit_database_errors(self) -> None:
-        self.assertEqual(self.http_call("/ledger/7", method="GET"), (200, ROW))
+        assert self.http_call("/ledger/7", method="GET") == (200, ROW)
         self.http_read.assert_called_once_with(self.cfg.ledger_path, 7)
         self.http_read.return_value = None
-        self.assertEqual(self.http_call("/ledger/7", method="GET")[0], 404)
+        assert self.http_call("/ledger/7", method="GET")[0] == 404
         self.http_read.side_effect = LedgerReadError("unreadable database")
         code, out = self.http_call("/ledger/7", method="GET")
-        self.assertEqual(code, 500)
-        self.assertIn("unreadable database", out["error"])
+        assert code == 500
+        assert "unreadable database" in out["error"]
         self.http_harness.ledger.get.assert_not_called()
 
     def test_http_invalid_ids_and_request_body(self) -> None:
         for row_id in ("", "0", "-1", "+1", "abc", "1.5", "7/", "７"):
-            with self.subTest(row_id=row_id):
-                self.assertEqual(self.http_call(f"/ledger/{row_id}", method="GET")[0], 400)
+            assert self.http_call(f"/ledger/{row_id}", method="GET")[0] == 400
         self.http_read.assert_not_called()
         for body in ([], True, "not an object"):
-            with self.subTest(body=body):
-                self.assertEqual(self.http_call("/search", body)[0], 400)
+            assert self.http_call("/search", body)[0] == 400
         self.http_harness.search.assert_not_called()
 
     def test_mcp_cleanup_does_not_create_a_session_or_config(self) -> None:
         self.stack.enter_context(patch.object(mcp_server, "_config", None))
-        self.assertEqual(mcp_server.serve(io.StringIO(""), io.StringIO()), 0)
+        assert mcp_server.serve(io.StringIO(""), io.StringIO()) == 0
         self.close_sessions.assert_called_once_with(None)
         self.discover.assert_not_called()
         self.local_session.assert_not_called()
@@ -489,7 +479,7 @@ class LedgerInterfaceTests(unittest.TestCase):
         self.stack.enter_context(patch.object(mcp_server, "_session", session))
         out = Mock()
         out.write.side_effect = OSError("output closed")
-        with self.assertRaisesRegex(OSError, "output closed"):
+        with pytest.raises(OSError, match="output closed"):
             mcp_server.serve(io.StringIO('{"id":1,"method":"ping"}\n'), out)
         session.close.assert_called_once_with()
         self.close_sessions.assert_called_once_with(self.cfg)
@@ -498,15 +488,6 @@ class LedgerInterfaceTests(unittest.TestCase):
         session = Mock()
         session.close.side_effect = RuntimeError("session close failed")
         self.stack.enter_context(patch.object(mcp_server, "_session", session))
-        with self.assertRaisesRegex(RuntimeError, "session close failed"):
+        with pytest.raises(RuntimeError, match="session close failed"):
             mcp_server.serve(io.StringIO(""), io.StringIO())
         self.close_sessions.assert_called_once_with(self.cfg)
-
-
-def main() -> int:
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(LedgerInterfaceTests)
-    return int(not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful())
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -21,9 +21,14 @@ from __future__ import annotations
 
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+pytestmark = pytest.mark.lean
 
 from nullius.config import ConfigError  # noqa: E402
 from nullius.repl import Session  # noqa: E402
@@ -100,45 +105,34 @@ def heredoc_cases() -> list[Case]:
     return out
 
 
-def main() -> int:
-    cases = cookbook_cases() + heredoc_cases()
-    print(f"{len(cases)} documented example(s)\n")
-
+@pytest.fixture(scope="module")
+def verifier() -> Iterator[Verifier]:
     session = Session()
     try:
         session.start()
     except ConfigError as exc:
         # Reached from a commit hook on a machine where the verifier is not built. Say so
         # plainly rather than failing with a traceback about a missing binary.
-        print(f"cannot check the examples: {exc}")
-        return 1
-    vf = Verifier(session)
-    failures: list[str] = []
-
-    for doc, line, expect, src in cases:
-        nontrivial = expect.endswith("-nontrivial")
-        want_ok = expect.startswith("verified")
-        v = vf.verify(src, require_nontrivial=nontrivial)
-        ok = v.verified == want_ok
-        caught = [c.name for c in v.checks if not c.passed]
-        name = v.target or "?"
-        print(
-            f"  {'ok  ' if ok else 'FAIL'}  {doc}:{line:<4} {expect:20s} "
-            f"{name:32s} {v.status}" + (f" caught_by={caught}" if caught else "")
-        )
-        if not ok:
-            failures.append(f"{doc}:{line} expected {expect}, got {v.status}\n{v.render()}")
-
+        pytest.fail(f"cannot check the examples: {exc}")
+    yield Verifier(session)
     session.close()
-    print()
-    if failures:
-        print(f"FAILED ({len(failures)}):")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print("Every documented example still behaves as documented.")
-    return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+CASES = cookbook_cases() + heredoc_cases()
+
+
+@pytest.mark.parametrize(
+    ("doc", "line", "expect", "source"),
+    CASES,
+    ids=[f"{doc}:{line}:{expect}" for doc, line, expect, _ in CASES],
+)
+def test_documented_example_behaves_as_documented(
+    verifier: Verifier, doc: str, line: int, expect: str, source: str
+) -> None:
+    verdict = verifier.verify(source, require_nontrivial=expect.endswith("-nontrivial"))
+    want_ok = expect.startswith("verified")
+    caught = [check.name for check in verdict.checks if not check.passed]
+    assert verdict.verified == want_ok, (
+        f"{doc}:{line} expected {expect}, got {verdict.status} "
+        f"caught_by={caught}\n{verdict.render()}"
+    )

@@ -9,9 +9,14 @@ line of defense rather than a formality.
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+pytestmark = pytest.mark.lean
 
 from nullius import guard as G  # noqa: E402
 from nullius import verify as V  # noqa: E402
@@ -179,77 +184,54 @@ GENUINE: list[tuple[str, str, str]] = [
 ]
 
 
-def main() -> int:
+@pytest.fixture(scope="module")
+def verifier() -> Iterator[V.Verifier]:
     session = Session()
     try:
         session.start()
     except ConfigError as exc:
         # Reached from a commit hook on a machine where the verifier is not built.
-        print(f"cannot run the suite: {exc}")
-        return 1
-    verifier = V.Verifier(session)
-    print(f"session ready in {session.startup_seconds:.2f}s\n")
-
-    real_guard = G.check
-    failures: list[str] = []
-
-    def bypass(src, extra=()):
-        return G.GuardResult(ok=True, violations=[])
-
-    print("=" * 74)
-    print("ATTACKS, guard DISABLED - the Lean audit must reject these unaided")
-    print("=" * 74)
-    V.guard.check = bypass
-    try:
-        for name, src, target in ATTACKS:
-            if name in GUARD_ONLY:
-                continue
-            v = verifier.verify(src, target=target, require_nontrivial=True)
-            caught = [c.name for c in v.checks if not c.passed]
-            ok = not v.verified
-            print(f"  {'ok  ' if ok else 'LEAK'}  {name:22s} {v.status:9s} caught_by={caught}")
-            if not ok:
-                failures.append(f"attack {name} was VERIFIED with guard disabled")
-    finally:
-        V.guard.check = real_guard
-
-    print()
-    print("=" * 74)
-    print("ATTACKS, guard ENABLED - caught earlier and more cheaply")
-    print("=" * 74)
-    for name, src, target in ATTACKS:
-        v = verifier.verify(src, target=target, require_nontrivial=True)
-        caught = [c.name for c in v.checks if not c.passed]
-        ok = not v.verified
-        print(f"  {'ok  ' if ok else 'LEAK'}  {name:22s} {v.status:9s} caught_by={caught}")
-        if not ok:
-            failures.append(f"attack {name} was VERIFIED with guard enabled")
-
-    print()
-    print("=" * 74)
-    print("GENUINE PROOFS - must be accepted; a verifier that rejects everything is useless")
-    print("=" * 74)
-    for name, src, target in GENUINE:
-        v = verifier.verify(src, target=target)
-        ok = v.verified
-        print(
-            f"  {'ok  ' if ok else 'FAIL'}  {name:22s} {v.status:9s} "
-            f"axioms={v.axioms} {v.elapsed:.2f}s"
-        )
-        if not ok:
-            failures.append(f"genuine proof {name} rejected:\n{v.render()}")
-
+        pytest.fail(f"cannot run the suite: {exc}")
+    yield V.Verifier(session)
     session.close()
 
-    print()
-    if failures:
-        print(f"FAILED ({len(failures)}):")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print("All checks behaved correctly.")
-    return 0
+
+@pytest.fixture
+def guard_disabled() -> Iterator[None]:
+    """Prove the Lean audit rejects an attack unaided, with the source guard out of the way."""
+    real = V.guard.check
+    V.guard.check = lambda src, extra=(): G.GuardResult(ok=True, violations=[])
+    try:
+        yield
+    finally:
+        V.guard.check = real
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+UNAIDED = [case for case in ATTACKS if case[0] not in GUARD_ONLY]
+
+
+@pytest.mark.parametrize(("name", "source", "target"), UNAIDED, ids=[c[0] for c in UNAIDED])
+def test_attack_is_rejected_with_the_guard_disabled(
+    verifier: V.Verifier, guard_disabled: None, name: str, source: str, target: str
+) -> None:
+    verdict = verifier.verify(source, target=target, require_nontrivial=True)
+    caught = [check.name for check in verdict.checks if not check.passed]
+    assert not verdict.verified, f"attack {name} was VERIFIED with the guard disabled {caught}"
+
+
+@pytest.mark.parametrize(("name", "source", "target"), ATTACKS, ids=[c[0] for c in ATTACKS])
+def test_attack_is_rejected_with_the_guard_enabled(
+    verifier: V.Verifier, name: str, source: str, target: str
+) -> None:
+    verdict = verifier.verify(source, target=target, require_nontrivial=True)
+    caught = [check.name for check in verdict.checks if not check.passed]
+    assert not verdict.verified, f"attack {name} was VERIFIED with the guard enabled {caught}"
+
+
+@pytest.mark.parametrize(("name", "source", "target"), GENUINE, ids=[c[0] for c in GENUINE])
+def test_genuine_proof_is_accepted(
+    verifier: V.Verifier, name: str, source: str, target: str
+) -> None:
+    """A verifier that rejects everything is useless, so the honest cases matter as much."""
+    verdict = verifier.verify(source, target=target)
+    assert verdict.verified, f"genuine proof {name} rejected:\n{verdict.render()}"

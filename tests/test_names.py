@@ -15,6 +15,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # Literal strings that must never reappear, with the reason they were retired.
@@ -38,13 +40,14 @@ FORBIDDEN = {
         "Cslib is imported as well; naming two of the three misleads"
     ),
     "test_cookbook.py": "renamed to tests/test_docs.py, which also checks the skill docs",
+    "check_names.py": "renamed to tests/test_names.py, so pytest discovers it",
 }
 
 # Where a documented revision is expected to match what lake actually pins.
 REV_CITATION = re.compile(r"\b(mathlib|physlib|cslib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40})\b", re.I)
 LEAN_VERSION = re.compile(r"\b(?:leanprover/lean4:)?v?(4\.\d+\.\d+)\b")
 
-SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/check_names.py")
+SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/test_names.py")
 
 # Deliberate uses of a retired name: (path, string). Migration code has to name the thing it
 # is migrating away from.
@@ -75,44 +78,60 @@ def pinned() -> tuple[str, dict[str, str]]:
     return (version.group(1) if version else ""), revs
 
 
-def main() -> int:
-    version, revs = pinned()
-    problems: list[str] = []
-
+@pytest.fixture(scope="module")
+def sources() -> list[tuple[Path, str]]:
+    """Every tracked file that can be read as text, with its path relative to the root."""
+    out = []
     for path in tracked_files():
         try:
-            text = path.read_text()
+            out.append((path.relative_to(ROOT), path.read_text()))
         except (UnicodeDecodeError, FileNotFoundError):
             continue
-        rel = path.relative_to(ROOT)
-
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            for bad, why in FORBIDDEN.items():
-                if bad in line and (str(rel), bad) not in ALLOWED:
-                    problems.append(f"{rel}:{lineno}: stale name {bad!r} — {why}")
-
-            # A cited Lean version must be the one that is pinned.
-            for found in LEAN_VERSION.findall(line):
-                if version and found != version:
-                    problems.append(
-                        f"{rel}:{lineno}: cites Lean {found}, but lean-toolchain pins {version}"
-                    )
-
-            # A cited Mathlib/Physlib/Cslib revision must be a prefix of the pinned one.
-            for pkg, rev in REV_CITATION.findall(line):
-                want = revs.get(pkg.lower(), "")
-                if want and not want.startswith(rev.lower()):
-                    problems.append(f"{rel}:{lineno}: cites {pkg} {rev}, but lake pins {want[:12]}")
-
-    if problems:
-        print(f"stale references ({len(problems)}):")
-        for p in problems:
-            print("  -", p)
-        print("\nUpdate them, or add a deliberate exception in tests/check_names.py.")
-        return 1
-    print("No stale names or version citations.")
-    return 0
+    return out
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def report(problems: list[str]) -> None:
+    assert not problems, (
+        "stale references ({}):\n  - {}\n\nUpdate them, or add a "
+        "deliberate exception in tests/test_names.py.".format(
+            len(problems), "\n  - ".join(problems)
+        )
+    )
+
+
+def test_no_retired_names_are_cited(sources: list[tuple[Path, str]]) -> None:
+    problems = [
+        f"{rel}:{lineno}: stale name {bad!r} — {why}"
+        for rel, text in sources
+        for lineno, line in enumerate(text.splitlines(), start=1)
+        for bad, why in FORBIDDEN.items()
+        if bad in line and (str(rel), bad) not in ALLOWED
+    ]
+    report(problems)
+
+
+def test_cited_lean_version_is_the_pinned_one(sources: list[tuple[Path, str]]) -> None:
+    version, _ = pinned()
+    if not version:
+        pytest.skip("lean/lean-toolchain names no version to compare against")
+    problems = [
+        f"{rel}:{lineno}: cites Lean {found}, but lean-toolchain pins {version}"
+        for rel, text in sources
+        for lineno, line in enumerate(text.splitlines(), start=1)
+        for found in LEAN_VERSION.findall(line)
+        if found != version
+    ]
+    report(problems)
+
+
+def test_cited_library_revisions_are_the_pinned_ones(sources: list[tuple[Path, str]]) -> None:
+    """A cited Mathlib, Physlib or Cslib revision must be a prefix of the pinned one."""
+    _, revs = pinned()
+    problems = [
+        f"{rel}:{lineno}: cites {pkg} {rev}, but lake pins {revs[pkg.lower()][:12]}"
+        for rel, text in sources
+        for lineno, line in enumerate(text.splitlines(), start=1)
+        for pkg, rev in REV_CITATION.findall(line)
+        if revs.get(pkg.lower()) and not revs[pkg.lower()].startswith(rev.lower())
+    ]
+    report(problems)

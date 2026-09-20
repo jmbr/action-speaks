@@ -9,11 +9,11 @@ assumed, because both fail quietly:
   `site-packages`, where it then looks for `lean/` beside the copy and finds nothing. Every
   session that imports the package therefore uses `-e`.
 
-* **The tests are not pytest.** Each is a standalone script with a `main()` returning an exit
-  code, because they double as the commit hooks in `.pre-commit-config.yaml` and have to run
-  with no test runner present. Pointing pytest at `tests/` collects **zero** tests and exits
-  0 — a green run that checked nothing, which is precisely the failure this repository exists
-  to argue against. They are invoked directly instead.
+* **Lean dominates the runtime.** The tests that need a built `lean/` checkout — a Lean
+  session, a `lake build`, or a local Loogle index — carry the `lean` marker declared in
+  pyproject.toml. `quick` deselects them and finishes in about a second; `tests` runs
+  everything and takes minutes. Marking them is what makes that split possible, so a new
+  test that starts Lean needs the marker too, or `quick` stops being quick.
 
 `lint`, `format` and `types` need neither Lean nor a built tree, so they are the ones worth
 running in a loop. `tests` needs a built checkout; see "Setup from scratch" in the README.
@@ -21,14 +21,12 @@ running in a loop. `tests` needs a built checkout; see "Setup from scratch" in t
     nox                      # lint, format, types, tests
     nox -s lint format       # seconds
     nox -s fix               # apply what `format` asks for
-    nox -s quick             # the Lean-free test alone, ~0.1 s
+    nox -s quick             # the Lean-free tests alone, ~1 s
     nox -s tests             # minutes, and needs lean/ built
+    nox -s tests -- -k ledger  # arguments after `--` reach pytest
 """
 
-from pathlib import Path
-
 import nox
-import nox.command
 
 nox.options.sessions = ["lint", "format", "types", "tests"]
 nox.options.reuse_existing_virtualenvs = True
@@ -36,24 +34,6 @@ nox.options.reuse_existing_virtualenvs = True
 # Everything of ours that is Python. `examples/` is included because it is documentation
 # people copy from, and this file because a linter that exempts itself is a poor advertisement.
 SOURCES = ["nullius", "tests", "examples", "noxfile.py"]
-
-# Cheapest first, so a broken environment surfaces before minutes go into Lean. Only
-# `check_names` is Lean-free; the others need a built checkout, and each skips itself
-# gracefully when an optional piece (Loogle, an installed entry point) is absent.
-TEST_SCRIPTS = [
-    "tests/check_names.py",
-    "tests/test_projects.py",
-    "tests/test_ledger_projects.py",
-    "tests/test_project_interfaces.py",
-    "tests/test_project_check.py",
-    "tests/test_ledger_readonly.py",
-    "tests/test_ledger_interfaces.py",
-    "tests/test_ledger_search.py",
-    "tests/test_entrypoints.py",
-    "tests/test_search.py",
-    "tests/test_adversarial.py",
-    "tests/test_docs.py",
-]
 
 
 @nox.session
@@ -97,34 +77,16 @@ def mypy(session):
 
 @nox.session
 def quick(session):
-    """The Lean-free check alone, for when only prose or naming has changed."""
-    session.install("-e", ".")
-    session.run("python", "tests/check_names.py")
+    """Everything that needs no Lean, for when only prose or Python has changed."""
+    session.install("-e", ".", "pytest")
+    session.run("pytest", "-m", "not lean", *session.posargs)
 
 
 @nox.session
 def tests(session):
     """The real suite. Requires `lean/` to be built — see the README.
 
-    Every script runs even when an earlier one fails, so a single failure cannot hide the
-    rest; the session then fails with the full list. That matters more here than usual,
-    because these checks are deliberately independent of each other.
+    Arguments after `--` are passed through, so `nox -s tests -- -x -k adversarial` works.
     """
-    listed = {Path(s).name for s in TEST_SCRIPTS}
-    present = {p.name for p in Path("tests").glob("*.py")}
-    if missing := present - listed:
-        session.error(
-            f"not listed in TEST_SCRIPTS, so never run: {', '.join(sorted(missing))}. "
-            "Add them there (and as a hook in .pre-commit-config.yaml)."
-        )
-
-    session.install("-e", ".")
-    failures = []
-    for script in TEST_SCRIPTS:
-        session.log(f"--- {script}")
-        try:
-            session.run("python", script)
-        except nox.command.CommandFailed:
-            failures.append(script)
-    if failures:
-        session.error(f"{len(failures)} failed: {', '.join(failures)}")
+    session.install("-e", ".", "pytest")
+    session.run("pytest", *session.posargs)

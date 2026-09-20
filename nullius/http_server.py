@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterator
@@ -38,6 +39,12 @@ from .ledger import LedgerReadError, read_ledger_row
 from .ledger_transfer import read_entry_reference, read_project_rows
 
 _harness: Harness | None = None
+
+# One harness per selected project, reusing the shared pool. A `Harness` holds no connection
+# of its own — `Ledger` opens one per operation — so reusing it across request threads costs
+# nothing and saves reopening the project's ledger on every call.
+_project_harnesses: dict[str | None, Harness] = {}
+_project_lock = threading.Lock()
 
 MAX_BODY = 4 * 1024 * 1024
 
@@ -73,14 +80,22 @@ def _request_harness(selector: str | None) -> Iterator[Harness]:
     cfg = _request_config(selector)
     if selector is None:
         yield _harness
-    else:
-        with Harness(
-            config=cfg,
-            pool_size=_harness.pool.size,
-            log=_harness.ledger is not None,
-            tag=_harness.tag,
-        ) as selected:
-            yield selected
+        return
+    # Borrow the one warm pool rather than starting a second set of Lean sessions per
+    # request: selecting a project swaps the ledger and the project metadata, and leaves the
+    # verifier tree alone. Building a pool here instead would put no ceiling on the number of
+    # live Lean processes, since each request would bring its own.
+    with _project_lock:
+        selected = _project_harnesses.get(cfg.project_id)
+        if selected is None:
+            selected = Harness(
+                config=cfg,
+                pool=_harness.pool,
+                log=_harness.ledger is not None,
+                tag=_harness.tag,
+            )
+            _project_harnesses[cfg.project_id] = selected
+    yield selected
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -330,6 +345,10 @@ def main(argv: list[str] | None = None) -> int:
         pass
     finally:
         server.shutdown()
+        # Project harnesses borrow the shared pool, so closing them only releases their own
+        # search sessions; the pool itself goes with the harness that owns it.
+        for selected in _project_harnesses.values():
+            selected.close()
         _harness.close()
     return 0
 
