@@ -7,6 +7,7 @@
     nullius close 'GOAL' -b '(n : Nat)' ask Lean which lemma closes a goal
     nullius log                         show recent verifications
     nullius project register PATH       register a project (execution needs --trust)
+    nullius serve                       run the session daemon for this checkout
 
 Subcommand names match the MCP tool names exactly, so a workflow written against one
 interface transfers unchanged to the other.
@@ -21,6 +22,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import daemon as D
+from . import http_server
 from . import search as S
 from .config import Config, ConfigError
 from .harness import (
@@ -34,13 +37,51 @@ from .ledger_transfer import read_entry_reference, read_project_rows, transfer_e
 from .project_check import verify_project
 from .projects import list_projects, register_project, rename_project, resolve_project
 from .repl import ReplError, Session
-from .verify import Verifier
+from .verify import Verdict, Verifier
 
 
 def _session(cfg: Config) -> Session:
     s = Session(cfg)
     s.start()
     return s
+
+
+def _daemon(args: argparse.Namespace, cfg: Config) -> "D.Address | None":
+    """The daemon to use for this command, or None to do the work in this process."""
+    if getattr(args, "no_daemon", False):
+        return None
+    return D.available(cfg)
+
+
+def _verify(cfg: Config, request: dict[str, Any], args: argparse.Namespace) -> Verdict:
+    """Verify through the daemon when one is listening, and in process otherwise.
+
+    The daemon holds warm Lean sessions, so this is the difference between seconds and
+    milliseconds per invocation. It does the checking only: the ledger belongs to whoever
+    ran the command, which is why `nullius serve` does not write to one.
+    """
+    addr = _daemon(args, cfg)
+    if addr is not None:
+        try:
+            reply = D.call(
+                "/verify", request, address=addr, timeout=(request.get("timeout") or 600.0) + 60
+            )
+            return Verdict.from_dict(reply)
+        except D.DaemonUnreachable as exc:
+            # Stopped between the probe and the call: redo the work here rather than fail.
+            print(f"daemon unavailable ({exc}); verifying in this process", file=sys.stderr)
+    s = _session(cfg)
+    try:
+        return Verifier(s).verify(
+            request["source"],
+            target=request.get("target"),
+            claim=request.get("claim"),
+            require_nontrivial=bool(request.get("require_nontrivial")),
+            check_vacuity=bool(request.get("check_vacuity", True)),
+            timeout=request.get("timeout"),
+        )
+    finally:
+        s.close()
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -58,6 +99,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         print("loogle       : not built (shape search uses the hosted service)")
     print(f"ledger       : {cfg.ledger_path}")
+    try:
+        addr = D.address(cfg)
+        running = D.connectable(addr.path)
+        print(f"daemon       : {'listening on' if running else 'not running;'} {addr.path}")
+        if addr.warning:
+            print(f"               {addr.warning}")
+    except D.DaemonError as exc:
+        print(f"daemon       : unavailable ({exc})")
     try:
         cfg.validate()
     except ConfigError as exc:
@@ -142,18 +191,17 @@ def cmd_verify(args: argparse.Namespace) -> int:
             timeout=args.timeout,
         )
     else:
-        s = _session(cfg)
-        try:
-            verdict = Verifier(s).verify(
-                src,
-                target=args.target,
-                claim=args.claim,
-                require_nontrivial=args.require_nontrivial,
-                check_vacuity=not args.no_vacuity,
-                timeout=args.timeout,
-            )
-        finally:
-            s.close()
+        request = {
+            "source": src,
+            "target": args.target,
+            "claim": args.claim,
+            "require_nontrivial": args.require_nontrivial,
+            "check_vacuity": not args.no_vacuity,
+            "timeout": args.timeout,
+        }
+        if project is not None:
+            request["project"] = project
+        verdict = _verify(cfg, request, args)
 
     if ledger is not None:
         if module is not None:
@@ -185,9 +233,21 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_statement(args: argparse.Namespace) -> int:
     cfg = Config.discover()
-    s = _session(cfg)
-    res = Verifier(s).check_statement(args.statement, timeout=args.timeout)
-    s.close()
+    addr = _daemon(args, cfg)
+    res = None
+    if addr is not None:
+        try:
+            res = D.call(
+                "/statement",
+                {"statement": args.statement, "timeout": args.timeout},
+                address=addr,
+            )
+        except D.DaemonUnreachable as exc:
+            print(f"daemon unavailable ({exc}); checking in this process", file=sys.stderr)
+    if res is None:
+        s = _session(cfg)
+        res = Verifier(s).check_statement(args.statement, timeout=args.timeout)
+        s.close()
     hits = []
     if res.get("ok"):
         hits = Ledger(cfg.ledger_path).recall(
@@ -256,9 +316,29 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 def cmd_close(args: argparse.Namespace) -> int:
     cfg = Config.discover()
-    s = _session(cfg)
-    res = S.local_search(s, args.goal, binders=args.binders, tactics=tuple(args.tactics.split(",")))
-    s.close()
+    addr = _daemon(args, cfg)
+    res = None
+    if addr is not None:
+        try:
+            res = S.SearchResult.from_dict(
+                D.call(
+                    "/find_proof",
+                    {
+                        "goal": args.goal,
+                        "binders": args.binders,
+                        "tactics": args.tactics.split(","),
+                    },
+                    address=addr,
+                )
+            )
+        except D.DaemonUnreachable as exc:
+            print(f"daemon unavailable ({exc}); searching in this process", file=sys.stderr)
+    if res is None:
+        s = _session(cfg)
+        res = S.local_search(
+            s, args.goal, binders=args.binders, tactics=tuple(args.tactics.split(","))
+        )
+        s.close()
     print(json.dumps(res.to_dict(), indent=2, ensure_ascii=False) if args.json else res.render())
     return 0 if res.hits else 1
 
@@ -401,6 +481,48 @@ def cmd_project(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args) -> int:
+    """Run the daemon, or write the service files that run it for you."""
+    cfg = Config.discover()
+    try:
+        addr = D.address(cfg) if not args.socket else D.Address(Path(args.socket))
+    except D.DaemonError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.install or args.print_units:
+        files, commands = D.install_instructions(cfg)
+        if not files:
+            print(commands)
+            return 0
+        for path, body in files.items():
+            if args.print_units:
+                print(f"# {path}\n{body}")
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body)
+            print(f"wrote {path}")
+        if not args.print_units:
+            print(f"\nEnable it with:\n\n{commands}")
+        return 0
+
+    if addr.warning:
+        print(f"warning: {addr.warning}", file=sys.stderr)
+    # Under socket activation systemd has already bound and listened on this path, so a
+    # connection succeeds and the probe below would mistake systemd for a rival daemon,
+    # exit 1, and — with Restart=on-failure — loop. An inherited descriptor settles it.
+    activated = D.inherited_socket() is not None
+    if not activated and D.connectable(addr.path):
+        print(f"a daemon is already listening on {addr.path}", file=sys.stderr)
+        return 1
+    # No ledger: the daemon supplies warm Lean sessions, and the caller records the verdict
+    # into its own ledger with its own tag and project. Two writers would double-count.
+    argv = ["--socket", str(addr.path), "--pool", str(args.pool), "--no-log"]
+    if args.no_warm:
+        argv.append("--no-warm")
+    return http_server.main(argv)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="nullius", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -417,6 +539,9 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--build", action="store_true", help="explicitly build the selected module")
     v.add_argument("--derived-from", metavar="UUID:ID", help="prior entry in project history")
     v.add_argument("-t", "--target", help="declaration to audit (default: last theorem)")
+    v.add_argument(
+        "--no-daemon", action="store_true", help="verify in this process, not via the daemon"
+    )
     v.add_argument("-c", "--claim", help="the informal claim this proof is meant to support")
     v.add_argument(
         "--require-nontrivial",
@@ -434,6 +559,9 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("statement", help="e.g. '(n : Nat) (h : n > 5) : n * n > 25'")
     st.add_argument("--timeout", type=float, default=None)
     st.add_argument("--json", action="store_true")
+    st.add_argument(
+        "--no-daemon", action="store_true", help="work in this process, not via the daemon"
+    )
     st.set_defaults(func=cmd_statement)
 
     se = sub.add_parser("search", help="find Mathlib lemmas")
@@ -461,6 +589,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("-b", "--binders", default="", help="e.g. '(n : Nat) (h : 0 < n)'")
     g.add_argument("--tactics", default="exact?,apply?")
     g.add_argument("--json", action="store_true")
+    g.add_argument(
+        "--no-daemon", action="store_true", help="work in this process, not via the daemon"
+    )
     g.set_defaults(func=cmd_close)
 
     lg = sub.add_parser("log", help="show recent verifications")
@@ -478,6 +609,18 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--stats", action="store_true")
     lg.add_argument("--json", action="store_true")
     lg.set_defaults(func=cmd_log)
+
+    sv = sub.add_parser("serve", help="run the session daemon for this checkout")
+    sv.add_argument("--socket", help="listen here instead of the resolved runtime directory")
+    sv.add_argument("--pool", type=int, default=2, help="concurrent Lean sessions")
+    sv.add_argument("--no-warm", action="store_true", help="start sessions lazily")
+    sv.add_argument(
+        "--install", action="store_true", help="write the service files for this platform"
+    )
+    sv.add_argument(
+        "--print-units", action="store_true", help="show those files without writing them"
+    )
+    sv.set_defaults(func=cmd_serve)
 
     pr = sub.add_parser("project", help="register projects and associate ledger history")
     pr.add_argument("--json", action="store_true", help="emit JSON")
@@ -514,6 +657,9 @@ def main(argv: list[str] | None = None) -> int:
         return int(args.func(args))
     except ConfigError as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
+        return 2
+    except D.DaemonError as exc:
+        print(f"daemon error: {exc}", file=sys.stderr)
         return 2
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -26,6 +26,7 @@ import re
 import secrets
 import time
 from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclass_fields
 from typing import Any
 
 from . import guard
@@ -88,6 +89,22 @@ class Verdict:
         d = asdict(self)
         d["verified"] = self.verified
         return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Verdict":
+        """Rebuild a verdict returned over HTTP, so a daemon reply renders like a local run.
+
+        `verified`, `feedback` and `render` are derived rather than stored, so they are
+        dropped; any other unknown key means the reply came from a different version and is
+        worth an error rather than a silently thinner verdict.
+        """
+        fields = {f.name for f in dataclass_fields(cls)}
+        unknown = set(data) - fields - {"verified", "feedback", "render"}
+        if unknown:
+            raise ValueError(f"unrecognized verdict fields: {', '.join(sorted(unknown))}")
+        known = {k: v for k, v in data.items() if k in fields}
+        known["checks"] = [Check(**c) for c in known.get("checks") or []]
+        return cls(**known)
 
     def to_json(self, indent: int | None = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)

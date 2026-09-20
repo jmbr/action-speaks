@@ -27,13 +27,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import socket
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .config import Config, ConfigError
+from .daemon import DaemonError, inherited_socket, prepare
 from .harness import Harness, filter_project_rows, project_history_stats
 from .ledger import LedgerReadError, read_ledger_row
 from .ledger_transfer import read_entry_reference, read_project_rows
@@ -96,6 +100,44 @@ def _request_harness(selector: str | None) -> Iterator[Harness]:
             )
             _project_harnesses[cfg.project_id] = selected
     yield selected
+
+
+class UnixServer(ThreadingHTTPServer):
+    """`ThreadingHTTPServer` over an AF_UNIX socket.
+
+    Two things in the base class assume an `(address, port)` pair. `server_bind` derives
+    `server_name` and `server_port` from the bound address, which for a path yields its first
+    two characters; and `get_request` returns the peer address, which an AF_UNIX accept leaves
+    empty. Both are overridden rather than worked around at the call site.
+    """
+
+    address_family = socket.AF_UNIX
+
+    # A socket handed over by systemd belongs to systemd: it outlives this process and must
+    # not be unlinked on the way out.
+    owns_path = True
+    # Only the instance that actually bound the path may remove it. `TCPServer.__init__`
+    # calls `server_close()` if `server_bind()` raises, and a second daemon losing the race
+    # to `EADDRINUSE` would otherwise delete the winner's socket, leaving it listening on an
+    # inode no client can name.
+    bound = False
+
+    def server_bind(self) -> None:
+        socket.socket.bind(self.socket, self.server_address)
+        self.server_name = "localhost"
+        self.server_port = 0
+        self.bound = True
+
+    def get_request(self):
+        connection, _ = self.socket.accept()
+        return connection, ("unix", 0)
+
+    def server_close(self) -> None:
+        super().server_close()
+        # A bound socket file outlives the process, and the next bind fails over it.
+        if self.owns_path and self.bound:
+            with suppress(OSError):
+                Path(self.server_address).unlink()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -281,7 +323,9 @@ class Handler(BaseHTTPRequestHandler):
             return 200, {"results": [{**v.to_dict(), "feedback": v.feedback()} for v in verdicts]}
 
         elif path == "/statement":
-            return 200, selected.check_statement(body.get("statement", ""))
+            return 200, selected.check_statement(
+                body.get("statement", ""), timeout=body.get("timeout")
+            )
 
         elif path == "/search":
             results = selected.search(
@@ -314,6 +358,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=823)
+    p.add_argument(
+        "--socket",
+        help="listen on this Unix socket instead of a TCP port; the directory must be private",
+    )
     p.add_argument("--pool", type=int, default=2, help="concurrent Lean sessions")
     p.add_argument("--no-log", action="store_true", help="do not write to the ledger")
     p.add_argument("--project", help="registered project name, UUID or root")
@@ -331,12 +379,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warming {args.pool} Lean session(s) ...", flush=True)
         _harness.warm()
 
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server: ThreadingHTTPServer
+    if args.socket:
+        path = Path(args.socket)
+        listening = inherited_socket()
+        if listening is not None:
+            # Socket-activated: systemd already created, bound and listened on this path.
+            server = UnixServer(str(path), Handler, bind_and_activate=False)
+            server.socket.close()
+            server.socket = listening
+            server.owns_path = False
+        else:
+            try:
+                prepare(path)
+            except DaemonError as exc:
+                p.exit(2, f"error: {exc}\n")
+            server = UnixServer(str(path), Handler)
+            # The bind is subject to the umask, which commonly leaves the socket group- and
+            # world-readable. The private directory is the real boundary, but there is no
+            # reason to leave the socket looser than it needs to be.
+            os.chmod(path, 0o600)
+        where = str(path)
+    else:
+        server = ThreadingHTTPServer((args.host, args.port), Handler)
+        where = f"http://{args.host}:{args.port}"
     server.verbose = args.verbose  # type: ignore[attr-defined]
     prov = _harness.provenance()
     print(
-        f"nullius listening on http://{args.host}:{args.port}  "
-        f"({prov['toolchain']}, mathlib {prov['mathlib_rev'][:12]})",
+        f"nullius listening on {where}  ({prov['toolchain']}, mathlib {prov['mathlib_rev'][:12]})",
         flush=True,
     )
     try:
@@ -345,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
         pass
     finally:
         server.shutdown()
+        server.server_close()
         # Project harnesses borrow the shared pool, so closing them only releases their own
         # search sessions; the pool itself goes with the harness that owns it.
         for selected in _project_harnesses.values():

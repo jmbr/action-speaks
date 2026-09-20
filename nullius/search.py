@@ -113,6 +113,18 @@ class SearchResult:
             lines.append("  " + h.render().replace("\n", "\n  "))
         return "\n".join(lines)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SearchResult":
+        """Rebuild a result carried over HTTP, so a daemon reply renders like a local one."""
+        return cls(
+            query=data.get("query", ""),
+            backend=data.get("backend", ""),
+            hits=[Hit(**hit) for hit in data.get("hits") or []],
+            error=data.get("error"),
+            note=data.get("note", ""),
+            index=data.get("index"),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         result = {
             "query": self.query,

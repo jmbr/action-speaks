@@ -182,6 +182,56 @@ The installed `nullius` command takes a **file path** after `verify`; use `-` fo
 The skill's `scripts/nullius` wrapper has different syntax: it takes a claim and reads the
 proof from stdin, or from `-f FILE`.
 
+## Session daemon
+
+Starting Lean loads the libraries and takes seconds. `nullius serve` keeps warm sessions in
+one process per user and per checkout, and the CLI uses it when it is running:
+
+```bash
+nullius serve                 # foreground, Ctrl-C to stop
+nullius serve --install       # write the service files for this platform
+nullius serve --print-units   # show them without writing anything
+```
+
+With the daemon running, `verify`, `statement` and `close` send their work to it instead of
+starting Lean; without it they behave exactly as before. `--no-daemon`, or
+`NULLIUS_NO_DAEMON=1`, forces the work into the calling process, which is what you want when
+reproducing a verdict against a known checkout.
+
+The daemon does the checking only. It writes no ledger entries: the caller records the
+verdict, with its own tag and project, into its own ledger.
+
+### Where the socket lives
+
+The socket goes in `$XDG_RUNTIME_DIR/nullius/<checkout>.sock`. That variable is the one in
+the XDG specification with no defined default, because its guarantees — owned by you, mode
+0700, lifetime bound to the login session — cannot be created by an application. It is
+honored wherever it is set, and on Linux it is `pam_systemd` that sets it, so it is missing
+under `sudo -i`, under cron, and in minimal containers as well as on other systems. When it
+is absent nullius falls back to a private `TMPDIR`, then to `$XDG_CACHE_HOME/nullius/run`,
+and says so, as the specification asks. `NULLIUS_SOCKET` overrides the choice; a path over
+104 bytes is rejected, since that is the shorter of the two platform limits.
+
+The socket is named after the checkout, so two checkouts never answer for one another. That
+matters because a verdict records the toolchain and library revisions it was checked
+against.
+
+### Running it as a service
+
+`nullius serve --install` writes a systemd user unit on Linux or a launchd agent on macOS,
+pins `NULLIUS_ROOT` and the checkout's own interpreter, and prints the commands to enable it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now nullius-<checkout>.socket
+loginctl enable-linger "$USER"      # or the daemon stops when you log out
+systemctl --user status nullius-<checkout>.service
+```
+
+The unit is socket-activated: systemd owns the socket and starts the daemon on first use, so
+an idle machine is not holding a warm pool. A daemon killed rather than stopped leaves its
+socket file behind; the next start removes it rather than failing to bind.
+
 ## Optional local ledger search
 
 Default searches are unchanged. Use Loogle patterns to search earlier verified targets:
@@ -236,6 +286,9 @@ or write the ledger.
   ledger rather than the verifier tree. Requests beyond the pool wait for a free session.
 - **Isolation:** each submission starts from the preloaded library environment. Definitions
   from earlier submissions are not retained for later ones.
+- **Daemon:** `nullius serve` shares one warm pool with every CLI call for that checkout.
+  `NULLIUS_SOCKET` sets the socket path and `NULLIUS_NO_DAEMON=1` disables its use. The MCP
+  server handles requests sequentially over stdio and does not use the daemon.
 - **Timeouts:** a timed-out Lean process is killed. A later call starts a replacement.
 - **Logging:** verdicts are appended to `ledger.sqlite3` with their source and library
   versions. `Harness(log=False)` disables ledger use.

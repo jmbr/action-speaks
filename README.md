@@ -32,7 +32,15 @@ nullius verify proof.lean -c "My claim" --require-nontrivial
 nullius log --stats
 ```
 
-For repeated checks, keep a Python session open:
+Starting Lean takes seconds. Run the daemon once and the commands above answer in
+milliseconds:
+
+```bash
+nullius serve --install     # a systemd user service, or a launchd agent on macOS
+nullius serve               # or just run it in the foreground
+```
+
+For repeated checks from Python, keep a session open:
 
 ```python
 from nullius import Harness
@@ -227,7 +235,8 @@ with contradictory assumptions are rejected.
 
 Starting Lean loads the libraries and takes several seconds. Reusing a session avoids that
 cost; simple proofs can then take milliseconds, while harder proofs and probes take longer.
-Use `Harness` or a persistent server for repeated work.
+Use `Harness`, a persistent server, or `nullius serve` for repeated work — with the daemon
+running, a `nullius verify` that took three seconds takes about a third of one.
 
 Each concurrent verification needs a session. Measure memory use on your workload before
 increasing the pool size. Submissions start from the same initial environment, so definitions
