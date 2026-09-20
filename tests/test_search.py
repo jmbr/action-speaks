@@ -37,7 +37,7 @@ from nullius.config import Config  # noqa: E402
 LIBRARIES = [
     ("physlib", "ClassicalMechanics.FreeParticle.linearMomentum", "Physlib."),
     ("mathlib", "|- Irrational (Real.sqrt _)", "Mathlib."),
-    ("cslib", "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluence_beta", "Cslib."),
+    ("cslib", "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluent_fullBeta", "Cslib."),
 ]
 
 

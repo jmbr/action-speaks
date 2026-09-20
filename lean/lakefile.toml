@@ -16,16 +16,16 @@ name = "NulliusAll"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.32.0"
+rev = "v4.33.0"
 
 # The REPL is the verification backend. Requiring it here rather than cloning it by hand
 # means lake fetches it, pins the exact revision in lake-manifest.json, and guarantees it is
 # built against the same toolchain as this project - a mismatch silently breaks elaboration.
-# This revision is the one whose lean-toolchain is v4.32.0.
+# This revision is the one whose lean-toolchain is v4.33.0.
 [[require]]
 name = "repl"
 git = "https://github.com/leanprover-community/repl"
-rev = "68a3b3a059787a7db44fb1e6281e4a657efee470"
+rev = "bbeedf38e0898869fc3b7c009e1ea877b46204e4"
 
 # Physlib is the physics library. It is pinned to an exact commit rather than a branch
 # because it ships deliberately incomplete results - `sorryful` (`sorryAx`), `pseudo`
@@ -34,24 +34,24 @@ rev = "68a3b3a059787a7db44fb1e6281e4a657efee470"
 # revision it was checked against is known. The audit rejects all three kinds anyway, since
 # none of those axioms is in `Nullius.Audit.trustedAxioms`.
 #
-# Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.32.0 above is
+# Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.33.0 above is
 # its constraint, not ours. Revisit both pins together when it bumps.
 [[require]]
 name = "Physlib"
 git = "https://github.com/leanprover-community/physlib"
-rev = "cf1d86d1fbba4fe42ce52577bab8b9df40d83a28"
+rev = "98fbbee20d0a376ea9160408517a48e274df1663"
 
 # Cslib is the computer science library: models of computation, lambda calculi, process
 # calculi, automata, and verified algorithms. It covers the half of this tool's remit -
 # algorithm correctness and termination arguments - that Mathlib serves only incidentally.
 #
-# The pin is the `v4.32.0` release tag, by commit rather than tag name so it cannot move.
-# Cslib tags a release per toolchain, and this one requires mathlib 81a5d257c8e4 - the exact
+# The pin is the `v4.33.0` release tag, by commit rather than tag name so it cannot move.
+# Cslib tags a release per toolchain, and this one requires mathlib v4.33.0 - the exact
 # revision Physlib requires and this project already builds. Lake admits one mathlib in the
-# graph, so that agreement is what makes the three coexist at all. Later Cslib tags on the
-# same Lean 4.32 line move mathlib forward and would break that agreement, and `main` is
-# further ahead still. Bump this only in step with the toolchain, and check the mathlib
-# revision still matches before believing it works.
+# graph, so that agreement is what makes the three coexist at all. Later Cslib tags move
+# mathlib forward and would break that agreement, and `main` is further ahead still. Bump
+# this only in step with the toolchain, and check the mathlib revision still matches before
+# believing it works.
 #
 # Unlike Physlib it ships no deliberate placeholders: no `sorry`, no declared axioms, no
 # `native_decide`. The audit is unchanged regardless, since it trusts a fixed axiom list
@@ -59,4 +59,4 @@ rev = "cf1d86d1fbba4fe42ce52577bab8b9df40d83a28"
 [[require]]
 name = "cslib"
 git = "https://github.com/leanprover/cslib"
-rev = "197a7be621263b84c67ca4f803f69205b36d06df"
+rev = "3951377e5a3f5772737f11cd62bc5bb6a72f95d1"

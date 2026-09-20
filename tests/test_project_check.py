@@ -45,7 +45,7 @@ run_cmd do
   let decl := Declaration.thmDecl {
     name := `Forged.bad, levelParams := [], type := mkConst ``False,
     value := mkConst ``True.intro }
-  match env.addDeclCore 0 decl none false with
+  match env.addDeclCore 0 0 decl none false with
   | .ok env' => modifyEnv fun _ => env'
   | .error _ => throwError "could not install test declaration"
 """
