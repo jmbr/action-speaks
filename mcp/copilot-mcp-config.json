@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "nullius": {
+    "action-speaks": {
       "type": "local",
       "command": "python3",
-      "args": ["-m", "nullius.mcp_server"],
-      "cwd": "__NULLIUS_ROOT__",
+      "args": ["-m", "action_speaks.mcp_server"],
+      "cwd": "__ACTION_SPEAKS_ROOT__",
       "env": {
-        "PYTHONPATH": "__NULLIUS_ROOT__",
+        "PYTHONPATH": "__ACTION_SPEAKS_ROOT__",
         "PYTHONUNBUFFERED": "1"
       },
       "tools": ["*"]

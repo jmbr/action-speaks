@@ -21,15 +21,15 @@ LOOGLE_REV="${LOOGLE_REV:-9f11169aaebf1ed1e7dcc4077f2aafe0fcf66fd0}"
 
 ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LEAN_DIR="$ROOT/lean"
-CHECKOUT="${NULLIUS_LOOGLE_DIR:-$ROOT/vendor/loogle}"
+CHECKOUT="${ACTION_SPEAKS_LOOGLE_DIR:-$ROOT/vendor/loogle}"
 BIN="$CHECKOUT/.lake/build/bin/loogle"
-MODULE="${NULLIUS_LOOGLE_MODULE:-NulliusAll}"
+MODULE="${ACTION_SPEAKS_LOOGLE_MODULE:-ActionSpeaksAll}"
 
 do_index=0
 [ "${1:-}" = "--index" ] && do_index=1
 
 if [ ! -f "$LEAN_DIR/lean-toolchain" ]; then
-  echo "no lean-toolchain at $LEAN_DIR; run this from the nullius repository" >&2
+  echo "no lean-toolchain at $LEAN_DIR; run this from the action-speaks repository" >&2
   exit 2
 fi
 
@@ -67,5 +67,5 @@ cat <<EOF
 
 Local shape search is enabled for this checkout. Nothing further is needed: the verifier
 looks for the binary at vendor/loogle by default. To use a checkout elsewhere, set
-NULLIUS_LOOGLE_BIN to the binary path.
+ACTION_SPEAKS_LOOGLE_BIN to the binary path.
 EOF

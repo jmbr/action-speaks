@@ -27,7 +27,7 @@ from .ledger_search import (
 from .verify import Check, Status, Verdict
 
 MODULE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
-MARKER = "NULLIUS_PROJECT "
+MARKER = "ACTION_SPEAKS_PROJECT "
 
 
 def project_root(config: Config, *, execution: bool = False) -> Path:
@@ -79,7 +79,7 @@ def source_files(root: Path) -> list[Path]:
             not in (
                 ".git",
                 ".lake",
-                ".nullius",
+                ".action-speaks",
                 ".venv",
                 "__pycache__",
                 "build",
@@ -124,9 +124,9 @@ def environment_id(config: Config) -> str:
         hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
         for name in (
             "scripts/project_audit.lean",
-            "nullius/project_check.py",
-            "nullius/verify.py",
-            "lean/Nullius/Audit.lean",
+            "action_speaks/project_check.py",
+            "action_speaks/verify.py",
+            "lean/ActionSpeaks/Audit.lean",
         )
     ]
     return _digest([config.project_id, config.toolchain(), _tree_states(list(roots)), policy])
@@ -156,7 +156,7 @@ def _git_info(root: Path) -> dict[str, str]:
             "--untracked-files=all",
             "--",
             ".",
-            ":(exclude).nullius",
+            ":(exclude).action-speaks",
         ],
         capture_output=True,
         text=True,
@@ -196,7 +196,7 @@ def runtime_environment(config: Config, deadline: float) -> dict[str, str]:
         )
     )
     result = dict(base)
-    result["NULLIUS_PROJECT_LEAN_PATH"] = project.get("LEAN_PATH", "")
+    result["ACTION_SPEAKS_PROJECT_LEAN_PATH"] = project.get("LEAN_PATH", "")
     for key in ("LEAN_PATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
         paths = list(
             dict.fromkeys(
@@ -289,7 +289,7 @@ def verify_project(
             deadline,
             config,
         ).strip()
-        env["NULLIUS_PROJECT_LEAN_PATH"] += os.pathsep + str(Path(prefix) / "lib/lean")
+        env["ACTION_SPEAKS_PROJECT_LEAN_PATH"] += os.pathsep + str(Path(prefix) / "lib/lean")
         output = _run(
             [
                 str(Path(prefix) / "bin/lean"),

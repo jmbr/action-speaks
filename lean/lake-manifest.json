@@ -171,6 +171,6 @@
    "inputRev": "main",
    "inherited": true,
    "configFile": "lakefile.lean"}],
- "name": "nullius",
+ "name": "ActionSpeaks",
  "lakeDir": ".lake",
  "fixedToolchain": false}

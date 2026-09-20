@@ -1,6 +1,6 @@
-# Instructions for agents using nullius
+# Instructions for agents using action-speaks
 
-Use nullius to check mathematical claims with Lean 4, Mathlib, Physlib, and Cslib.
+Use action-speaks to check mathematical claims with Lean 4, Mathlib, Physlib, and Cslib.
 Verify substantial inequalities, identities, bounds, convergence or correctness arguments,
 and counterexamples. Skip trivial arithmetic and non-mathematical claims.
 
@@ -67,7 +67,7 @@ an export failure is not evidence of unprovability. See
 [export limitations](docs/INTEGRATION.md#optional-local-ledger-search).
 
 The tools are `verify`, `statement`, `search`, `close`, and `log`. Clients may prefix their
-names with the server name, for example `nullius-search`.
+names with the server name, for example `action-speaks-search`.
 
 Over MCP these are answered one at a time: the server reads a request, answers it, and only
 then reads the next. Issuing several checks does not overlap them, so a slow verification

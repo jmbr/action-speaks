@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nullius"
+name = "action-speaks"
 description = "Machine-checked backing for an agent's mathematical claims, via Lean 4 + Mathlib"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,7 +23,7 @@ dynamic = ["version"]
 
 # Deliberately empty. The verifier drives Lean through a subprocess and speaks JSON-RPC and
 # HTTP with the standard library alone, so installing it pulls in nothing. That keeps the
-# trusted computing base to Lean's kernel, Mathlib and `lean/Nullius/Audit.lean` — adding a
+# trusted computing base to Lean's kernel, Mathlib and `lean/ActionSpeaks/Audit.lean` — adding a
 # dependency here would widen it for no benefit.
 dependencies = []
 
@@ -41,23 +41,23 @@ dev = [
 ]
 
 [project.scripts]
-nullius = "nullius.cli:main"
+action-speaks = "action_speaks.cli:main"
 
 [tool.setuptools]
 # Discovery rather than an explicit list, so that adding a subpackage cannot silently leave
 # it out of the install.
 [tool.setuptools.packages.find]
-include = ["nullius*"]
+include = ["action_speaks*"]
 
 [tool.setuptools.dynamic]
-version = { attr = "nullius.__version__" }
+version = { attr = "action_speaks.__version__" }
 
 [tool.commitizen]
 # Conventional Commits, so a release tool can read the history rather than a human
 # summarising it. Commitizen validates messages; it does not bump versions or write a
 # changelog here. That belongs to one engine, and this is not it.
 name = "cz_conventional_commits"
-# The version lives in `nullius/__init__.py` and is read from there by
+# The version lives in `action_speaks/__init__.py` and is read from there by
 # `[tool.setuptools.dynamic]` above. Named here so the two cannot drift, not so that
 # Commitizen bumps it.
 version_provider = "pep621"
@@ -79,8 +79,8 @@ major_version_zero = true
 # The sole version and changelog engine. Commitizen validates messages and must never bump:
 # two engines produce disagreeing tags.
 commit_parser = "conventional"
-# `nullius/__init__.py` is the one version source; pyproject reads it via `attr` above.
-version_variables = ["nullius/__init__.py:__version__"]
+# `action_speaks/__init__.py` is the one version source; pyproject reads it via `attr` above.
+version_variables = ["action_speaks/__init__.py:__version__"]
 tag_format = "v{version}"
 # Below 1.0 a breaking change is a minor bump, matching `major_version_zero` for Commitizen.
 allow_zero_version = true
@@ -129,7 +129,7 @@ ignore = [
     # Carried over as standing preferences.
     "PLC2401", "N802", "N806", "N813", "N818", "F722", "PLR0912", "PLR0915",
 
-    # `from nullius import search as S`, `guard as G`, `verify as V`. Used consistently in
+    # `from action_speaks import search as S`, `guard as G`, `verify as V`. Used consistently in
     # the CLI, the servers and the tests, where a one-letter module alias keeps call sites
     # readable.
     "N812",

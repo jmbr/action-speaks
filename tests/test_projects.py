@@ -21,15 +21,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius.ledger import SCHEMA, Ledger, read_ledger_identity  # noqa: E402
-from nullius.projects import (  # noqa: E402
+from action_speaks.ledger import SCHEMA, Ledger, read_ledger_identity  # noqa: E402
+from action_speaks.projects import (  # noqa: E402
     ProjectError,
     list_projects,
     register_project,
     rename_project,
     resolve_project,
 )
-from nullius.verify import Verdict  # noqa: E402
+from action_speaks.verify import Verdict  # noqa: E402
 
 
 def snapshot(root: Path) -> dict[str, tuple[bytes, int]]:
@@ -53,7 +53,7 @@ class TestProject:
             self.base = Path(directory).resolve()
             self.registry = self.base / "registry" / "projects.json"
             self.root = self.lean_project("original")
-            with patch.dict(os.environ, {"NULLIUS_PROJECT_REGISTRY": str(self.registry)}):
+            with patch.dict(os.environ, {"ACTION_SPEAKS_PROJECT_REGISTRY": str(self.registry)}):
                 yield
 
     def lean_project(self, name: str, *, lean_lakefile: bool = False) -> Path:
@@ -66,7 +66,7 @@ class TestProject:
         return root
 
     def config(self, root: Path | None = None) -> Path:
-        return (root or self.root) / ".nullius" / "project.json"
+        return (root or self.root) / ".action-speaks" / "project.json"
 
     def test_create_and_idempotent_registration(self) -> None:
         with patch("subprocess.run", side_effect=AssertionError("must not run a command")):
@@ -76,8 +76,8 @@ class TestProject:
         assert project.root == self.root
         assert not project.trusted
         assert project.aliases == ()
-        assert project.ledger_path == self.root / ".nullius" / "ledger.sqlite3"
-        assert project.index_dir == self.root / ".nullius" / "indexes"
+        assert project.ledger_path == self.root / ".action-speaks" / "ledger.sqlite3"
+        assert project.index_dir == self.root / ".action-speaks" / "indexes"
         assert not project.index_dir.exists()
         assert json.loads(self.config().read_text()) == {
             "schema_version": 1,
@@ -93,7 +93,7 @@ class TestProject:
         assert list_projects() == [project, second]
 
     def test_trust_only_comes_from_registry(self) -> None:
-        (self.root / ".nullius").mkdir()
+        (self.root / ".action-speaks").mkdir()
         self.config().write_text(
             json.dumps(
                 {
@@ -129,7 +129,10 @@ class TestProject:
         assert renamed.id == project.id
         assert renamed.aliases == ("mechanics",)
         assert ledger.identity() == identity
-        assert snapshot(self.root)[".nullius/ledger.sqlite3"] == before[".nullius/ledger.sqlite3"]
+        assert (
+            snapshot(self.root)[".action-speaks/ledger.sqlite3"]
+            == before[".action-speaks/ledger.sqlite3"]
+        )
         for selector in ("mechanics", "continuum", project.id, self.root):
             assert resolve_project(selector) == renamed
         third = rename_project("mechanics", "fields")
@@ -214,7 +217,7 @@ class TestProject:
         assert ledger_identity(project.ledger_path)["project_id"] == other.id
 
     def test_bound_ledger_without_config_is_not_adopted(self) -> None:
-        ledger_path = self.root / ".nullius" / "ledger.sqlite3"
+        ledger_path = self.root / ".action-speaks" / "ledger.sqlite3"
         ledger = Ledger(ledger_path)
         project_id = str(uuid4())
         ledger.bind_project(project_id)
@@ -249,7 +252,7 @@ class TestProject:
         with pytest.raises(ProjectError, match="lakefile"):
             register_project(self.root)
         assert not self.registry.exists()
-        assert not (self.root / ".nullius").exists()
+        assert not (self.root / ".action-speaks").exists()
 
     def test_plain_path_is_not_implicit_registration(self) -> None:
         before = snapshot(self.base)
@@ -258,12 +261,14 @@ class TestProject:
         assert list_projects() == []
         assert snapshot(self.base) == before
         assert not self.registry.parent.exists()
-        assert not (self.root / ".nullius").exists()
+        assert not (self.root / ".action-speaks").exists()
 
     def test_readonly_resolve_never_recreates_or_migrates_ledger(self) -> None:
         project = register_project(self.root)
         before = snapshot(self.base)
-        with patch("nullius.projects.Ledger", side_effect=AssertionError("no writable ledger")):
+        with patch(
+            "action_speaks.projects.Ledger", side_effect=AssertionError("no writable ledger")
+        ):
             assert resolve_project(project.id) == project
             assert list_projects() == [project]
         assert snapshot(self.base) == before
@@ -300,7 +305,7 @@ class TestProject:
         assert not self.config().exists()
 
     def test_bad_project_files_and_names(self) -> None:
-        (self.root / ".nullius").mkdir()
+        (self.root / ".action-speaks").mkdir()
         bad_values = (
             "not json",
             "[]",
@@ -361,7 +366,7 @@ class TestProject:
             assert snapshot(self.base) == before
 
     def test_malformed_ledger_and_metadata_paths(self) -> None:
-        metadata = self.root / ".nullius"
+        metadata = self.root / ".action-speaks"
         metadata.write_text("not a directory")
         with pytest.raises(ProjectError):
             register_project(self.root)
@@ -381,8 +386,8 @@ class TestProject:
     def test_registry_cannot_overwrite_project_metadata(self) -> None:
         for filename in ("project.json", "ledger.sqlite3", "local-registry.json"):
             with pytest.raises(ProjectError, match="outside"):
-                register_project(self.root, registry_path=self.root / ".nullius" / filename)
-        assert not (self.root / ".nullius").exists()
+                register_project(self.root, registry_path=self.root / ".action-speaks" / filename)
+        assert not (self.root / ".action-speaks").exists()
 
     def test_symlink_root_is_canonical_but_metadata_links_are_rejected(self) -> None:
         alias = self.base / "root-alias"
@@ -391,7 +396,9 @@ class TestProject:
         assert project.root == self.root
         assert resolve_project(alias) == project
         other = self.lean_project("other")
-        (other / ".nullius").symlink_to(self.root / ".nullius", target_is_directory=True)
+        (other / ".action-speaks").symlink_to(
+            self.root / ".action-speaks", target_is_directory=True
+        )
         before = snapshot(self.root)
         with pytest.raises(ProjectError, match="local directory"):
             register_project(other, "other")
@@ -399,10 +406,10 @@ class TestProject:
 
     def test_registry_defaults_and_explicit_override(self) -> None:
         with patch.dict(
-            os.environ, {"NULLIUS_PROJECT_REGISTRY": "", "XDG_CONFIG_HOME": str(self.base)}
+            os.environ, {"ACTION_SPEAKS_PROJECT_REGISTRY": "", "XDG_CONFIG_HOME": str(self.base)}
         ):
             project = register_project(self.root)
-            assert (self.base / "nullius" / "projects.json").is_file()
+            assert (self.base / "action-speaks" / "projects.json").is_file()
             assert resolve_project(project.id) == project
         assert not self.registry.exists()
         explicit = self.base / "explicit.json"
@@ -410,12 +417,12 @@ class TestProject:
         assert resolve_project(project.id, registry_path=explicit) == same
         assert not self.registry.exists()
         with (
-            patch.dict(os.environ, {"NULLIUS_PROJECT_REGISTRY": "", "XDG_CONFIG_HOME": ""}),
-            patch("nullius.projects.Path.home", return_value=self.base / "home"),
+            patch.dict(os.environ, {"ACTION_SPEAKS_PROJECT_REGISTRY": "", "XDG_CONFIG_HOME": ""}),
+            patch("action_speaks.projects.Path.home", return_value=self.base / "home"),
         ):
             assert list_projects() == []
             register_project(self.root)
-            assert (self.base / "home" / ".config" / "nullius" / "projects.json").is_file()
+            assert (self.base / "home" / ".config" / "action-speaks" / "projects.json").is_file()
 
     def test_concurrent_registration_keeps_all_projects_and_one_id(self) -> None:
         barrier = Barrier(4)
@@ -449,7 +456,10 @@ class TestProject:
 
     def test_failed_new_registration_retains_one_uuid_for_retry(self) -> None:
         with (
-            patch("nullius.projects.Ledger.bind_project", side_effect=ValueError("binding failed")),
+            patch(
+                "action_speaks.projects.Ledger.bind_project",
+                side_effect=ValueError("binding failed"),
+            ),
             pytest.raises(ProjectError, match="binding failed"),
         ):
             register_project(self.root)
@@ -470,7 +480,7 @@ class TestProject:
             replace_file(source, destination)
 
         with (
-            patch("nullius.projects.os.replace", side_effect=fail_registry),
+            patch("action_speaks.projects.os.replace", side_effect=fail_registry),
             pytest.raises(ProjectError, match="simulated registry write failure"),
         ):
             rename_project(project.id, "new")

@@ -28,12 +28,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 pytestmark = pytest.mark.lean
 
-from nullius import search as S  # noqa: E402
-from nullius.config import Config  # noqa: E402
+from action_speaks import search as S  # noqa: E402
+from action_speaks.config import Config  # noqa: E402
 
 # One declaration from each library in the prelude, to prove a single index spans all three.
 # Neither Physlib's nor Cslib's root module imports all of Mathlib, so indexing any one of
-# them alone leaves a hole; `lean/NulliusAll.lean` exists precisely to close it.
+# them alone leaves a hole; `lean/ActionSpeaksAll.lean` exists precisely to close it.
 LIBRARIES = [
     ("physlib", "ClassicalMechanics.FreeParticle.linearMomentum", "Physlib."),
     ("mathlib", "|- Irrational (Real.sqrt _)", "Mathlib."),
@@ -74,7 +74,7 @@ def test_local_index_reaches_every_prelude_library(
 
 def test_absent_binary_reports_itself_rather_than_substituting(monkeypatch) -> None:
     """With no binary, shape search must say so rather than answering from another library."""
-    monkeypatch.setenv("NULLIUS_LOOGLE_BIN", "/nonexistent/loogle")
+    monkeypatch.setenv("ACTION_SPEAKS_LOOGLE_BIN", "/nonexistent/loogle")
     monkeypatch.setattr(S, "_local_loogle", None)  # force rediscovery with the patched environment
     absent = S.loogle("Nat.succ_le_succ", limit=1)
     assert not absent.hits

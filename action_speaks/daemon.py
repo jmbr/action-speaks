@@ -39,7 +39,7 @@ from .config import Config
 # the kind of difference that only shows up on somebody else's machine.
 SUN_PATH_MAX = 104
 
-SOCKET_DIR = "nullius"
+SOCKET_DIR = "action-speaks"
 
 
 class DaemonError(RuntimeError):
@@ -119,12 +119,12 @@ def checkout_id(config: Config) -> str:
 
 def address(config: Config | None = None) -> Address:
     """Resolve the socket path without creating anything."""
-    override = os.environ.get("NULLIUS_SOCKET")
+    override = os.environ.get("ACTION_SPEAKS_SOCKET")
     if override:
         path = Path(override)
         if len(str(path).encode()) > SUN_PATH_MAX:
             raise DaemonError(
-                f"NULLIUS_SOCKET is {len(str(path).encode())} bytes, over the {SUN_PATH_MAX} "
+                f"ACTION_SPEAKS_SOCKET is {len(str(path).encode())} bytes, over the {SUN_PATH_MAX} "
                 "the platform allows for a socket path"
             )
         return Address(path)
@@ -137,7 +137,7 @@ def address(config: Config | None = None) -> Address:
         # failing with the kernel's bare "path too long".
         raise DaemonError(
             f"the socket path {path} is {len(str(path).encode())} bytes, over the "
-            f"{SUN_PATH_MAX} the platform allows. Set NULLIUS_SOCKET to a shorter path."
+            f"{SUN_PATH_MAX} the platform allows. Set ACTION_SPEAKS_SOCKET to a shorter path."
         )
     return Address(path, warning)
 
@@ -154,7 +154,7 @@ def prepare(path: Path) -> None:
     if not _private(directory):
         raise DaemonError(
             f"{directory} is readable by other users, so a socket there would be too. "
-            "Fix its ownership and permissions, or set NULLIUS_SOCKET elsewhere."
+            "Fix its ownership and permissions, or set ACTION_SPEAKS_SOCKET elsewhere."
         )
     if not path.exists():
         return
@@ -230,10 +230,10 @@ def call(
 def available(config: Config | None = None) -> Address | None:
     """The daemon's address if one is listening and the caller has not opted out.
 
-    Opting out matters for reproducing a verdict: `NULLIUS_NO_DAEMON=1` forces the work into
+    Opting out matters for reproducing a verdict: `ACTION_SPEAKS_NO_DAEMON=1` forces the work into
     this process, against this checkout, with no question of which daemon answered.
     """
-    if os.environ.get("NULLIUS_NO_DAEMON"):
+    if os.environ.get("ACTION_SPEAKS_NO_DAEMON"):
         return None
     try:
         addr = address(config)
@@ -246,7 +246,7 @@ def available(config: Config | None = None) -> Address | None:
 
 
 def unit_name(config: Config) -> str:
-    return f"nullius-{checkout_id(config)}"
+    return f"action-speaks-{checkout_id(config)}"
 
 
 def inherited_socket() -> socket.socket | None:
@@ -283,15 +283,15 @@ def systemd_units(config: Config, python: Path | None = None) -> dict[str, str]:
     python = python or Path(sys.executable)
     name = unit_name(config)
     socket_unit = f"""[Unit]
-Description=nullius verification daemon socket ({root.name})
-Documentation=https://github.com/jmbr/nullius
+Description=action-speaks verification daemon socket ({root.name})
+Documentation=https://github.com/jmbr/action-speaks
 
 [Socket]
 ListenStream=%t/{SOCKET_DIR}/{checkout_id(config)}.sock
 # The daemon binds a socket systemd has already created, so the directory must exist first.
 RuntimeDirectory={SOCKET_DIR}
 # Both default to 0755, which would leave the socket's directory readable by every other
-# user — and a later `nullius serve` run by hand refuses to bind in one.
+# user — and a later `action-speaks serve` run by hand refuses to bind in one.
 RuntimeDirectoryMode=0700
 DirectoryMode=0700
 SocketMode=0600
@@ -302,8 +302,8 @@ Accept=no
 WantedBy=sockets.target
 """
     service_unit = f"""[Unit]
-Description=nullius verification daemon ({root.name})
-Documentation=https://github.com/jmbr/nullius
+Description=action-speaks verification daemon ({root.name})
+Documentation=https://github.com/jmbr/action-speaks
 Requires={name}.socket
 After={name}.socket
 
@@ -313,8 +313,8 @@ Type=simple
 # library revisions, and a daemon answering from a different one would record the wrong
 # provenance.
 WorkingDirectory={root}
-Environment=NULLIUS_ROOT={root}
-ExecStart={python} -m nullius.cli serve --socket %t/{SOCKET_DIR}/{checkout_id(config)}.sock
+Environment=ACTION_SPEAKS_ROOT={root}
+ExecStart={python} -m action_speaks.cli serve --socket %t/{SOCKET_DIR}/{checkout_id(config)}.sock
 # Lean processes need a moment to exit; killing them early leaves temporary files behind.
 TimeoutStopSec=30
 Restart=on-failure
@@ -329,7 +329,7 @@ def launchd_agent(config: Config, python: Path | None = None) -> tuple[str, str]
     """The macOS equivalent: a launchd agent with the same socket and checkout pinning."""
     root = config.lean_dir.resolve().parent
     python = python or Path(sys.executable)
-    label = f"org.nullius.{checkout_id(config)}"
+    label = f"org.action-speaks.{checkout_id(config)}"
     path = address(config).path
     plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -341,14 +341,14 @@ def launchd_agent(config: Config, python: Path | None = None) -> tuple[str, str]
   <array>
     <string>{python}</string>
     <string>-m</string>
-    <string>nullius.cli</string>
+    <string>action_speaks.cli</string>
     <string>serve</string>
     <string>--socket</string>
     <string>{path}</string>
   </array>
   <key>WorkingDirectory</key><string>{root}</string>
   <key>EnvironmentVariables</key>
-  <dict><key>NULLIUS_ROOT</key><string>{root}</string></dict>
+  <dict><key>ACTION_SPEAKS_ROOT</key><string>{root}</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><false/>
 </dict>
@@ -366,7 +366,7 @@ def install_instructions(config: Config, python: Path | None = None) -> tuple[di
         commands = (
             f"launchctl unload {target} 2>/dev/null || true\n"
             f"launchctl load {target}\n"
-            "\nlaunchd starts the daemon at login. `launchctl list | grep nullius` shows it."
+            "\nlaunchd starts the daemon at login. `launchctl list | grep action-speaks` shows it."
         )
         return {target: plist}, commands
     if sys.platform.startswith("linux"):
@@ -384,5 +384,5 @@ def install_instructions(config: Config, python: Path | None = None) -> tuple[di
         return files, commands
     return {}, (
         f"No service manager is generated for {sys.platform}. Run the daemon in the "
-        "foreground instead:\n\n    nullius serve\n"
+        "foreground instead:\n\n    action-speaks serve\n"
     )

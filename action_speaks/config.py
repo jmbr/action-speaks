@@ -29,11 +29,11 @@ def _missing_lean_dir_message(lean_dir: Path) -> str:
     if "site-packages" in str(lean_dir):
         return (
             f"{base}\n"
-            "This looks like a copied install. nullius drives a Lean project that must be "
+            "This looks like a copied install. action-speaks drives a Lean project that must be "
             "built from a checkout, so install it from one with `pip install -e .`, or set "
-            "NULLIUS_ROOT to the checkout you built."
+            "ACTION_SPEAKS_ROOT to the checkout you built."
         )
-    return f"{base}\nSet NULLIUS_ROOT to the checkout containing lean/, or build it there."
+    return f"{base}\nSet ACTION_SPEAKS_ROOT to the checkout containing lean/, or build it there."
 
 
 @dataclass
@@ -43,7 +43,7 @@ class Config:
     lake_bin: Path
     ledger_path: Path
     loogle_bin: Path | None = None
-    loogle_module: str = "NulliusAll"
+    loogle_module: str = "ActionSpeaksAll"
     startup_timeout: float = 300.0
     command_timeout: float = 120.0
     lean_threads: int = 4
@@ -72,36 +72,38 @@ class Config:
 
     @classmethod
     def discover(cls) -> "Config":
-        root = Path(os.environ.get("NULLIUS_ROOT", ROOT))
-        lean_dir = Path(os.environ.get("NULLIUS_LEAN_DIR", root / "lean"))
+        root = Path(os.environ.get("ACTION_SPEAKS_ROOT", ROOT))
+        lean_dir = Path(os.environ.get("ACTION_SPEAKS_LEAN_DIR", root / "lean"))
         repl_bin = (
-            Path(os.environ["NULLIUS_REPL_BIN"])
-            if "NULLIUS_REPL_BIN" in os.environ
+            Path(os.environ["ACTION_SPEAKS_REPL_BIN"])
+            if "ACTION_SPEAKS_REPL_BIN" in os.environ
             else cls._find_repl(root, lean_dir)
         )
-        lake = os.environ.get("NULLIUS_LAKE_BIN") or cls._find_lake()
+        lake = os.environ.get("ACTION_SPEAKS_LAKE_BIN") or cls._find_lake()
         if not lake:
             raise ConfigError(
                 "`lake` not found. Install elan (https://github.com/leanprover/elan), or set "
-                "NULLIUS_LAKE_BIN to the binary. Note that agents often launch tools with a "
+                "ACTION_SPEAKS_LAKE_BIN to the binary. Note that agents often launch tools with a "
                 "minimal PATH that omits ~/.elan/bin."
             )
-        ledger = Path(os.environ.get("NULLIUS_LEDGER", root / "ledger.sqlite3"))
+        ledger = Path(os.environ.get("ACTION_SPEAKS_LEDGER", root / "ledger.sqlite3"))
         return cls(
             lean_dir=lean_dir,
             repl_bin=repl_bin,
             lake_bin=Path(lake),
             ledger_path=ledger,
             loogle_bin=cls._find_loogle(root),
-            loogle_module=os.environ.get("NULLIUS_LOOGLE_MODULE", "NulliusAll"),
-            command_timeout=float(os.environ.get("NULLIUS_COMMAND_TIMEOUT", "120")),
-            startup_timeout=float(os.environ.get("NULLIUS_STARTUP_TIMEOUT", "300")),
-            lean_threads=int(os.environ.get("NULLIUS_LEAN_THREADS", "4")),
-            pool_size=int(os.environ.get("NULLIUS_POOL_SIZE", "2")),
+            loogle_module=os.environ.get("ACTION_SPEAKS_LOOGLE_MODULE", "ActionSpeaksAll"),
+            command_timeout=float(os.environ.get("ACTION_SPEAKS_COMMAND_TIMEOUT", "120")),
+            startup_timeout=float(os.environ.get("ACTION_SPEAKS_STARTUP_TIMEOUT", "300")),
+            lean_threads=int(os.environ.get("ACTION_SPEAKS_LEAN_THREADS", "4")),
+            pool_size=int(os.environ.get("ACTION_SPEAKS_POOL_SIZE", "2")),
             ledger_index_dir=Path(
-                os.environ.get("NULLIUS_LEDGER_INDEX_DIR", root / "build" / "ledger-search")
+                os.environ.get("ACTION_SPEAKS_LEDGER_INDEX_DIR", root / "build" / "ledger-search")
             ),
-            ledger_refresh_timeout=float(os.environ.get("NULLIUS_LEDGER_REFRESH_TIMEOUT", "900")),
+            ledger_refresh_timeout=float(
+                os.environ.get("ACTION_SPEAKS_LEDGER_REFRESH_TIMEOUT", "900")
+            ),
         )
 
     @staticmethod
@@ -132,7 +134,7 @@ class Config:
         Optional by design: without it, shape search falls back to the hosted service, so a
         checkout that never runs `scripts/build-loogle.sh` still works.
         """
-        explicit = os.environ.get("NULLIUS_LOOGLE_BIN")
+        explicit = os.environ.get("ACTION_SPEAKS_LOOGLE_BIN")
         if explicit:
             return Path(explicit)
         candidate = root / "vendor" / "loogle" / ".lake" / "build" / "bin" / "loogle"

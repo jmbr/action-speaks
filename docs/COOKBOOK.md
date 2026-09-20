@@ -14,17 +14,17 @@ other agents can use the shell wrapper supplied by the skill.
 
 | Operation                               | CLI                 | MCP tool    |
 |-----------------------------------------|---------------------|-------------|
-| Check a proof                           | `nullius verify`    | `verify`    |
-| Check types and look for contradictory assumptions | `nullius statement` | `statement` |
-| Find a lemma by meaning or shape        | `nullius search`    | `search`    |
-| Find what closes a goal                 | `nullius close`     | `close`     |
-| Look up past verdicts                   | `nullius log`       | `log`       |
+| Check a proof                           | `action-speaks verify`    | `verify`    |
+| Check types and look for contradictory assumptions | `action-speaks statement` | `statement` |
+| Find a lemma by meaning or shape        | `action-speaks search`    | `search`    |
+| Find what closes a goal                 | `action-speaks close`     | `close`     |
+| Look up past verdicts                   | `action-speaks log`       | `log`       |
 
 For `verify`, `--require-nontrivial` maps to `require_nontrivial`, `--tag` to `tag`,
 `-t` to `target`, and `-c` to `claim`. For `close`, `-b` maps to `binders`. For example:
 
 ```bash
-nullius verify bound.lean -c "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial
+action-speaks verify bound.lean -c "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial
 ```
 
 The corresponding MCP `verify` arguments are:
@@ -70,7 +70,7 @@ form. Also review whether the assumptions can hold together.
 
 ## Check assumptions before building on them
 
-Run `nullius statement` before attempting a proof. It checks types and tries to find
+Run `action-speaks statement` before attempting a proof. It checks types and tries to find
 contradictory assumptions. Applied arguments often combine parameter ranges and step-size
 conditions that need to be checked together.
 
@@ -150,9 +150,9 @@ Use `ℕ` for counts when these operations are intended. Use `ℤ` for signed di
 Physlib is preloaded. Search for its existing results and the assumptions they require:
 
 ```
-nullius search 'ClassicalMechanics.HarmonicOscillator.ω, |- _ = _' --backend loogle
+action-speaks search 'ClassicalMechanics.HarmonicOscillator.ω, |- _ = _' --backend loogle
   → ω_sq : S.ω ^ 2 = S.k / S.m
-nullius search 'ClassicalMechanics.HarmonicOscillator.m, |- 0 < _' --backend loogle
+action-speaks search 'ClassicalMechanics.HarmonicOscillator.m, |- 0 < _' --backend loogle
   → m_pos : 0 < self.m
 ```
 
@@ -276,7 +276,7 @@ theorem euler_growth_guessed (h L : ℝ) (n : ℕ) (hh : 0 ≤ h) (hL : 0 ≤ L)
 Ask Lean for a suitable lemma:
 
 ```
-nullius close 'a ^ n ≤ b ^ n' -b '(a b : ℝ) (n : ℕ) (ha : 0 ≤ a) (hab : a ≤ b)'
+action-speaks close 'a ^ n ≤ b ^ n' -b '(a b : ℝ) (n : ℕ) (ha : 0 ≤ a) (hab : a ≤ b)'
 ```
 
 The suggestion is `exact pow_le_pow_left₀ ha hab n`, with a `₀` suffix.
@@ -311,8 +311,8 @@ the proof so it can be reproduced.
 Use a tag to collect related attempts:
 
 ```bash
-nullius verify bound.lean -c "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial
-nullius log --tag paper-draft
+action-speaks verify bound.lean -c "energy estimate, eq. (3.7)" --tag paper-draft --require-nontrivial
+action-speaks log --tag paper-draft
 ```
 
 From an agent, the same two steps are `verify` with `tag: "paper-draft"` and

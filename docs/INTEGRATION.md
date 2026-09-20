@@ -1,4 +1,4 @@
-# Using nullius in an application
+# Using action-speaks in an application
 
 | Interface | Best for | Lean session lifetime |
 |---|---|---|
@@ -21,7 +21,7 @@ python3 -m venv .venv
 ## Python
 
 ```python
-from nullius import Harness
+from action_speaks import Harness
 
 with Harness(pool_size=1).warm() as h:
     v = h.verify(
@@ -112,7 +112,7 @@ verified theorem can be irrelevant to that task.
 ## HTTP
 
 ```bash
-python3 -m nullius.http_server --port 8823 --pool 2
+python3 -m action_speaks.http_server --port 8823 --pool 2
 ```
 
 ```bash
@@ -154,10 +154,10 @@ networks.
 ```json
 {
   "mcpServers": {
-    "nullius": {
-      "command": "/path/to/nullius/.venv/bin/python3",
-      "args": ["-m", "nullius.mcp_server"],
-      "cwd": "/path/to/nullius"
+    "action-speaks": {
+      "command": "/path/to/action-speaks/.venv/bin/python3",
+      "args": ["-m", "action_speaks.mcp_server"],
+      "cwd": "/path/to/action-speaks"
     }
   }
 }
@@ -169,45 +169,45 @@ The tools are `verify`, `statement`, `search`, `close`, and `log`. Give the agen
 
 Requests are handled **one at a time**: the server reads a line from stdin, answers it, and
 only then reads the next. So a long verification delays whatever the agent asks for next, and
-`NULLIUS_POOL_SIZE` does not change that — a single server has no pool of its own. That is
+`ACTION_SPEAKS_POOL_SIZE` does not change that — a single server has no pool of its own. That is
 the current behavior, not a commitment; making one server concurrent would change how it owns
 its work, and is not planned here.
 
 Each client starts its own server process, so **run the [session daemon](#session-daemon)**
 if more than one agent uses this machine. With it running, the servers send their checking to
 it and start no Lean process of their own; without it, each holds its own session and its own
-copy of the libraries, which is several gigabytes each. `NULLIUS_NO_DAEMON=1` forces the work
+copy of the libraries, which is several gigabytes each. `ACTION_SPEAKS_NO_DAEMON=1` forces the work
 back into the server process.
 
 ## CLI
 
 ```bash
-nullius verify proof.lean -c "claim" --json --require-nontrivial
-printf '%s\n' "$SRC" | nullius verify - --json
-nullius log --recall 'gradient descent step size'
+action-speaks verify proof.lean -c "claim" --json --require-nontrivial
+printf '%s\n' "$SRC" | action-speaks verify - --json
+action-speaks log --recall 'gradient descent step size'
 ```
 
 For `verify`, exit code 0 means verified, 1 means not verified, and 2 indicates a
 configuration or command-line error. Use `--no-log` to avoid reading or writing the ledger.
 
-The installed `nullius` command takes a **file path** after `verify`; use `-` for stdin.
-The skill's `scripts/nullius` wrapper has different syntax: it takes a claim and reads the
+The installed `action-speaks` command takes a **file path** after `verify`; use `-` for stdin.
+The skill's `scripts/action-speaks` wrapper has different syntax: it takes a claim and reads the
 proof from stdin, or from `-f FILE`.
 
 ## Session daemon
 
-Starting Lean loads the libraries and takes seconds. `nullius serve` keeps warm sessions in
+Starting Lean loads the libraries and takes seconds. `action-speaks serve` keeps warm sessions in
 one process per user and per checkout, and the CLI uses it when it is running:
 
 ```bash
-nullius serve                 # foreground, Ctrl-C to stop
-nullius serve --install       # write the service files for this platform
-nullius serve --print-units   # show them without writing anything
+action-speaks serve                 # foreground, Ctrl-C to stop
+action-speaks serve --install       # write the service files for this platform
+action-speaks serve --print-units   # show them without writing anything
 ```
 
 With the daemon running, `verify`, `statement` and `close` send their work to it instead of
 starting Lean; without it they behave exactly as before. `--no-daemon`, or
-`NULLIUS_NO_DAEMON=1`, forces the work into the calling process, which is what you want when
+`ACTION_SPEAKS_NO_DAEMON=1`, forces the work into the calling process, which is what you want when
 reproducing a verdict against a known checkout.
 
 The daemon does the checking only. It writes no ledger entries: the caller records the
@@ -215,13 +215,13 @@ verdict, with its own tag and project, into its own ledger.
 
 ### Where the socket lives
 
-The socket goes in `$XDG_RUNTIME_DIR/nullius/<checkout>.sock`. That variable is the one in
+The socket goes in `$XDG_RUNTIME_DIR/action-speaks/<checkout>.sock`. That variable is the one in
 the XDG specification with no defined default, because its guarantees — owned by you, mode
 0700, lifetime bound to the login session — cannot be created by an application. It is
 honored wherever it is set, and on Linux it is `pam_systemd` that sets it, so it is missing
 under `sudo -i`, under cron, and in minimal containers as well as on other systems. When it
-is absent nullius falls back to a private `TMPDIR`, then to `$XDG_CACHE_HOME/nullius/run`,
-and says so, as the specification asks. `NULLIUS_SOCKET` overrides the choice; a path over
+is absent action-speaks falls back to a private `TMPDIR`, then to `$XDG_CACHE_HOME/action-speaks/run`,
+and says so, as the specification asks. `ACTION_SPEAKS_SOCKET` overrides the choice; a path over
 104 bytes is rejected, since that is the shorter of the two platform limits.
 
 The socket is named after the checkout, so two checkouts never answer for one another. That
@@ -230,14 +230,14 @@ against.
 
 ### Running it as a service
 
-`nullius serve --install` writes a systemd user unit on Linux or a launchd agent on macOS,
-pins `NULLIUS_ROOT` and the checkout's own interpreter, and prints the commands to enable it:
+`action-speaks serve --install` writes a systemd user unit on Linux or a launchd agent on macOS,
+pins `ACTION_SPEAKS_ROOT` and the checkout's own interpreter, and prints the commands to enable it:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now nullius-<checkout>.socket
+systemctl --user enable --now action-speaks-<checkout>.socket
 loginctl enable-linger "$USER"      # or the daemon stops when you log out
-systemctl --user status nullius-<checkout>.service
+systemctl --user status action-speaks-<checkout>.service
 ```
 
 The unit is socket-activated: systemd owns the socket and starts the daemon on first use, so
@@ -249,9 +249,9 @@ socket file behind; the next start removes it rather than failing to bind.
 Default searches are unchanged. Use Loogle patterns to search earlier verified targets:
 
 ```bash
-nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
-nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger
-nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
 ```
 
 `backend="ledger"` searches only the ledger. `include_ledger` adds a separate ledger group
@@ -285,7 +285,7 @@ exclusions; failures do not show that a claim is unprovable. These are export li
 not changes to the proof language accepted by the verifier.
 
 **Reuse source, not generated aliases.** Use a hit's row ID to retrieve its current source:
-CLI `nullius log --id 123 --json`, MCP `log { "id": 123 }`, or HTTP `GET /ledger/123`.
+CLI `action-speaks log --id 123 --json`, MCP `log { "id": 123 }`, or HTTP `GET /ledger/123`.
 Include the needed declarations and verify a fresh submission. Earlier proofs are not
 preloaded, and `close` is unchanged. Index and single-row source reads do not create, migrate,
 or write the ledger.
@@ -299,9 +299,9 @@ or write the ledger.
   ledger rather than the verifier tree. Requests beyond the pool wait for a free session.
 - **Isolation:** each submission starts from the preloaded library environment. Definitions
   from earlier submissions are not retained for later ones.
-- **Daemon:** `nullius serve` shares one warm pool with every CLI call and MCP server for
+- **Daemon:** `action-speaks serve` shares one warm pool with every CLI call and MCP server for
   that checkout, which is what keeps several agents from holding several copies of the
-  libraries. `NULLIUS_SOCKET` sets the socket path and `NULLIUS_NO_DAEMON=1` disables its
+  libraries. `ACTION_SPEAKS_SOCKET` sets the socket path and `ACTION_SPEAKS_NO_DAEMON=1` disables its
   use. An MCP server still answers its own requests sequentially.
 - **Timeouts:** a timed-out Lean process is killed. A later call starts a replacement.
 - **Logging:** verdicts are appended to `ledger.sqlite3` with their source and library
@@ -309,19 +309,19 @@ or write the ledger.
 
 | Environment variable | Default |
 |---|---|
-| `NULLIUS_ROOT` | Checkout containing the Python package |
-| `NULLIUS_LEAN_DIR` | `<root>/lean` |
-| `NULLIUS_REPL_BIN` | `<lean_dir>/.lake/packages/repl/.lake/build/bin/repl`; legacy `<root>/repl/` is also checked |
-| `NULLIUS_LAKE_BIN` | `lake` on PATH, then standard elan locations |
-| `NULLIUS_LEDGER` | `<root>/ledger.sqlite3` |
-| `NULLIUS_LEDGER_INDEX_DIR` | `<root>/build/ledger-search` |
-| `NULLIUS_LEDGER_REFRESH_TIMEOUT` | 900 seconds |
-| `NULLIUS_LOOGLE_BIN` | `<root>/vendor/loogle/.lake/build/bin/loogle`, if built |
-| `NULLIUS_LOOGLE_MODULE` | `NulliusAll` |
-| `NULLIUS_POOL_SIZE` | 2; an MCP server has no pool of its own, but the daemon it uses does |
-| `NULLIUS_COMMAND_TIMEOUT` | 120 seconds |
-| `NULLIUS_STARTUP_TIMEOUT` | 300 seconds |
-| `NULLIUS_LEAN_THREADS` | 4 |
+| `ACTION_SPEAKS_ROOT` | Checkout containing the Python package |
+| `ACTION_SPEAKS_LEAN_DIR` | `<root>/lean` |
+| `ACTION_SPEAKS_REPL_BIN` | `<lean_dir>/.lake/packages/repl/.lake/build/bin/repl`; legacy `<root>/repl/` is also checked |
+| `ACTION_SPEAKS_LAKE_BIN` | `lake` on PATH, then standard elan locations |
+| `ACTION_SPEAKS_LEDGER` | `<root>/ledger.sqlite3` |
+| `ACTION_SPEAKS_LEDGER_INDEX_DIR` | `<root>/build/ledger-search` |
+| `ACTION_SPEAKS_LEDGER_REFRESH_TIMEOUT` | 900 seconds |
+| `ACTION_SPEAKS_LOOGLE_BIN` | `<root>/vendor/loogle/.lake/build/bin/loogle`, if built |
+| `ACTION_SPEAKS_LOOGLE_MODULE` | `ActionSpeaksAll` |
+| `ACTION_SPEAKS_POOL_SIZE` | 2; an MCP server has no pool of its own, but the daemon it uses does |
+| `ACTION_SPEAKS_COMMAND_TIMEOUT` | 120 seconds |
+| `ACTION_SPEAKS_STARTUP_TIMEOUT` | 300 seconds |
+| `ACTION_SPEAKS_LEAN_THREADS` | 4 |
 
 ## Reporting results
 

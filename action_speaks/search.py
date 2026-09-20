@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 
 LOOGLE_URL = "https://loogle.lean-lang.org/json"
 LEANSEARCH_URL = "https://leansearch.net/search"
-USER_AGENT = "nullius-verifier/0.1 (+local research tool)"
+USER_AGENT = "action-speaks-verifier/0.1 (+local research tool)"
 
 
 @dataclass
@@ -231,7 +231,9 @@ class LoogleSession:
         self.lean_dir = lean_dir or (cfg.lean_dir if cfg else Path("lean"))
         self.lake_bin = lake_bin or (cfg.lake_bin if cfg else Path("lake"))
         self.module = module or (
-            cfg.loogle_module if cfg else os.environ.get("NULLIUS_LOOGLE_MODULE", "NulliusAll")
+            cfg.loogle_module
+            if cfg
+            else os.environ.get("ACTION_SPEAKS_LOOGLE_MODULE", "ActionSpeaksAll")
         )
         self.proc: subprocess.Popen[str] | None = None
         self._lock = threading.RLock()

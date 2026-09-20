@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Install the nullius skill, CLI and MCP server into the agent harnesses on this machine.
+# Install the action-speaks skill, CLI and MCP server into the agent harnesses on this machine.
 #
 #   ./install.sh              install skill + CLI symlink + MCP config
 #   ./install.sh --skill      skill only
 #   ./install.sh --mcp        MCP config only
-#   ./install.sh --cli        `nullius` on PATH only
+#   ./install.sh --cli        `action-speaks` on PATH only
 #   ./install.sh --uninstall  remove what this script installed
 #   ./install.sh --dry-run    show what would change
 #
@@ -18,12 +18,12 @@
 set -euo pipefail
 
 ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$ROOT/skills/nullius"
-SKILL_DST="$HOME/.agents/skills/nullius"
+SKILL_SRC="$ROOT/skills/action-speaks"
+SKILL_DST="$HOME/.agents/skills/action-speaks"
 MCP_TEMPLATE="$ROOT/mcp/copilot-mcp-config.json"
 MCP_DST="$HOME/.copilot/mcp-config.json"
-CLI_SRC="$ROOT/.venv/bin/nullius"
-CLI_DST="${NULLIUS_BIN_DIR:-$HOME/.local/bin}/nullius"
+CLI_SRC="$ROOT/.venv/bin/action-speaks"
+CLI_DST="${ACTION_SPEAKS_BIN_DIR:-$HOME/.local/bin}/action-speaks"
 
 do_skill=1
 do_mcp=1
@@ -61,7 +61,7 @@ install_skill() {
     return 1
   fi
   act "ln -sfn '$SKILL_SRC' '$SKILL_DST'"
-  act "chmod +x '$SKILL_SRC/scripts/nullius'"
+  act "chmod +x '$SKILL_SRC/scripts/action-speaks'"
   say "  ok (pi and Copilot both read ~/.agents/skills)"
   remove_legacy_skill
 }
@@ -69,10 +69,19 @@ install_skill() {
 # The skill used to be called `lean-proof-check`. A symlink under the old name still points
 # into this repository, so leaving it behind registers the same skill twice under two names.
 remove_legacy_skill() {
-  local legacy="$HOME/.agents/skills/lean-proof-check"
-  if [ -L "$legacy" ] && [ "$(readlink -f "$legacy")" = "$(readlink -f "$SKILL_SRC")" ]; then
-    say "  removing superseded symlink $legacy (skill renamed to nullius)"
+  # Names this project has been installed under before. Removed only when the link points
+  # at this checkout, so an unrelated skill of the same name is left alone.
+  local legacy
+  for legacy in "$HOME/.agents/skills/lean-proof-check" "$HOME/.agents/skills/nullius"; do
+  if [ -L "$legacy" ] && case "$(readlink "$legacy")" in "$ROOT"/*) true ;; *) false ;; esac; then
+    say "  removing superseded symlink $legacy (skill renamed to action-speaks)"
     act "rm '$legacy'"
+  fi
+  done
+  local old_cli="${ACTION_SPEAKS_BIN_DIR:-$HOME/.local/bin}/nullius"
+  if [ -L "$old_cli" ] && case "$(readlink "$old_cli")" in "$ROOT"/*) true ;; *) false ;; esac; then
+    say "  removing superseded command $old_cli"
+    act "rm '$old_cli'"
   fi
 }
 
@@ -89,7 +98,7 @@ uninstall_skill() {
 # --- CLI on PATH ---------------------------------------------------------
 
 # The console script lives inside the virtualenv, which would otherwise have to be activated
-# before every `nullius` call. A symlink from a directory already on PATH removes that step;
+# before every `action-speaks` call. A symlink from a directory already on PATH removes that step;
 # the script is a generated wrapper that hard-codes the venv's interpreter, so it works
 # through the symlink without activation.
 install_cli() {
@@ -106,8 +115,8 @@ install_cli() {
   act "mkdir -p '$(dirname "$CLI_DST")'"
   act "ln -sfn '$CLI_SRC' '$CLI_DST'"
   case ":$PATH:" in
-    *":$(dirname "$CLI_DST"):"*) say "  ok ('nullius' is on PATH)" ;;
-    *) say "  ok, but $(dirname "$CLI_DST") is not on PATH; add it to use 'nullius' directly" ;;
+    *":$(dirname "$CLI_DST"):"*) say "  ok ('action-speaks' is on PATH)" ;;
+    *) say "  ok, but $(dirname "$CLI_DST") is not on PATH; add it to use 'action-speaks' directly" ;;
   esac
 }
 
@@ -130,7 +139,7 @@ import json, os, shutil, sys
 
 template_path, dst_path, root, dry = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
 
-entry = json.loads(open(template_path).read().replace("__NULLIUS_ROOT__", root))["mcpServers"]["nullius"]
+entry = json.loads(open(template_path).read().replace("__ACTION_SPEAKS_ROOT__", root))["mcpServers"]["action-speaks"]
 
 # Point the server at the interpreter the package was installed into, when there is one.
 # A venv's python needs no PYTHONPATH and cannot be shadowed by whatever `python3` happens
@@ -149,14 +158,17 @@ if os.path.exists(dst_path):
         sys.exit(1)
 
 servers = existing.setdefault("mcpServers", {})
-if servers.get("nullius") == entry:
+superseded = servers.pop("nullius", None) is not None
+if servers.get("action-speaks") == entry and not superseded:
     print("  ok (already configured)")
     sys.exit(0)
+if superseded:
+    print("  removing superseded server `nullius`")
 
-action = "updating" if "nullius" in servers else "adding"
-servers["nullius"] = entry
-others = [k for k in servers if k != "nullius"]
-print(f"  {action} `nullius`" + (f", preserving: {', '.join(others)}" if others else ""))
+action = "updating" if "action-speaks" in servers else "adding"
+servers["action-speaks"] = entry
+others = [k for k in servers if k != "action-speaks"]
+print(f"  {action} `action-speaks`" + (f", preserving: {', '.join(others)}" if others else ""))
 
 if dry:
     print("  would write:", dst_path)
@@ -181,10 +193,10 @@ remove_mcp() {
 import json, sys
 dst, dry = sys.argv[1], sys.argv[2] == "1"
 cfg = json.load(open(dst))
-if cfg.get("mcpServers", {}).pop("nullius", None) is None:
-    print("  mcp: `nullius` not present")
+if cfg.get("mcpServers", {}).pop("action-speaks", None) is None:
+    print("  mcp: `action-speaks` not present")
     sys.exit(0)
-print("  removing `nullius` from", dst)
+print("  removing `action-speaks` from", dst)
 if not dry:
     with open(dst, "w") as f:
         json.dump(cfg, f, indent=2); f.write("\n")
@@ -212,6 +224,6 @@ fi
 
 if [ "$dry" -eq 0 ]; then
   say ""
-  say "Next: ./skills/nullius/scripts/nullius doctor"
+  say "Next: ./skills/action-speaks/scripts/action-speaks doctor"
   say "      (checks Lean, Mathlib and that the verifier discriminates correctly)"
 fi

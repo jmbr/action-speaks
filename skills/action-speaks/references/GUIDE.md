@@ -1,6 +1,6 @@
-# nullius reference
+# action-speaks reference
 
-See [SKILL.md](../SKILL.md) for the workflow. Commands below use `scripts/nullius` relative
+See [SKILL.md](../SKILL.md) for the workflow. Commands below use `scripts/action-speaks` relative
 to the skill directory.
 
 ## Failed checks
@@ -62,11 +62,11 @@ Use a completed result, prove the missing step, or report that the dependency is
 ## Finding lemmas
 
 ```bash
-scripts/nullius search 'every continuous function on a compact set attains its maximum'
-scripts/nullius search '|- Continuous (fun _ => _)' --backend loogle
-scripts/nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle
-scripts/nullius close 'Irrational (Real.sqrt 2)'
-scripts/nullius close '0 ≤ x^2' -b '(x : ℝ)'
+scripts/action-speaks search 'every continuous function on a compact set attains its maximum'
+scripts/action-speaks search '|- Continuous (fun _ => _)' --backend loogle
+scripts/action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle
+scripts/action-speaks close 'Irrational (Real.sqrt 2)'
+scripts/action-speaks close '0 ≤ x^2' -b '(x : ℝ)'
 ```
 
 Loogle pattern syntax:
@@ -93,7 +93,7 @@ candidates and run the finished proof through `verify`.
 adds a separate group alongside library results. Only explicit `--refresh-ledger` rechecks
 proofs and builds the index. Ordinary searches do neither; a missing or outdated cache asks
 for refresh. The default cache is `<root>/build/ledger-search`; override it with
-`NULLIUS_LEDGER_INDEX_DIR`. `NULLIUS_LEDGER_REFRESH_TIMEOUT` defaults to 900 seconds.
+`ACTION_SPEAKS_LEDGER_INDEX_DIR`. `ACTION_SPEAKS_LEDGER_REFRESH_TIMEOUT` defaults to 900 seconds.
 
 Only formerly verified targets that pass current rechecking and export are indexed.
 Identical source/target pairs share a hit; helpers are not separate hits. Export copies
@@ -104,7 +104,7 @@ that a claim is unprovable. These limits do not change the accepted proof langua
 
 Ledger source stays local. `--backend both --include-ledger` sends only the original query
 to remote natural-language search; remote-only backends cannot include ledger results.
-Retrieve a hit with `scripts/nullius log --id 123 --json`, include its needed declarations,
+Retrieve a hit with `scripts/action-speaks log --id 123 --json`, include its needed declarations,
 and verify a fresh submission. Generated aliases are not available in normal submissions
 or `close`. Reading the index or a source row does not create, migrate, or write the ledger.
 
@@ -119,9 +119,9 @@ verifier repository for registration, history association/import, and source pro
 Claim: *the arithmetic mean of two nonnegative reals is at least their geometric mean.*
 
 ```bash
-scripts/nullius statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
+scripts/action-speaks statement '(a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) : Real.sqrt (a * b) ≤ (a + b) / 2'
 
-scripts/nullius verify "AM-GM for two nonnegative reals" --require-nontrivial <<'EOF'
+scripts/action-speaks verify "AM-GM for two nonnegative reals" --require-nontrivial <<'EOF'
 theorem am_gm_two (a b : ℝ) (ha : 0 ≤ a) (hb : 0 ≤ b) :
     Real.sqrt (a * b) ≤ (a + b) / 2 := by
   rw [show a * b = ((a+b)/2)^2 - ((a-b)/2)^2 by ring]
@@ -141,7 +141,7 @@ Compare it with the English claim before calling the claim machine-checked.
 Prove the negation to refute a claim:
 
 ```bash
-scripts/nullius verify "not every continuous function is differentiable" <<'EOF'
+scripts/action-speaks verify "not every continuous function is differentiable" <<'EOF'
 theorem not_all_cont_diff : ¬ (∀ f : ℝ → ℝ, Continuous f → Differentiable ℝ f) := by
   intro h
   exact not_differentiableAt_abs_zero (h _ continuous_abs 0)
@@ -155,7 +155,7 @@ If neither direction is proved, report that the question remains unresolved.
 The CLI starts Lean for each invocation. For repeated checks, reuse sessions through Python:
 
 ```python
-from nullius import Harness
+from action_speaks import Harness
 
 with Harness(pool_size=2).warm() as h:
     verdicts = h.verify_many(
@@ -170,14 +170,14 @@ See `docs/INTEGRATION.md` in the verifier repository.
 ## Setup, history, and reproducibility
 
 ```bash
-scripts/nullius doctor
-scripts/nullius log
-scripts/nullius log --recall 'gradient descent'
+scripts/action-speaks doctor
+scripts/action-speaks log
+scripts/action-speaks log --recall 'gradient descent'
 ```
 
 `doctor` checks configuration and whether the verifier accepts and rejects its sample proofs
 as expected. Use any error message to identify the missing configuration or build step.
-The wrapper follows its symlink to find the repository; `NULLIUS_ROOT` overrides that path.
+The wrapper follows its symlink to find the repository; `ACTION_SPEAKS_ROOT` overrides that path.
 
 The ledger stores attempts with their source and library versions. Use `--tag NAME` when
 verifying related claims and `log --tag NAME` to retrieve them. A failed attempt does not

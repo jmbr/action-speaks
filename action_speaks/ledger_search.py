@@ -24,8 +24,8 @@ from .search import LoogleSession, SearchResult
 from .verify import Verifier
 
 FORMAT_VERSION = 1
-EXPORT_MARKER = "NULLIUS_LEDGER_EXPORT "
-RESULT_PREFIX = "NulliusLedgerResults."
+EXPORT_MARKER = "ACTION_SPEAKS_LEDGER_EXPORT "
+RESULT_PREFIX = "ActionSpeaksLedgerResults."
 _sessions: dict[tuple[str, ...], LoogleSession] = {}
 _session_lock = threading.RLock()
 
@@ -182,7 +182,7 @@ def _tree_states(roots: list[Path]) -> list[tuple[str, int, int, int]]:
                 not in (
                     ".git",
                     ".lake",
-                    ".nullius",
+                    ".action-speaks",
                     ".venv",
                     "__pycache__",
                     "build",
@@ -219,10 +219,10 @@ def _environment_key(config: Config) -> str:
     policy = [
         _file_hash(ROOT / file)
         for file in (
-            "nullius/verify.py",
-            "nullius/guard.py",
-            "nullius/repl.py",
-            "nullius/ledger_search.py",
+            "action_speaks/verify.py",
+            "action_speaks/guard.py",
+            "action_speaks/repl.py",
+            "action_speaks/ledger_search.py",
             "scripts/ledger_index.lean",
         )
     ]
@@ -283,9 +283,10 @@ def _prepare_workspace(workspace: Path, config: Config) -> None:
     _write_if_changed(workspace / "lean-toolchain", config.toolchain() + "\n")
     _write_if_changed(
         workspace / "lakefile.toml",
-        'name = "nulliusLedger"\nversion = "0.1.0"\n'
+        'name = "actionSpeaksLedger"\nversion = "0.1.0"\n'
         '[[lean_lib]]\nname = "Ledger"\n'
-        f'[[require]]\nname = "nullius"\npath = {json.dumps(str(config.lean_dir.resolve()))}\n'
+        f'[[require]]\nname = "ActionSpeaks"\n'
+        f"path = {json.dumps(str(config.lean_dir.resolve()))}\n"
         f'[[require]]\nname = "loogle"\npath = {json.dumps(str(loogle))}\n',
     )
     packages = []
@@ -302,7 +303,7 @@ def _prepare_workspace(workspace: Path, config: Config) -> None:
             }
         )
     for name, path, file in (
-        ("nullius", config.lean_dir.resolve(), "lakefile.toml"),
+        ("ActionSpeaks", config.lean_dir.resolve(), "lakefile.toml"),
         ("loogle", loogle, "lakefile.lean"),
     ):
         packages.append(
@@ -321,7 +322,7 @@ def _prepare_workspace(workspace: Path, config: Config) -> None:
         json.dumps(
             {
                 "version": "1.2.0",
-                "name": "nulliusLedger",
+                "name": "actionSpeaksLedger",
                 "lakeDir": ".lake",
                 "packagesDir": ".lake/packages",
                 "packages": packages,
@@ -436,7 +437,7 @@ def _export_entry(
         raise BuildFailure(verdict.feedback())
     module = f"Ledger.E{key}"
     text = (
-        "import Mathlib\nimport Physlib\nimport Cslib\nimport Nullius.LedgerExport\n\n"
+        "import Mathlib\nimport Physlib\nimport Cslib\nimport ActionSpeaks.LedgerExport\n\n"
         "#ledger_begin\n" + source + "\n\n"
         f'#ledger_export {json.dumps(target, ensure_ascii=False)} "E{key}"\n'
     )
@@ -483,7 +484,12 @@ def _refresh(
             return current
         # Build the adapter against the existing project, never update its dependencies.
         _run(
-            [*_lake(config, config.lean_dir), "build", "NulliusAll", "Nullius.LedgerExport"],
+            [
+                *_lake(config, config.lean_dir),
+                "build",
+                "ActionSpeaksAll",
+                "ActionSpeaks.LedgerExport",
+            ],
             config.lean_dir,
             deadline,
             config,
@@ -518,7 +524,7 @@ def _refresh(
             session.close()
         generation = _digest([environment, sorted(groups), entries, excluded])
         module = f"Ledger.S{generation}"
-        root_source = "import NulliusAll\n" + "".join(
+        root_source = "import ActionSpeaksAll\n" + "".join(
             f"import {entry['module']}\n" for entry in entries
         )
         _write_if_changed(workspace / "Ledger" / f"S{generation}.lean", root_source)

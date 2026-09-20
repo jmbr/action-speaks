@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius.repl import Session
-from nullius.verify import Verifier
+from action_speaks.repl import Session
+from action_speaks.verify import Verifier
 
 s = Session()
 s.start()

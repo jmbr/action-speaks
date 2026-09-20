@@ -14,10 +14,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius import cli, harness, http_server, mcp_server  # noqa: E402
-from nullius import search as S  # noqa: E402
-from nullius.config import Config, ConfigError  # noqa: E402
-from nullius.ledger import LedgerReadError  # noqa: E402
+from action_speaks import cli, harness, http_server, mcp_server  # noqa: E402
+from action_speaks import search as S  # noqa: E402
+from action_speaks.config import Config, ConfigError  # noqa: E402
+from action_speaks.ledger import LedgerReadError  # noqa: E402
 
 CORE_SEARCH = S.search
 ROW = {
@@ -121,7 +121,9 @@ class TestLedgerInterface:
             self.mock(S, name, return_value=self.library)
             for name in ("loogle", "loogle_remote", "leansearch")
         ]
-        backends.append(self.stack.enter_context(patch("nullius.ledger_search.search_ledger")))
+        backends.append(
+            self.stack.enter_context(patch("action_speaks.ledger_search.search_ledger"))
+        )
         return backends
 
     def test_cli_default_search_does_not_enable_ledger(self) -> None:

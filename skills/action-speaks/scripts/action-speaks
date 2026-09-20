@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Thin wrapper around the nullius verifier, callable from any working directory.
+# Thin wrapper around the action-speaks verifier, callable from any working directory.
 #
-#   nullius verify "informal claim" < proof.lean     check a proof (stdin or -f FILE)
-#   nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
-#   nullius search 'sum of two even numbers is even'
-#   nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
-#   nullius log
-#   nullius doctor
+#   action-speaks verify "informal claim" < proof.lean     check a proof (stdin or -f FILE)
+#   action-speaks statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+#   action-speaks search 'sum of two even numbers is even'
+#   action-speaks close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
+#   action-speaks log
+#   action-speaks doctor
 #
 # `check` is accepted as an alias for `verify`. These names are also the MCP tool names, so
 # the same workflow applies whether you are at a shell or driving this from an agent.
@@ -27,16 +27,16 @@ while [ -L "$self" ]; do
 done
 script_dir="$(cd -P "$(dirname "$self")" && pwd)"
 
-# <repo>/skills/nullius/scripts/nullius  ->  <repo>
+# <repo>/skills/action-speaks/scripts/action-speaks  ->  <repo>
 default_root="$(cd -P "$script_dir/../../.." && pwd)"
-ROOT="${NULLIUS_ROOT:-$default_root}"
+ROOT="${ACTION_SPEAKS_ROOT:-$default_root}"
 
-if [ ! -d "$ROOT/nullius" ]; then
+if [ ! -d "$ROOT/action_speaks" ]; then
   cat >&2 <<EOF
-nullius verifier not found at: $ROOT
+action-speaks verifier not found at: $ROOT
 
-This skill expects to live inside the verifier repository (as skills/nullius), or to
-be symlinked from it. Reinstall with the repository's install.sh, or set NULLIUS_ROOT to the
+This skill expects to live inside the verifier repository (as skills/action-speaks), or to
+be symlinked from it. Reinstall with the repository's install.sh, or set ACTION_SPEAKS_ROOT to the
 repository path.
 EOF
   exit 2
@@ -50,9 +50,9 @@ cmd="${1:-}"
 # `pip install -e .` has not been run, and the verifier depends on nothing outside the
 # standard library, so running it straight from the source tree is legitimate.
 if [ -x "$ROOT/.venv/bin/python3" ]; then
-  run() { (cd "$ROOT" && "$ROOT/.venv/bin/python3" -m nullius.cli "$@"); }
+  run() { (cd "$ROOT" && "$ROOT/.venv/bin/python3" -m action_speaks.cli "$@"); }
 else
-  run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m nullius.cli "$@"); }
+  run() { (cd "$ROOT" && PYTHONPATH="$ROOT" python3 -m action_speaks.cli "$@"); }
 fi
 
 case "$cmd" in
@@ -72,7 +72,7 @@ case "$cmd" in
       src_arg="$file"
     else
       # Read the proof from stdin into a temp file so the CLI can report line numbers.
-      tmp="$(mktemp -t nullius-XXXXXX.lean)"
+      tmp="$(mktemp -t action-speaks-XXXXXX.lean)"
       trap 'rm -f "$tmp"' EXIT
       cat > "$tmp"
       if [ ! -s "$tmp" ]; then

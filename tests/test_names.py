@@ -26,13 +26,13 @@ FORBIDDEN = {
     "lean_search_lemma": "renamed to `search`",
     "lean_find_proof": "renamed to `close`",
     "lean_ledger": "renamed to `log`",
-    "nullius goal": "the `goal` subcommand is now `close`",
-    "nullius.cli goal": "the `goal` subcommand is now `close`",
-    "leanai": "the project is called nullius",
-    "LeanAI": "the project is called nullius",
-    "LEANAI": "the project is called nullius",
-    "lean-ai": "the project is called nullius",
-    "lean-proof-check": "the skill is named after the project: `nullius`",
+    "action-speaks goal": "the `goal` subcommand is now `close`",
+    "action_speaks.cli goal": "the `goal` subcommand is now `close`",
+    "leanai": "the project is called action-speaks",
+    "LeanAI": "the project is called action-speaks",
+    "LEANAI": "the project is called action-speaks",
+    "lean-ai": "the project is called action-speaks",
+    "lean-proof-check": "the skill is named after the project: `action-speaks`",
     "indexes Mathlib only": (
         "shape search covers Physlib and Cslib too when loogle is built locally"
     ),
@@ -41,6 +41,9 @@ FORBIDDEN = {
     ),
     "test_cookbook.py": "renamed to tests/test_docs.py, which also checks the skill docs",
     "check_names.py": "renamed to tests/test_names.py, so pytest discovers it",
+    "nullius": "the project is called action-speaks-louder-than-words",
+    "Nullius": "the Lean package is called ActionSpeaks",
+    "NULLIUS_": "environment variables are prefixed ACTION_SPEAKS_",
 }
 
 # Where a documented revision is expected to match what lake actually pins.
@@ -56,6 +59,8 @@ SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/test_names.py")
 # is migrating away from.
 ALLOWED = {
     ("install.sh", "lean-proof-check"),
+    # The installer removes the superseded install, so it has to name it.
+    ("install.sh", "nullius"),
 }
 
 # Files whose subject is comparing releases, so naming more than the pinned one is the point

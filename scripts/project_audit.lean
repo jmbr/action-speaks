@@ -1,4 +1,4 @@
-import Nullius.Audit
+import ActionSpeaks.Audit
 import Lean.Replay
 
 open Lean Elab
@@ -33,13 +33,13 @@ private def auditTarget (target : String) (nontrivial : Bool)
   let explicit ← (withOptions (fun o => o.setBool `pp.explicit true)
     (PrettyPrinter.ppExpr ci.type)).run'
   let probes : MetaM (Option String × Option String) := Term.TermElabM.run' do
-    let vacuous ← Nullius.Audit.probe (← Nullius.Audit.vacuityGoal name)
-    let trivial ← match ← Nullius.Audit.trivialityGoal name with
+    let vacuous ← ActionSpeaks.Audit.probe (← ActionSpeaks.Audit.vacuityGoal name)
+    let trivial ← match ← ActionSpeaks.Audit.trivialityGoal name with
       | none => pure none
-      | some (goal, _) => Nullius.Audit.probe goal
+      | some (goal, _) => ActionSpeaks.Audit.probe goal
     return (vacuous, trivial)
   let (vacuous, trivial) ← probes.run'
-  let trusted := axioms.toList.all Nullius.Audit.trustedAxioms.contains
+  let trusted := axioms.toList.all ActionSpeaks.Audit.trustedAxioms.contains
   let checks := [
     Json.mkObj [("name", toJson "is_theorem"), ("passed", toJson ci.isThm)],
     Json.mkObj [("name", toJson "trusted_axioms"), ("passed", toJson trusted)],
@@ -58,11 +58,11 @@ unsafe def main (args : List String) : IO UInt32 := do
     | throw <| IO.userError "expected MODULE TARGET REQUIRE_NONTRIVIAL"
   let imports : Array Import := #[
     {module := `Mathlib, importAll := true}, {module := `Physlib, importAll := true},
-    {module := `Cslib, importAll := true}, {module := `Nullius.Audit, importAll := true}]
+    {module := `Cslib, importAll := true}, {module := `ActionSpeaks.Audit, importAll := true}]
   enableInitializersExecution
   let base ← importModules (loadExts := true) imports {}
   let basePath ← searchPathRef.get
-  if let some projectPath ← IO.getEnv "NULLIUS_PROJECT_LEAN_PATH" then
+  if let some projectPath ← IO.getEnv "ACTION_SPEAKS_PROJECT_LEAN_PATH" then
     searchPathRef.set (System.SearchPath.parse projectPath)
   let env ← importModules (loadExts := false)
     #[{module := moduleName.toName, importAll := true}] {}
@@ -71,7 +71,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   for (name, ci) in env.constants.toList do
     if let some original := base.find? name then
       unless compatible ci original do
-        IO.println s!"NULLIUS_PROJECT {Json.mkObj [
+        IO.println s!"ACTION_SPEAKS_PROJECT {Json.mkObj [
           ("environment_error", toJson s!"project replaces trusted declaration {name}")] |>.compress}"
         return 0
     else
@@ -80,7 +80,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   let checked ← try
       Environment.replay extra base
     catch e =>
-      IO.println s!"NULLIUS_PROJECT {Json.mkObj [
+      IO.println s!"ACTION_SPEAKS_PROJECT {Json.mkObj [
         ("replay_error", toJson e.toString)] |>.compress}"
       return 0
   -- Retain trusted parser/tactic state and expose only the kernel-checked project constants.
@@ -93,5 +93,5 @@ unsafe def main (args : List String) : IO UInt32 := do
       audited := addition.mainEnv
   let (result, _) ← (auditTarget target (nontrivial == "true") env).toIO
     {fileName := "<project-audit>", fileMap := default} {env := audited}
-  IO.println s!"NULLIUS_PROJECT {result.compress}"
+  IO.println s!"ACTION_SPEAKS_PROJECT {result.compress}"
   return 0

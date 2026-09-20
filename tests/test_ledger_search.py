@@ -16,12 +16,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius import ledger_search as LS  # noqa: E402
-from nullius import search as S  # noqa: E402
-from nullius.config import Config  # noqa: E402
-from nullius.ledger import Ledger  # noqa: E402
-from nullius.repl import Session  # noqa: E402
-from nullius.verify import Verifier  # noqa: E402
+from action_speaks import ledger_search as LS  # noqa: E402
+from action_speaks import search as S  # noqa: E402
+from action_speaks.config import Config  # noqa: E402
+from action_speaks.ledger import Ledger  # noqa: E402
+from action_speaks.repl import Session  # noqa: E402
+from action_speaks.verify import Verifier  # noqa: E402
 
 SOURCE = """
 namespace Demo
@@ -195,7 +195,7 @@ def test_ledger_search_isolation_refresh_and_retrieval(config: Config, directory
         repaired = LS.search_ledger(QUERY, refresh=True, config=cfg)
         assert repaired.hits and not repaired.error, repaired.render()
         assert repaired.index and repaired.index["repairs"]
-        local_name = re.search(r"NulliusLedgerEntries\.[^\s(]+", result.hits[0].signature)
+        local_name = re.search(r"ActionSpeaksLedgerEntries\.[^\s(]+", result.hits[0].signature)
         assert local_name is not None
         assert LS.search_ledger(local_name.group(), config=cfg).hits
         assert not vf.verify(
@@ -208,7 +208,7 @@ def test_ledger_search_isolation_refresh_and_retrieval(config: Config, directory
 
 @pytest.fixture
 def directory() -> Iterator[Path]:
-    with tempfile.TemporaryDirectory(prefix="nullius-ledger-tests-") as temp:
+    with tempfile.TemporaryDirectory(prefix="action-speaks-ledger-tests-") as temp:
         yield Path(temp)
 
 

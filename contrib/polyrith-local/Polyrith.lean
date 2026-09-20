@@ -352,8 +352,8 @@ def runSage (trace : Bool) (α : Expr) (atoms : Nat) (hyps : Array (Source × Po
     -- dry run enabled
     return .ok { trace := query }
 
-  let python := (← IO.getEnv "NULLIUS_PYTHON").getD "python3"
-  let script := (← IO.getEnv "NULLIUS_POLYRITH_SCRIPT").getD "scripts/polyrith_local.py"
+  let python := (← IO.getEnv "ACTION_SPEAKS_PYTHON").getD "python3"
+  let script := (← IO.getEnv "ACTION_SPEAKS_POLYRITH_SCRIPT").getD "scripts/polyrith_local.py"
   let child ← IO.Process.spawn {
     cmd := python, args := #[script],
     stdin := .piped, stdout := .piped, stderr := .piped }

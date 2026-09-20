@@ -24,9 +24,9 @@ from typing import Any
 
 from .config import Config
 
-PRELUDE = "import Mathlib\nimport Physlib\nimport Cslib\nimport Nullius.Audit"
+PRELUDE = "import Mathlib\nimport Physlib\nimport Cslib\nimport ActionSpeaks.Audit"
 
-AUDIT_MARKER = "NULLIUS_AUDIT "
+AUDIT_MARKER = "ACTION_SPEAKS_AUDIT "
 
 
 class ReplError(RuntimeError):
@@ -76,7 +76,7 @@ class ReplResponse:
         return not self.errors
 
     def audit_records(self) -> list[dict[str, Any]]:
-        """Decode the `NULLIUS_AUDIT {json}` messages emitted by `Nullius.Audit`."""
+        """Decode the `ACTION_SPEAKS_AUDIT {json}` messages emitted by `ActionSpeaks.Audit`."""
         out: list[dict[str, Any]] = []
         for text in self.infos:
             for line in text.splitlines():

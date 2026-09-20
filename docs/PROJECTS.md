@@ -1,16 +1,16 @@
 # Project-backed proofs
 
-A registered Lean project keeps its own ledger at `.nullius/ledger.sqlite3`.
-The project remains the source of its definitions and proofs. nullius records verification
+A registered Lean project keeps its own ledger at `.action-speaks/ledger.sqlite3`.
+The project remains the source of its definitions and proofs. action-speaks records verification
 attempts and builds disposable search caches; it does not copy or snapshot the project.
 
-Standalone `nullius verify FILE` and the default ledger continue to work as before.
+Standalone `action-speaks verify FILE` and the default ledger continue to work as before.
 
 ## Register a project
 
 ```bash
-nullius project register /path/to/mechanics --name mechanics
-nullius project list
+action-speaks project register /path/to/mechanics --name mechanics
+action-speaks project list
 ```
 
 Registration creates a project UUID and binds its ledger to that UUID. The display name
@@ -20,22 +20,22 @@ dependencies.
 Before running project checks or loading its search index, explicitly approve execution:
 
 ```bash
-nullius project register /path/to/mechanics --trust
+action-speaks project register /path/to/mechanics --trust
 ```
 
 Only approve projects you trust: Lake configurations and project code can execute programs.
-This is not a sandbox. Prepare the project's locked dependencies yourself. nullius uses
+This is not a sandbox. Prepare the project's locked dependencies yourself. action-speaks uses
 offline Lake commands, not automatic dependency installation.
 
-Project configuration lives in `.nullius/project.json`; registration and local trust
-settings live in the user registry. `NULLIUS_PROJECT_REGISTRY` overrides the registry path.
+Project configuration lives in `.action-speaks/project.json`; registration and local trust
+settings live in the user registry. `ACTION_SPEAKS_PROJECT_REGISTRY` overrides the registry path.
 Keep generated ledgers and caches out of version control. Keep the project identity file
 if you want a copy of the checkout to retain its identity.
 
 ## Check a named theorem
 
 ```bash
-nullius verify --project mechanics --module Mechanics.Bounds \
+action-speaks verify --project mechanics --module Mechanics.Bounds \
   --target Mechanics.Bounds.energy_bound --build
 ```
 
@@ -43,7 +43,7 @@ nullius verify --project mechanics --module Mechanics.Bounds \
 requires up-to-date build artifacts:
 
 ```bash
-nullius verify --project mechanics --module Mechanics.Bounds \
+action-speaks verify --project mechanics --module Mechanics.Bounds \
   --target Mechanics.Bounds.energy_bound --require-nontrivial
 ```
 
@@ -63,9 +63,9 @@ project ledger; it does not add project modules to the snippet's imports.
 ## Search and retrieve
 
 ```bash
-nullius search 'Real.sqrt' --project mechanics --backend ledger --refresh-ledger
-nullius search 'Real.sqrt' --project mechanics --backend ledger
-nullius log --project mechanics --id 91 --json
+action-speaks search 'Real.sqrt' --project mechanics --backend ledger --refresh-ledger
+action-speaks search 'Real.sqrt' --project mechanics --backend ledger
+action-speaks log --project mechanics --id 91 --json
 ```
 
 Project-backed results describe declarations checked in the **current checkout**. Their
@@ -81,16 +81,16 @@ is reported as inapplicable rather than hiding valid project results.
 ## Rename or move a project
 
 ```bash
-nullius project rename mechanics continuum
+action-speaks project rename mechanics continuum
 ```
 
 The UUID and ledger stay unchanged. The previous name remains an alias. Historical names,
 targets, and verdicts are not rewritten.
 
-If you move the directory, move `.nullius/` with it and register the new path:
+If you move the directory, move `.action-speaks/` with it and register the new path:
 
 ```bash
-nullius project register /new/path/to/continuum
+action-speaks project register /new/path/to/continuum
 ```
 
 The UUID identifies the moved project. If its old registered directory still exists, use
@@ -105,7 +105,7 @@ verify the new targets; retain old records as history.
 First preview a selection from an existing ledger:
 
 ```bash
-nullius project link mechanics --from-ledger /path/to/ledger.sqlite3 \
+action-speaks project link mechanics --from-ledger /path/to/ledger.sqlite3 \
   --tag mechanics --dry-run
 ```
 
@@ -115,7 +115,7 @@ entries with repeated `--id` flags instead of `--tag`.
 Use `import` when the project needs its own copy of the history:
 
 ```bash
-nullius project import mechanics --from-ledger /path/to/ledger.sqlite3 \
+action-speaks project import mechanics --from-ledger /path/to/ledger.sqlite3 \
   --id 91 --id 92 --dry-run
 ```
 
@@ -128,7 +128,7 @@ Every ledger has its own UUID. A durable entry reference is `LEDGER_UUID:ROW_ID`
 IDs alone are local to one database:
 
 ```bash
-nullius log --project mechanics --ref LEDGER_UUID:ROW_ID --json
+action-speaks log --project mechanics --ref LEDGER_UUID:ROW_ID --json
 ```
 
 Links require the source ledger to remain available. If it moves, relink it at the new
@@ -139,14 +139,14 @@ To promote it, put the needed definitions and proof in a project module, then re
 verification linked to the old entry:
 
 ```bash
-nullius verify --project mechanics --module Mechanics.Bounds \
+action-speaks verify --project mechanics --module Mechanics.Bounds \
   --target Mechanics.Bounds.energy_bound --build --derived-from LEDGER_UUID:ROW_ID
 ```
 
 ## Python and agents
 
 ```python
-from nullius import Harness
+from action_speaks import Harness
 
 with Harness(project="mechanics") as h:
     verdict = h.verify_module(

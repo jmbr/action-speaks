@@ -12,7 +12,7 @@ Tools offered, in the order an agent normally needs them:
   verify     the main event: check a proof and return a verdict
   log        look up past verdicts
 
-The names match the CLI subcommands exactly, so `nullius search` and the `search` tool are
+The names match the CLI subcommands exactly, so `action-speaks search` and the `search` tool are
 the same operation, and a workflow written for one transfers to the other.
 
 Design note: the server keeps one warm Lean session per process. The first call pays the
@@ -43,7 +43,7 @@ from .repl import ReplError, Session
 from .verify import Verdict, Verifier
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "nullius", "version": "0.1.0"}
+SERVER_INFO = {"name": "action-speaks", "version": "0.1.0"}
 
 # Reentrant: `session()` holds this lock while calling `config()`, which takes it again.
 _state_lock = threading.RLock()
@@ -81,7 +81,7 @@ def session() -> Session:
 #
 # Each MCP client starts its own server process, so without this every agent on the machine
 # holds a separate Lean session: measured at ~7.6 GB resident, about half of it private once
-# the memory-mapped `.olean` files are shared. Sending the work to `nullius serve` instead
+# the memory-mapped `.olean` files are shared. Sending the work to `action-speaks serve` instead
 # means one warm pool for all of them, and no import cost per agent.
 #
 # These helpers must be consulted *before* `session()`, or the server starts the very process

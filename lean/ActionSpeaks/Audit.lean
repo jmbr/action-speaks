@@ -1,7 +1,7 @@
 import Mathlib
 
 /-!
-# Nullius.Audit — machine-checkable auditing of agent-produced theorems
+# ActionSpeaks.Audit — machine-checkable auditing of agent-produced theorems
 
 `lake build`-ing a file only answers "does it elaborate?". For an agent that is trying to
 *back up a claim*, that is the least interesting question. This module adds the checks that
@@ -16,13 +16,13 @@ catch the two ways an agent's "proof" can be worthless:
    conclusion holds without its hypotheses is weaker than advertised. Caught by
    `#audit_vacuity` and `#audit_triviality`.
 
-Each command emits one `info` message of the form `NULLIUS_AUDIT {json}` so the Python driver
+Each command emits one `info` message of the form `ACTION_SPEAKS_AUDIT {json}` so the Python driver
 can parse results instead of scraping the pretty-printer.
 -/
 
 open Lean Elab Command Term Meta Tactic
 
-namespace Nullius.Audit
+namespace ActionSpeaks.Audit
 
 /-- Axioms a legitimately-proved classical theorem may depend on. Anything else — `sorryAx`,
 `Lean.ofReduceBool` (from `native_decide`), or a user-declared `axiom` — is disqualifying. -/
@@ -36,7 +36,7 @@ private def jnames (ns : List Name) : String :=
 private def jbool (b : Bool) : String := if b then "true" else "false"
 
 private def emit (payload : String) : CommandElabM Unit :=
-  logInfo m!"NULLIUS_AUDIT {payload}"
+  logInfo m!"ACTION_SPEAKS_AUDIT {payload}"
 
 /-- The tactic battery used for vacuity/triviality probes. Each entry must be a *finishing*
 tactic: it either closes the goal or fails. Entries are parenthesised because
@@ -205,7 +205,7 @@ def elabAuditReplay : CommandElab := fun stx => do
       if n.isInternal || skipPrefix.isPrefixOf n.toString then
         continue
       checked := checked + 1
-      match ← liftCoreM (kernelRecheck env n ci (`nulliusReplay)) with
+      match ← liftCoreM (kernelRecheck env n ci (`actionSpeaksReplay)) with
       | some err => failures := err :: failures
       | none => pure ()
     let msgs := failures.map fun f => jstr (f.replace "\n" " ")
@@ -276,4 +276,4 @@ def elabAuditShape : CommandElab := fun stx => do
     emit s!"\{\"check\":\"shape\",\"decl\":{jstr n.toString},\"binders\":{nBinders},\"is_theorem\":{jbool isThm},\"statement\":{jstr stmt},\"statement_explicit\":{jstr explicitStmt},\"statement_has_sorry\":{jbool ci.type.hasSorry}}"
   | _ => throwUnsupportedSyntax
 
-end Nullius.Audit
+end ActionSpeaks.Audit

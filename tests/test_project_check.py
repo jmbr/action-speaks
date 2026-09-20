@@ -16,13 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 pytestmark = pytest.mark.lean
 
-from nullius import project_search as PS  # noqa: E402
-from nullius import search as S  # noqa: E402
-from nullius.config import Config  # noqa: E402
-from nullius.ledger import Ledger  # noqa: E402
-from nullius.project_check import environment_id, verify_project  # noqa: E402
-from nullius.repl import Session  # noqa: E402
-from nullius.verify import Verifier  # noqa: E402
+from action_speaks import project_search as PS  # noqa: E402
+from action_speaks import search as S  # noqa: E402
+from action_speaks.config import Config  # noqa: E402
+from action_speaks.ledger import Ledger  # noqa: E402
+from action_speaks.project_check import environment_id, verify_project  # noqa: E402
+from action_speaks.repl import Session  # noqa: E402
+from action_speaks.verify import Verifier  # noqa: E402
 
 PROJECT_ID = "67357f2f-4635-4726-948b-18ee6c8c1341"
 MODEL = """namespace Demo
@@ -78,8 +78,8 @@ def write_project(root: Path, config: Config) -> Config:
         project_id=PROJECT_ID,
         project_name="fixture",
         project_trusted=True,
-        ledger_path=root / ".nullius/ledger.sqlite3",
-        ledger_index_dir=root / ".nullius/indexes",
+        ledger_path=root / ".action-speaks/ledger.sqlite3",
+        ledger_index_dir=root / ".action-speaks/indexes",
         ledger_refresh_timeout=300,
     )
 
@@ -92,14 +92,14 @@ def base() -> Config:
 @pytest.fixture
 def unbuilt(base: Config) -> Iterator[Config]:
     """A project whose sources are present but never compiled."""
-    with tempfile.TemporaryDirectory(prefix="nullius-project-check-") as directory:
+    with tempfile.TemporaryDirectory(prefix="action-speaks-project-check-") as directory:
         yield write_project(Path(directory), base)
 
 
 @pytest.fixture(scope="module")
 def built(base: Config) -> Iterator[Config]:
     """Built once: `lake build` dominates the cost of this module."""
-    with tempfile.TemporaryDirectory(prefix="nullius-project-check-") as directory:
+    with tempfile.TemporaryDirectory(prefix="action-speaks-project-check-") as directory:
         cfg = write_project(Path(directory), base)
         verdict = verify_project(cfg, "Demo", "Demo.value_eq", build=True)
         assert verdict.verified, verdict.render()
@@ -108,7 +108,9 @@ def built(base: Config) -> Iterator[Config]:
 
 
 def test_untrusted_project_is_rejected_before_anything_runs(unbuilt: Config) -> None:
-    with patch("nullius.project_check._run", side_effect=AssertionError("unapproved execution")):
+    with patch(
+        "action_speaks.project_check._run", side_effect=AssertionError("unapproved execution")
+    ):
         with pytest.raises(ValueError):
             verify_project(replace(unbuilt, project_trusted=False), "Demo", "Demo.value_eq")
 
@@ -178,9 +180,9 @@ def test_project_search_reads_the_ledger_without_building_or_checking(
     assert refreshed.hits[0].ledger["ids"] == [row]
 
     with (
-        patch("nullius.project_search._run", side_effect=AssertionError("implicit build")),
+        patch("action_speaks.project_search._run", side_effect=AssertionError("implicit build")),
         patch(
-            "nullius.project_search.verify_project",
+            "action_speaks.project_search.verify_project",
             side_effect=AssertionError("implicit check"),
         ),
     ):
@@ -201,4 +203,4 @@ def test_project_search_reads_the_ledger_without_building_or_checking(
 
     (built.project_root / "Demo.lean").write_text(GOOD + "\n-- changed source\n")
     assert PS.search_project_ledger("Demo.Box", 8, 20, config=built).error
-    assert not list(built.project_root.glob(".nullius/snapshots"))
+    assert not list(built.project_root.glob(".action-speaks/snapshots"))

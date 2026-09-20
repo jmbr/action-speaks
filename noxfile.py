@@ -3,7 +3,7 @@
 Two properties of this project shape every session below, and both were measured rather than
 assumed, because both fail quietly:
 
-* **The package must be installed editable.** `nullius` is a thin driver for a Lean project of
+* **The package must be installed editable.** `action-speaks` is a thin driver for a Lean project of
   several gigabytes that has to be built locally, and it locates that project relative to its
   own source file. A plain `session.install(".")` copies the Python into the session's
   `site-packages`, where it then looks for `lean/` beside the copy and finds nothing. Every
@@ -33,7 +33,7 @@ nox.options.reuse_existing_virtualenvs = True
 
 # Everything of ours that is Python. `examples/` is included because it is documentation
 # people copy from, and this file because a linter that exempts itself is a poor advertisement.
-SOURCES = ["nullius", "tests", "examples", "noxfile.py"]
+SOURCES = ["action_speaks", "tests", "examples", "noxfile.py"]
 
 
 @nox.session
@@ -64,7 +64,7 @@ def types(session):
     """Settings come from `[tool.pyright]` in pyproject.toml."""
     session.install("-e", ".")
     session.install("basedpyright")
-    session.run("basedpyright", "nullius")
+    session.run("basedpyright", "action-speaks")
 
 
 @nox.session
@@ -72,7 +72,7 @@ def mypy(session):
     """Not in the default set: it and pyright disagree, and one opinion is enough to act on."""
     session.install("-e", ".")
     session.install("mypy")
-    session.run("mypy", "nullius")
+    session.run("mypy", "action-speaks")
 
 
 @nox.session

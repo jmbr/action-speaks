@@ -1,13 +1,13 @@
 """Command-line interface.
 
-    nullius doctor                      check the installation
-    nullius verify FILE                 verify a Lean file (or - for stdin)
-    nullius statement 'STMT'            elaborate a statement without proving it
-    nullius search QUERY                find Mathlib lemmas
-    nullius close 'GOAL' -b '(n : Nat)' ask Lean which lemma closes a goal
-    nullius log                         show recent verifications
-    nullius project register PATH       register a project (execution needs --trust)
-    nullius serve                       run the session daemon for this checkout
+    action-speaks doctor                      check the installation
+    action-speaks verify FILE                 verify a Lean file (or - for stdin)
+    action-speaks statement 'STMT'            elaborate a statement without proving it
+    action-speaks search QUERY                find Mathlib lemmas
+    action-speaks close 'GOAL' -b '(n : Nat)' ask Lean which lemma closes a goal
+    action-speaks log                         show recent verifications
+    action-speaks project register PATH       register a project (execution needs --trust)
+    action-speaks serve                       run the session daemon for this checkout
 
 Subcommand names match the MCP tool names exactly, so a workflow written against one
 interface transfers unchanged to the other.
@@ -58,7 +58,7 @@ def _verify(cfg: Config, request: dict[str, Any], args: argparse.Namespace) -> V
 
     The daemon holds warm Lean sessions, so this is the difference between seconds and
     milliseconds per invocation. It does the checking only: the ledger belongs to whoever
-    ran the command, which is why `nullius serve` does not write to one.
+    ran the command, which is why `action-speaks serve` does not write to one.
     """
     addr = _daemon(args, cfg)
     if addr is not None:
@@ -525,7 +525,9 @@ def cmd_serve(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="nullius", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        prog="action-speaks",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

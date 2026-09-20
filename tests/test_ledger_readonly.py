@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius.ledger import LedgerReadError, read_ledger_row, read_verified_rows  # noqa: E402
+from action_speaks.ledger import LedgerReadError, read_ledger_row, read_verified_rows  # noqa: E402
 
 
 @pytest.fixture

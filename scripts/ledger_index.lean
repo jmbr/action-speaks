@@ -14,7 +14,7 @@ private def buildIndex (targets : Array String) (depHash : String)
     let name := stx.getId
     let ci ← getConstInfo name
     let isTheorem := match ci with | .thmInfo _ => true | _ => false
-    unless isTheorem && (`NulliusLedgerResults).isPrefixOf name do
+    unless isTheorem && (`ActionSpeaksLedgerResults).isPrefixOf name do
       throwError "not an exported ledger theorem: {name}"
     relation ← (Loogle.Find.addDecl name ci relation).run'
     trie ← (Loogle.Find.SuffixTrie.addDecl name ci trie).run'

@@ -70,7 +70,7 @@ def _ledger_snapshot(path: Path) -> Iterator[Path]:
     """Let SQLite read journaled data without writing the source's WAL read marks."""
     # mode=ro still creates/updates -shm; immutable=1 silently ignores committed WAL.
     # Copy a stable file set, then let SQLite recover/index only the private copy.
-    with tempfile.TemporaryDirectory(prefix="nullius-ledger-read-") as directory:
+    with tempfile.TemporaryDirectory(prefix="action-speaks-ledger-read-") as directory:
         for attempt in range(3):
             before = _ledger_file_state(path)
             if before[0] is None:

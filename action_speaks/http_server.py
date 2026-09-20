@@ -1,6 +1,6 @@
 """HTTP service, for harnesses that are not written in Python.
 
-    python3 -m nullius.http_server --port 823 --pool 4
+    python3 -m action_speaks.http_server --port 823 --pool 4
 
 Endpoints (all JSON):
 
@@ -141,7 +141,7 @@ class UnixServer(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "nullius/0.1"
+    server_version = "action_speaks/0.1"
 
     # `format` shadows the builtin, but the name is fixed by the base class: callers in
     # http.server pass it positionally, and a rename breaks anyone who passes it by keyword.
@@ -352,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
 def main(argv: list[str] | None = None) -> int:
     global _harness
     p = argparse.ArgumentParser(
-        prog="nullius.http_server",
+        prog="action_speaks.http_server",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -406,7 +406,8 @@ def main(argv: list[str] | None = None) -> int:
     server.verbose = args.verbose  # type: ignore[attr-defined]
     prov = _harness.provenance()
     print(
-        f"nullius listening on {where}  ({prov['toolchain']}, mathlib {prov['mathlib_rev'][:12]})",
+        f"action-speaks listening on {where}  "
+        f"({prov['toolchain']}, mathlib {prov['mathlib_rev'][:12]})",
         flush=True,
     )
     try:

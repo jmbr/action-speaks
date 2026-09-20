@@ -1,6 +1,6 @@
-# nullius — check an agent's mathematical claims
+# action-speaks — check an agent's mathematical claims
 
-nullius checks Lean 4 proofs written by AI agents. It uses Mathlib for mathematics,
+action-speaks checks Lean 4 proofs written by AI agents. It uses Mathlib for mathematics,
 Physlib for physics, and Cslib for computer science. You can call it from Python, the
 command line, an HTTP service, or an MCP tool.
 
@@ -8,13 +8,11 @@ It checks more than whether a proof compiles: it rejects incomplete proofs and u
 axioms, and looks for contradictory or unnecessary assumptions. **You still need to check
 that the Lean statement matches the claim you intended.**
 
-The name comes from *nullius in verba*: "on the word of no one."
-
 ## Start here
 
 | Task | Guide |
 |---|---|
-| Install and build nullius | [Setup from scratch](#setup-from-scratch) |
+| Install and build action-speaks | [Setup from scratch](#setup-from-scratch) |
 | Enable it in an agent | [Agent setup](docs/SETUP-AGENTS.md) |
 | Use Python, HTTP, MCP, or the CLI | [Integration guide](docs/INTEGRATION.md) |
 | Work through mathematical examples | [Cookbook](docs/COOKBOOK.md) |
@@ -24,26 +22,26 @@ The name comes from *nullius in verba*: "on the word of no one."
 Once installed:
 
 ```bash
-nullius doctor
-nullius statement '(n : Nat) (h : 5 < n) : 25 < n * n'
-nullius search 'sum of two even numbers is even'
-nullius close '25 < n * n' -b '(n : Nat) (h : 5 < n)'
-nullius verify proof.lean -c "My claim" --require-nontrivial
-nullius log --stats
+action-speaks doctor
+action-speaks statement '(n : Nat) (h : 5 < n) : 25 < n * n'
+action-speaks search 'sum of two even numbers is even'
+action-speaks close '25 < n * n' -b '(n : Nat) (h : 5 < n)'
+action-speaks verify proof.lean -c "My claim" --require-nontrivial
+action-speaks log --stats
 ```
 
 Starting Lean takes seconds. Run the daemon once and the commands above answer in
 milliseconds:
 
 ```bash
-nullius serve --install     # a systemd user service, or a launchd agent on macOS
-nullius serve               # or just run it in the foreground
+action-speaks serve --install     # a systemd user service, or a launchd agent on macOS
+action-speaks serve               # or just run it in the foreground
 ```
 
 For repeated checks from Python, keep a session open:
 
 ```python
-from nullius import Harness
+from action_speaks import Harness
 
 with Harness(pool_size=1).warm() as h:
     v = h.verify(
@@ -57,10 +55,10 @@ with Harness(pool_size=1).warm() as h:
 ## What it checks
 
 Lean accepts declarations that use `sorry` (an unfinished proof) or new axioms. Those are
-useful while developing a proof, but they are not evidence for a claim. nullius checks the
+useful while developing a proof, but they are not evidence for a claim. action-speaks checks the
 proof's axiom dependencies and allows only `propext`, `Classical.choice`, and `Quot.sound`.
 
-A complete proof can also prove the wrong thing. nullius runs two additional checks:
+A complete proof can also prove the wrong thing. action-speaks runs two additional checks:
 
 - **Contradictory assumptions (vacuity).** It tries to derive `False` from the assumptions.
   If it succeeds, the theorem is rejected.
@@ -91,11 +89,11 @@ statement matches your informal claim.
 ### Why replay and an integrity check are needed
 
 An axiom check alone is not enough. Lean metaprograms can insert declarations without a
-kernel check. nullius therefore rechecks eligible local declarations with the kernel before
+kernel check. action-speaks therefore rechecks eligible local declarations with the kernel before
 examining their axiom dependencies.
 
 The audit also runs in the submission's environment, where modified audit commands could
-report false results. To detect this, nullius adds a known-bad proof, called a *canary*,
+report false results. To detect this, action-speaks adds a known-bad proof, called a *canary*,
 alongside a randomly named alias of the target. The audit must reject the canary.
 
 These checks supplement the source guard; they are not a sandbox for running arbitrary
@@ -128,7 +126,7 @@ library versions. It keeps rejected attempts as well as successful ones.
 for identical source. You can search directly:
 
 ```bash
-nullius log --recall 'gradient descent step size'
+action-speaks log --recall 'gradient descent step size'
 ```
 
 Recall uses three kinds of match:
@@ -152,10 +150,10 @@ the statement. Library updates can change either outcome.
 Use Loogle patterns to find reusable earlier proofs:
 
 ```bash
-nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
-nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger
-nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
-nullius log --id 123 --json
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger --refresh-ledger
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger
+action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+action-speaks log --id 123 --json
 ```
 
 `ledger` searches only cached ledger targets; `--include-ledger` adds a separate group
@@ -187,11 +185,11 @@ python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
-nullius has no required Python dependencies. Use an **editable install** (`-e`): the driver
+action-speaks has no required Python dependencies. Use an **editable install** (`-e`): the driver
 expects the built `lean/` project beside its source. It is not a standalone PyPI package.
 
-Without installing, you can run `python3 -m nullius.cli` from the repository root, or use
-`skills/nullius/scripts/nullius` from another directory.
+Without installing, you can run `python3 -m action_speaks.cli` from the repository root, or use
+`skills/action-speaks/scripts/action-speaks` from another directory.
 
 ### Build Lean and the libraries
 
@@ -221,7 +219,7 @@ switches to the public service. To use that service explicitly, choose
 ```bash
 ./install.sh --dry-run
 ./install.sh
-nullius doctor
+action-speaks doctor
 ```
 
 The installer adds the command to `~/.local/bin`, links the skill, and configures Copilot's
@@ -235,8 +233,8 @@ with contradictory assumptions are rejected.
 
 Starting Lean loads the libraries and takes several seconds. Reusing a session avoids that
 cost; simple proofs can then take milliseconds, while harder proofs and probes take longer.
-Use `Harness`, a persistent server, or `nullius serve` for repeated work — with the daemon
-running, a `nullius verify` that took three seconds takes about a third of one.
+Use `Harness`, a persistent server, or `action-speaks serve` for repeated work — with the daemon
+running, a `action-speaks verify` that took three seconds takes about a third of one.
 
 Each concurrent verification needs a session, and a session is expensive: roughly 7.5 GB
 resident, of which about 4 GB is private, the rest being shared `.olean` pages. A second
@@ -267,15 +265,15 @@ and says what a move would cost. It needs no built checkout.
 
 | Path | Purpose |
 |---|---|
-| `lean/Nullius/Audit.lean` | Lean audit commands |
+| `lean/ActionSpeaks/Audit.lean` | Lean audit commands |
 | `lean/lakefile.toml`, `lean/lake-manifest.json` | Dependency requirements and locked revisions |
-| `lean/NulliusAll.lean` | Combined imports for the local search index |
-| `nullius/config.py`, `nullius/repl.py` | Configuration, Lean processes, and session pool |
-| `nullius/guard.py`, `nullius/verify.py` | Source restrictions, verification pipeline, and verdicts |
-| `nullius/ledger.py`, `nullius/search.py` | Stored results, recall, and lemma search |
-| `nullius/harness.py` | Python API |
-| `nullius/cli.py`, `nullius/http_server.py`, `nullius/mcp_server.py` | CLI and server entry points |
-| `skills/nullius/`, `mcp/`, `install.sh` | Agent instructions and installation |
+| `lean/ActionSpeaksAll.lean` | Combined imports for the local search index |
+| `action_speaks/config.py`, `action_speaks/repl.py` | Configuration, Lean processes, and session pool |
+| `action_speaks/guard.py`, `action_speaks/verify.py` | Source restrictions, verification pipeline, and verdicts |
+| `action_speaks/ledger.py`, `action_speaks/search.py` | Stored results, recall, and lemma search |
+| `action_speaks/harness.py` | Python API |
+| `action_speaks/cli.py`, `action_speaks/http_server.py`, `action_speaks/mcp_server.py` | CLI and server entry points |
+| `skills/action-speaks/`, `mcp/`, `install.sh` | Agent instructions and installation |
 | `tests/`, `noxfile.py`, `.pre-commit-config.yaml` | Tests and development checks |
 | `scripts/check_updates.py` | Which Lean release the pins could move to, and what it costs |
 | `contrib/` | Separate contributions, not part of the verifier build |
@@ -333,7 +331,7 @@ GITEA_SERVER_URL=https://your-gitea .venv/bin/semantic-release version
 ```
 
 `feat` gives a minor bump, `fix` a patch one. Below 1.0 a breaking change stays minor. The
-version lives in `nullius/__init__.py` and nowhere else; `CHANGELOG.md` is generated. Tags
+version lives in `action_speaks/__init__.py` and nowhere else; `CHANGELOG.md` is generated. Tags
 are `vX.Y.Z`, starting from `v0.1.0`, which marks where Conventional Commits were adopted.
 
 Releasing is manual: this Gitea has no Actions runner registered, so a workflow would not
@@ -349,7 +347,7 @@ needs semantic-release's `insecure` flag, which is deliberately not committed.
   contradiction checks.
 - [lean-lsp-mcp](https://github.com/oOo0oOo/lean-lsp-mcp) exposes Lean's language server and search tools.
 
-nullius focuses on claims whose statements are written by the agent, rather than supplied
+action-speaks focuses on claims whose statements are written by the agent, rather than supplied
 as a fixed specification.
 
 ## License and authorship

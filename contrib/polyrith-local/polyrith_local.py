@@ -55,7 +55,7 @@ def main() -> int:
             "MissingBackend",
             f"{exc}. Install the backend with "
             "`pip install passagemath-singular passagemath-repl`, and point "
-            "NULLIUS_PYTHON at that interpreter.",
+            "ACTION_SPEAKS_PYTHON at that interpreter.",
         )
 
     # `Integer` and `RealNumber` are the names the preparser generates for numeric literals.

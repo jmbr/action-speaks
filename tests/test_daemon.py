@@ -24,13 +24,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius import (
+from action_speaks import (
     cli,  # noqa: E402
     mcp_server,  # noqa: E402
 )
-from nullius import daemon as D  # noqa: E402
-from nullius.config import Config  # noqa: E402
-from nullius.http_server import UnixServer  # noqa: E402
+from action_speaks import daemon as D  # noqa: E402
+from action_speaks.config import Config  # noqa: E402
+from action_speaks.http_server import UnixServer  # noqa: E402
 
 CONFIG = Config(
     lean_dir=Path("/checkout/lean"),
@@ -71,8 +71,8 @@ def isolated(monkeypatch, cache: Path) -> None:
         "XDG_RUNTIME_DIR",
         "TMPDIR",
         "XDG_CACHE_HOME",
-        "NULLIUS_SOCKET",
-        "NULLIUS_NO_DAEMON",
+        "ACTION_SPEAKS_SOCKET",
+        "ACTION_SPEAKS_NO_DAEMON",
         "LISTEN_PID",
         "LISTEN_FDS",
     ):
@@ -114,13 +114,13 @@ def test_world_readable_tmpdir_is_refused_in_favor_of_the_cache(
     monkeypatch.setenv("TMPDIR", str(shared))
     base, warning = D.runtime_dir()
     assert shared not in base.parents and base != shared
-    assert base == cache / "nullius" / "run"
+    assert base == cache / "action-speaks" / "run"
     assert warning and "not private" in warning
 
 
 def test_fallback_always_warns_as_the_specification_requires(cache: Path) -> None:
     base, warning = D.runtime_dir()
-    assert base == cache / "nullius" / "run"
+    assert base == cache / "action-speaks" / "run"
     assert warning
 
 
@@ -140,13 +140,13 @@ def test_overlong_socket_path_is_explained_rather_than_left_to_the_kernel(
 ) -> None:
     deep = short_root / ("d" * 120)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(deep))
-    with pytest.raises(D.DaemonError, match="NULLIUS_SOCKET"):
+    with pytest.raises(D.DaemonError, match="ACTION_SPEAKS_SOCKET"):
         D.address(CONFIG)
 
 
 def test_explicit_socket_overrides_the_resolver(monkeypatch, short_root: Path) -> None:
     chosen = short_root / "chosen.sock"
-    monkeypatch.setenv("NULLIUS_SOCKET", str(chosen))
+    monkeypatch.setenv("ACTION_SPEAKS_SOCKET", str(chosen))
     assert D.address(CONFIG).path == chosen
 
 
@@ -154,7 +154,7 @@ def test_explicit_socket_overrides_the_resolver(monkeypatch, short_root: Path) -
 
 
 def test_prepare_creates_a_private_directory(short_root: Path) -> None:
-    path = short_root / "run" / "nullius" / "a.sock"
+    path = short_root / "run" / "action-speaks" / "a.sock"
     D.prepare(path)
     assert path.parent.is_dir()
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
@@ -200,7 +200,7 @@ def test_absent_and_dead_sockets_are_not_connectable(private: Path) -> None:
 def test_available_respects_the_opt_out(monkeypatch, private: Path) -> None:
     """Reproducing a verdict means knowing which checkout answered."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(private))
-    monkeypatch.setenv("NULLIUS_NO_DAEMON", "1")
+    monkeypatch.setenv("ACTION_SPEAKS_NO_DAEMON", "1")
     assert D.available(CONFIG) is None
 
 
@@ -298,24 +298,24 @@ def test_systemd_units_pin_the_checkout_and_its_interpreter() -> None:
     units = D.systemd_units(CONFIG, python=Path("/venv/bin/python3"))
     name = D.unit_name(CONFIG)
     service = units[f"{name}.service"]
-    assert "Environment=NULLIUS_ROOT=/checkout" in service
+    assert "Environment=ACTION_SPEAKS_ROOT=/checkout" in service
     assert "WorkingDirectory=/checkout" in service
-    assert "/venv/bin/python3 -m nullius.cli serve" in service
+    assert "/venv/bin/python3 -m action_speaks.cli serve" in service
     # An activated virtualenv is exactly what a service does not have.
     assert "activate" not in service
     assert "TimeoutStopSec" in service
 
 
 def test_systemd_unit_names_are_not_template_instances() -> None:
-    """`nullius@id.service` would read as an instance of a template that does not exist."""
+    """`action-speaks@id.service` would read as an instance of a template that does not exist."""
     assert "@" not in D.unit_name(CONFIG)
 
 
 def test_socket_unit_provides_its_runtime_directory() -> None:
     units = D.systemd_units(CONFIG)
     socket_unit = units[f"{D.unit_name(CONFIG)}.socket"]
-    assert "ListenStream=%t/nullius/" in socket_unit
-    assert "RuntimeDirectory=nullius" in socket_unit
+    assert "ListenStream=%t/action-speaks/" in socket_unit
+    assert "RuntimeDirectory=action-speaks" in socket_unit
     assert "Accept=no" in socket_unit
 
 
@@ -323,7 +323,7 @@ def test_launchd_agent_pins_the_checkout() -> None:
     filename, plist = D.launchd_agent(CONFIG, python=Path("/venv/bin/python3"))
     assert filename.endswith(".plist")
     assert "<string>/checkout</string>" in plist
-    assert "NULLIUS_ROOT" in plist
+    assert "ACTION_SPEAKS_ROOT" in plist
 
 
 def test_linux_instructions_cover_lingering_and_reload(monkeypatch) -> None:
@@ -340,7 +340,7 @@ def test_unsupported_platform_falls_back_to_the_foreground(monkeypatch) -> None:
     monkeypatch.setattr(sys, "platform", "freebsd14")
     files, commands = D.install_instructions(CONFIG)
     assert files == {}
-    assert "nullius serve" in commands
+    assert "action-speaks serve" in commands
 
 
 def test_a_failed_bind_does_not_delete_the_winners_socket(private: Path) -> None:
@@ -546,7 +546,7 @@ def test_mcp_does_not_retry_a_refusal_in_process(
 
 
 def test_mcp_works_normally_with_no_daemon(monkeypatch) -> None:
-    monkeypatch.setenv("NULLIUS_NO_DAEMON", "1")
+    monkeypatch.setenv("ACTION_SPEAKS_NO_DAEMON", "1")
     used = {}
     monkeypatch.setattr(mcp_server, "session", lambda: used.setdefault("local", True))
     monkeypatch.setattr(

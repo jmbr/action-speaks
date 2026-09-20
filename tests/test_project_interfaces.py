@@ -15,12 +15,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius import cli, harness, http_server, mcp_server  # noqa: E402
-from nullius import search as S  # noqa: E402
-from nullius.config import Config  # noqa: E402
-from nullius.ledger import LedgerReadError  # noqa: E402
-from nullius.projects import Project, ProjectError  # noqa: E402
-from nullius.verify import Verdict  # noqa: E402
+from action_speaks import cli, harness, http_server, mcp_server  # noqa: E402
+from action_speaks import search as S  # noqa: E402
+from action_speaks.config import Config  # noqa: E402
+from action_speaks.ledger import LedgerReadError  # noqa: E402
+from action_speaks.projects import Project, ProjectError  # noqa: E402
+from action_speaks.verify import Verdict  # noqa: E402
 
 PROJECT_ID = "11111111-1111-4111-8111-111111111111"
 LEDGER_ID = "22222222-2222-4222-8222-222222222222"

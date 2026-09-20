@@ -37,7 +37,7 @@ TRUSTED_AXIOMS = ("propext", "Classical.choice", "Quot.sound")
 
 # Prefix for the alias, seed and canary declarations the auditor injects. The kernel-replay
 # command is told to ignore it so the auditor does not re-check its own scaffolding.
-_HELPER_PREFIX = "nulliusRef"
+_HELPER_PREFIX = "actionSpeaksRef"
 
 _DECL_RE = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)*(?:private\s+|protected\s+|noncomputable\s+)*"
@@ -544,7 +544,7 @@ class Verifier:
         whether the hypotheses are already contradictory - which means no proof of it would
         be worth anything.
         """
-        name = "nulliusStatementProbe"
+        name = "actionSpeaksStatementProbe"
         src = f"theorem {name} {statement} := by sorry"
         g = guard.check(src)
         if not g.ok:

@@ -30,15 +30,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 pytestmark = pytest.mark.lean
 
-from nullius.config import ConfigError  # noqa: E402
-from nullius.repl import Session  # noqa: E402
-from nullius.verify import Verifier  # noqa: E402
+from action_speaks.config import ConfigError  # noqa: E402
+from action_speaks.repl import Session  # noqa: E402
+from action_speaks.verify import Verifier  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 COOKBOOK = ROOT / "docs" / "COOKBOOK.md"
 HEREDOC_DOCS = [
-    ROOT / "skills" / "nullius" / "SKILL.md",
-    ROOT / "skills" / "nullius" / "references" / "GUIDE.md",
+    ROOT / "skills" / "action-speaks" / "SKILL.md",
+    ROOT / "skills" / "action-speaks" / "references" / "GUIDE.md",
 ]
 
 BLOCK = re.compile(r"```lean\n(.*?)```", re.DOTALL)

@@ -4,7 +4,7 @@ This contribution restores Mathlib's `polyrith` tactic using a local computer al
 backend. It asks Singular, through [passagemath](https://passagemath.org), for polynomial
 coefficients and returns a `linear_combination` proof for Lean to check.
 
-It is separate from nullius and is not included in the verifier build.
+It is separate from action_speaks and is not included in the verifier build.
 
 ```lean
 example (x y : ℚ) (h1 : x + y = 3) (h2 : x - y = 1) : x = 2 := by polyrith'
@@ -44,8 +44,8 @@ Add `Polyrith.lean` to a Mathlib-based Lake project as a library, with the two P
 beside it. Set the interpreter and backend paths:
 
 ```bash
-export NULLIUS_PYTHON=/path/to/.venv-cas/bin/python3
-export NULLIUS_POLYRITH_SCRIPT=/path/to/polyrith_local.py
+export ACTION_SPEAKS_PYTHON=/path/to/.venv-cas/bin/python3
+export ACTION_SPEAKS_POLYRITH_SCRIPT=/path/to/polyrith_local.py
 lake env lean YourFile.lean
 ```
 
@@ -54,7 +54,7 @@ on the working directory and shell environment.
 
 The tactic is named `polyrith'` because Mathlib still defines `polyrith` as a removed-tactic
 stub. Use the generated `linear_combination` proof, not the external tactic call, when
-submitting a proof to nullius.
+submitting a proof to action-speaks.
 
 ## Changes from upstream
 
@@ -76,7 +76,7 @@ not need a separate syntax conversion.
 ## Examples and limitations
 
 The recorded compatibility baseline is Lean 4.33.0, Mathlib `db584cd6d46c`, and passagemath
-10.8.9. These examples produced certificates that passed nullius's audit:
+10.8.9. These examples produced certificates that passed action-speaks's audit:
 
 ```lean
 example (x y : ℚ) (h1 : x + y = 3) (h2 : x - y = 1) : x = 2 := by polyrith'

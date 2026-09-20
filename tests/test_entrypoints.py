@@ -65,7 +65,9 @@ def installed(path: Path, hint: str) -> Path:
 
 
 def test_skill_wrapper_runs_without_a_virtualenv() -> None:
-    wrapper = installed(ROOT / "skills" / "nullius" / "scripts" / "nullius", "the skill wrapper")
+    wrapper = installed(
+        ROOT / "skills" / "action-speaks" / "scripts" / "action-speaks", "the skill wrapper"
+    )
     done = run([str(wrapper), "log", "-n", "1"])
     assert done.returncode == 0, f"rc={done.returncode}\n{done.stdout}\n{done.stderr}"
 
@@ -73,7 +75,7 @@ def test_skill_wrapper_runs_without_a_virtualenv() -> None:
 def test_mcp_server_runs_without_a_virtualenv() -> None:
     python = installed(ROOT / ".venv" / "bin" / "python3", "the checkout virtualenv")
     done = run(
-        [str(python), "-m", "nullius.mcp_server"],
+        [str(python), "-m", "action_speaks.mcp_server"],
         stdin="\n".join(json.dumps(r) for r in (INITIALIZE, LOG_CALL)) + "\n",
     )
     replies = [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
@@ -83,6 +85,6 @@ def test_mcp_server_runs_without_a_virtualenv() -> None:
 
 
 def test_installed_command_runs_without_a_virtualenv() -> None:
-    cli = installed(Path.home() / ".local" / "bin" / "nullius", "~/.local/bin/nullius")
+    cli = installed(Path.home() / ".local" / "bin" / "action-speaks", "~/.local/bin/action-speaks")
     done = run([str(cli), "log", "-n", "1"])
     assert done.returncode == 0, f"rc={done.returncode}\n{done.stdout}\n{done.stderr}"

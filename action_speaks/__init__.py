@@ -1,8 +1,8 @@
-"""nullius: machine-checked backing for an agent's mathematical claims.
+"""action-speaks: machine-checked backing for an agent's mathematical claims.
 
 Typical use from a harness:
 
-    from nullius import Harness
+    from action_speaks import Harness
 
     with Harness(pool_size=4).warm() as h:
         v = h.verify(source, claim="...")

@@ -1,14 +1,14 @@
 ---
-name: nullius
+name: action-speaks
 description: Check mathematical or computational claims by proving them in Lean 4 with Mathlib, Physlib and Cslib. Use for non-obvious inequalities, identities, bounds, closed forms, convergence, termination, correctness arguments, and counterexamples in mathematics, physics, or computer science. Also use to check statements for contradictory assumptions and to find library lemmas instead of guessing names.
-compatibility: Requires a built nullius checkout (Lean 4.33.0 + Mathlib + Physlib + Cslib) and its install.sh setup. Linux/macOS with python3.
+compatibility: Requires a built action-speaks checkout (Lean 4.33.0 + Mathlib + Physlib + Cslib) and its install.sh setup. Linux/macOS with python3.
 metadata:
-  repository: nullius
+  repository: action-speaks
 ---
 
 # Check mathematical claims with Lean
 
-Use nullius for mathematical facts that need more than inspection to justify. It checks Lean
+Use action-speaks for mathematical facts that need more than inspection to justify. It checks Lean
 proofs, rejects unfinished proofs and untrusted axioms, and looks for problems in assumptions.
 It cannot check that a formal statement matches an English claim; you must compare them.
 
@@ -24,7 +24,7 @@ State what you intend to prove before writing Lean.
 ### 2. Check the statement
 
 ```bash
-~/.agents/skills/nullius/scripts/nullius statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
+~/.agents/skills/action-speaks/scripts/action-speaks statement '(n : ℕ) (h : 5 < n) : 25 < n * n'
 ```
 
 This returns the *elaborated statement*: what Lean interpreted after resolving notation
@@ -37,16 +37,16 @@ equivalent theorem. A previous tactic failure is a reason to try another approac
 give up. A detected contradiction or unnecessary assumption calls for reviewing the
 statement.
 
-The commands below use `scripts/nullius` relative to this skill directory. Use the full path
+The commands below use `scripts/action-speaks` relative to this skill directory. Use the full path
 above when working elsewhere. For wording-based ledger recall, run
-`scripts/nullius log --recall TEXT`.
+`scripts/action-speaks log --recall TEXT`.
 
 ### 3. Find lemmas
 
 ```bash
-scripts/nullius search 'sum of two even numbers is even'
-scripts/nullius search '|- Irrational (Real.sqrt _)' --backend loogle
-scripts/nullius close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
+scripts/action-speaks search 'sum of two even numbers is even'
+scripts/action-speaks search '|- Irrational (Real.sqrt _)' --backend loogle
+scripts/action-speaks close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
 ```
 
 Local Loogle searches the installed Mathlib, Physlib, and Cslib. `close` asks the installed
@@ -61,9 +61,9 @@ it uses a different Mathlib revision and does not cover Physlib or Cslib.
 When you need an earlier proof, use local ledger shape search, not just library search:
 
 ```bash
-scripts/nullius search 'Real.sqrt, |- _ ≤ _' --backend ledger
-scripts/nullius search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
-scripts/nullius log --id 123 --json
+scripts/action-speaks search 'Real.sqrt, |- _ ≤ _' --backend ledger
+scripts/action-speaks search 'Real.sqrt, |- _ ≤ _' --backend loogle --include-ledger
+scripts/action-speaks log --id 123 --json
 ```
 
 `ledger` searches only earlier targets; `--include-ledger` adds a separate group alongside
@@ -86,7 +86,7 @@ results; retrieve stable ledger references with `log`'s `ref` argument.
 ### 4. Verify the proof
 
 ```bash
-scripts/nullius verify "if n > 5 then n squared exceeds 25" --require-nontrivial <<'EOF'
+scripts/action-speaks verify "if n > 5 then n squared exceeds 25" --require-nontrivial <<'EOF'
 theorem main (n : ℕ) (h : 5 < n) : 25 < n * n := by nlinarith
 EOF
 ```
@@ -97,7 +97,7 @@ can establish the conclusion after removing propositional assumptions. It does n
 that each assumption is necessary.
 
 The wrapper takes a claim and reads source from stdin or `-f FILE`. The installed CLI uses
-`nullius verify FILE -c "claim"` instead.
+`action-speaks verify FILE -c "claim"` instead.
 
 ### 5. Report the result
 

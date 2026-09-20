@@ -30,11 +30,11 @@ class Project:
 
     @property
     def ledger_path(self) -> Path:
-        return self.root / ".nullius" / "ledger.sqlite3"
+        return self.root / ".action-speaks" / "ledger.sqlite3"
 
     @property
     def index_dir(self) -> Path:
-        return self.root / ".nullius" / "indexes"
+        return self.root / ".action-speaks" / "indexes"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,11 +58,11 @@ def _path(value: str | Path) -> Path:
 def _registry_path(override: Path | None) -> Path:
     if override is not None:
         return _path(override)
-    configured = os.environ.get("NULLIUS_PROJECT_REGISTRY")
+    configured = os.environ.get("ACTION_SPEAKS_PROJECT_REGISTRY")
     if configured:
         return _path(configured)
     base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    return _path(base / "nullius" / "projects.json")
+    return _path(base / "action-speaks" / "projects.json")
 
 
 def _uuid(value: object) -> str:
@@ -164,7 +164,7 @@ def _validate_root(root: Path) -> None:
             raise ProjectError(f"project root {root} must contain lean-toolchain")
         if not any((root / name).is_file() for name in ("lakefile.toml", "lakefile.lean")):
             raise ProjectError(f"project root {root} must contain lakefile.toml or lakefile.lean")
-        metadata = root / ".nullius"
+        metadata = root / ".action-speaks"
         if metadata.is_symlink() or (metadata.exists() and not metadata.is_dir()):
             raise ProjectError(f"project metadata must be a local directory: {metadata}")
         for name in ("project.json", "ledger.sqlite3"):
@@ -176,7 +176,7 @@ def _validate_root(root: Path) -> None:
 
 
 def _config(root: Path, *, optional: bool = False) -> tuple[str, str] | None:
-    data = _read_json(root / ".nullius" / "project.json", optional=optional)
+    data = _read_json(root / ".action-speaks" / "project.json", optional=optional)
     if data is None:
         return None
     return _uuid(data.get("id")), _name(data.get("name"))
@@ -275,7 +275,7 @@ def _atomic_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def _write_config(project: Project) -> None:
-    path = project.root / ".nullius" / "project.json"
+    path = project.root / ".action-speaks" / "project.json"
     data = {"schema_version": 1, "id": project.id, "name": project.name}
     if _read_json(path, optional=True) != data:
         _atomic_json(path, data)
@@ -297,8 +297,8 @@ def _write_registry(path: Path, projects: dict[str, Project]) -> None:
 
 
 def _registry_outside_metadata(path: Path, root: Path) -> None:
-    if path.is_relative_to(root / ".nullius"):
-        raise ProjectError("local project registry must be outside project .nullius metadata")
+    if path.is_relative_to(root / ".action-speaks"):
+        raise ProjectError("local project registry must be outside project .action-speaks metadata")
 
 
 def _renamed(project: Project, name: str) -> Project:
@@ -329,7 +329,7 @@ def register_project(
     _registry_outside_metadata(registry, root)
     with _lock(Path(str(registry) + ".lock")):
         projects = _read_registry(registry)
-        with _lock(root / ".nullius" / "project.lock"):
+        with _lock(root / ".action-speaks" / "project.lock"):
             _validate_root(root)
             config = _config(root, optional=True)
             occupant = next((p for p in projects.values() if p.root == root), None)
@@ -385,7 +385,7 @@ def rename_project(
         projects = _read_registry(registry)
         selected = _select(selector, projects)
         _registry_outside_metadata(registry, selected.root)
-        with _lock(selected.root / ".nullius" / "project.lock"):
+        with _lock(selected.root / ".action-speaks" / "project.lock"):
             _checked(selected)
             project = _renamed(selected, name)
             _check_labels(project, projects)

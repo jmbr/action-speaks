@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius.ledger import (  # noqa: E402
+from action_speaks.ledger import (  # noqa: E402
     SCHEMA,
     Ledger,
     LedgerReadError,
@@ -30,12 +30,12 @@ from nullius.ledger import (  # noqa: E402
     read_ledger_row,
     read_verified_rows,
 )
-from nullius.ledger_transfer import (  # noqa: E402
+from action_speaks.ledger_transfer import (  # noqa: E402
     read_entry_reference,
     read_project_rows,
     transfer_entries,
 )
-from nullius.verify import Check, Verdict  # noqa: E402
+from action_speaks.verify import Check, Verdict  # noqa: E402
 
 
 def saved_rows(path: Path) -> list[dict]:
@@ -279,7 +279,7 @@ class TestLedgerProject:
                 ledger.record(Verdict("verified", "new", "new"), "new")
             return result
 
-        with patch("nullius.ledger.shutil.copyfile", side_effect=copy_and_change):
+        with patch("action_speaks.ledger.shutil.copyfile", side_effect=copy_and_change):
             rows = read_verified_rows(self.source)
         assert changed
         assert [row["id"] for row in rows] == [1, 4]
@@ -295,7 +295,7 @@ class TestLedgerProject:
             return result
 
         with (
-            patch("nullius.ledger.shutil.copyfile", side_effect=copy_and_change),
+            patch("action_speaks.ledger.shutil.copyfile", side_effect=copy_and_change),
             pytest.raises(LedgerReadError, match="changed repeatedly"),
         ):
             read_verified_rows(self.source)

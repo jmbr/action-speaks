@@ -1,16 +1,16 @@
-name = "nullius"
+name = "ActionSpeaks"
 version = "0.1.0"
-defaultTargets = ["Nullius"]
+defaultTargets = ["ActionSpeaks"]
 
 [[lean_lib]]
-name = "Nullius"
+name = "ActionSpeaks"
 
 # The root module for local lemma search: it imports Mathlib, Physlib and the audit module,
 # so a Loogle index built from it covers exactly what a submission can refer to. Nothing
 # depends on it, and it is not part of `defaultTargets` — `scripts/build-loogle.sh` builds
 # it on demand.
 [[lean_lib]]
-name = "NulliusAll"
+name = "ActionSpeaksAll"
 
 
 [[require]]
@@ -32,7 +32,7 @@ rev = "bbeedf38e0898869fc3b7c009e1ea877b46204e4"
 # (`Lean.ofReduceBool`) and `semiformal_result` (an inconsistent `axiom helper : α`) - and
 # which results are complete changes over time. A ledger entry only means something if the
 # revision it was checked against is known. The audit rejects all three kinds anyway, since
-# none of those axioms is in `Nullius.Audit.trustedAxioms`.
+# none of those axioms is in `ActionSpeaks.Audit.trustedAxioms`.
 #
 # Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.33.0 above is
 # its constraint, not ours. Revisit both pins together when it bumps -- `scripts/check_updates.py`

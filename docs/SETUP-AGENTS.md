@@ -1,11 +1,11 @@
-# Set up nullius for an agent
+# Set up action-speaks for an agent
 
-First [install and build nullius](../README.md#setup-from-scratch). Then run:
+First [install and build action-speaks](../README.md#setup-from-scratch). Then run:
 
 ```bash
 ./install.sh --dry-run    # Preview changes
 ./install.sh              # Install the command, skill, and Copilot MCP entry
-nullius doctor
+action-speaks doctor
 ```
 
 Restart Copilot after installing the MCP entry.
@@ -15,7 +15,7 @@ Restart Copilot after installing the MCP entry.
 | Component | Purpose |
 |---|---|
 | Skill | Teaches the agent when to verify and how to interpret results |
-| MCP server | Lets the agent call nullius tools directly and reuse a Lean session |
+| MCP server | Lets the agent call action-speaks tools directly and reuse a Lean session |
 | CLI | Runs checks from a shell |
 
 Use both the skill and MCP where supported. For agents without MCP, such as the pi setup
@@ -36,13 +36,13 @@ Installed commands use the checkout's interpreter; you do not need to activate a
 
 ## Skill
 
-The skill is installed at `~/.agents/skills/nullius`, which pi and Copilot CLI can discover.
+The skill is installed at `~/.agents/skills/action-speaks`, which pi and Copilot CLI can discover.
 
 ```text
-skills/nullius/
-├── SKILL.md               # When to use nullius and the verification workflow
+skills/action-speaks/
+├── SKILL.md               # When to use action-speaks and the verification workflow
 ├── references/GUIDE.md    # Error reference and worked examples
-└── scripts/nullius        # Shell wrapper
+└── scripts/action-speaks        # Shell wrapper
 ```
 
 The skill description tells the agent which tasks should trigger verification. The full
@@ -52,14 +52,14 @@ installed skill can be used from other projects.
 To check discovery in pi:
 
 ```bash
-pi --print "/skill:nullius"
+pi --print "/skill:action-speaks"
 ```
 
 For clients using a different skill directory, link the same source there. For example:
 
 ```bash
 mkdir -p ~/.claude/skills
-ln -s /path/to/nullius/skills/nullius ~/.claude/skills/nullius
+ln -s /path/to/action-speaks/skills/action-speaks ~/.claude/skills/action-speaks
 ```
 
 pi can also read additional directories through its settings:
@@ -73,13 +73,13 @@ pi can also read additional directories through its settings:
 The skill wrapper resolves the checkout through its symlink, so it works from any directory:
 
 ```bash
-~/.agents/skills/nullius/scripts/nullius verify "My claim" < proof.lean
+~/.agents/skills/action-speaks/scripts/action-speaks verify "My claim" < proof.lean
 ```
 
 This differs from the installed CLI:
 
 ```bash
-nullius verify proof.lean -c "My claim"
+action-speaks verify proof.lean -c "My claim"
 ```
 
 Both use the same verifier and configured ledger. Each shell invocation starts a new Lean
@@ -92,11 +92,11 @@ session; use MCP or the Python API for repeated checks.
 ```json
 {
   "mcpServers": {
-    "nullius": {
+    "action-speaks": {
       "type": "local",
-      "command": "/path/to/nullius/.venv/bin/python3",
-      "args": ["-m", "nullius.mcp_server"],
-      "cwd": "/path/to/nullius",
+      "command": "/path/to/action-speaks/.venv/bin/python3",
+      "args": ["-m", "action_speaks.mcp_server"],
+      "cwd": "/path/to/action-speaks",
       "env": {"PYTHONUNBUFFERED": "1"},
       "tools": ["*"]
     }
@@ -110,9 +110,9 @@ session open to avoid reloading the libraries for every request.
 
 ## Troubleshooting
 
-Run `nullius doctor` to check paths, library versions, and basic verification behavior.
+Run `action-speaks doctor` to check paths, library versions, and basic verification behavior.
 If it fails, use its error message to identify the missing build or configuration.
-`NULLIUS_ROOT` can point the wrapper at a different built checkout.
+`ACTION_SPEAKS_ROOT` can point the wrapper at a different built checkout.
 
 If an agent cannot find the tools, check its skill directory or MCP configuration and restart
 the client. See the [integration guide](INTEGRATION.md) for direct Python, HTTP, and CLI use.
