@@ -1,7 +1,7 @@
 ---
 name: action-speaks
-description: Check mathematical or computational claims by proving them in Lean 4 with Mathlib, Physlib and Cslib. Use for non-obvious inequalities, identities, bounds, closed forms, convergence, termination, correctness arguments, and counterexamples in mathematics, physics, or computer science. Also use to check statements for contradictory assumptions and to find library lemmas instead of guessing names.
-compatibility: Requires a built action-speaks checkout (Lean 4.33.0 + Mathlib + Physlib + Cslib) and its install.py setup. Linux/macOS with python3.
+description: Check mathematical or computational claims by proving them in Lean 4 with Mathlib, Physlib, Cslib and FloatLib. Use for non-obvious inequalities, identities, bounds, closed forms, convergence, termination, correctness arguments, and counterexamples in mathematics, physics, or computer science. Also use to check statements for contradictory assumptions and to find library lemmas instead of guessing names.
+compatibility: Requires a built action-speaks checkout (Lean 4.34.0 + Mathlib + Physlib + Cslib) and its install.py setup. Linux/macOS with python3.
 metadata:
   repository: action-speaks
 ---
@@ -108,7 +108,7 @@ For any other verdict, explain what failed. Do not present the claim as proved.
 
 ## Lean source rules
 
-- No `import` lines: Mathlib, Physlib, Cslib, and the audit module are preloaded.
+- No `import` lines: Mathlib, Physlib, Cslib, FloatLib, and the audit module are preloaded.
 - Put helpers first and the target theorem last, or select the theorem explicitly.
 - Physlib includes unfinished results marked `@[sorryful]` or `@[pseudo]`. Citing one can
   fail the axiom check even if your source contains no `sorry`.

@@ -75,7 +75,7 @@ not need a separate syntax conversion.
 
 ## Examples and limitations
 
-The recorded compatibility baseline is Lean 4.33.0, Mathlib `db584cd6d46c`, and passagemath
+The recorded compatibility baseline is Lean 4.34.0, Mathlib `5ed296525643`, and passagemath
 10.8.9. These examples produced certificates that passed action-speaks's audit:
 
 ```lean

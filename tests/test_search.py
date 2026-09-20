@@ -6,7 +6,8 @@ the whole tool exists to prevent.
 
 Two properties matter and neither is covered elsewhere:
 
-* the local index reaches Physlib and Cslib, which is the reason for running Loogle locally
+* the local index reaches Physlib, Cslib and FloatLib, which is the reason for running
+  Loogle locally
   at all — the hosted service has neither in its index, and a search that cannot see a library
   the verifier can is worse than useless, because its silence looks like an answer;
 * an absent binary is *reported* rather than quietly answered from the hosted index, whose
@@ -38,6 +39,7 @@ LIBRARIES = [
     ("physlib", "ClassicalMechanics.FreeParticle.linearMomentum", "Physlib."),
     ("mathlib", "|- Irrational (Real.sqrt _)", "Mathlib."),
     ("cslib", "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluent_fullBeta", "Cslib."),
+    ("floatlib", "FloatLib.Numerics.LimbArray.size_shiftLeft", "FloatLib."),
 ]
 
 

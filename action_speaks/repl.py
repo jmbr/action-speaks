@@ -24,7 +24,7 @@ from typing import Any
 
 from .config import Config
 
-PRELUDE = "import Mathlib\nimport Physlib\nimport Cslib\nimport ActionSpeaks.Audit"
+PRELUDE = "import Mathlib\nimport Physlib\nimport Cslib\nimport FloatLib\nimport ActionSpeaks.Audit"
 
 AUDIT_MARKER = "ACTION_SPEAKS_AUDIT "
 

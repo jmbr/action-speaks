@@ -193,7 +193,7 @@ class Config:
         """The revision of the local Loogle checkout, if there is one.
 
         Recorded because a lemma search is part of how a proof was arrived at, and because
-        the local index reflects *these* Mathlib, Physlib and Cslib revisions rather than
+        the local index reflects *these* Mathlib, Physlib, Cslib and FloatLib revisions rather than
         whatever the hosted service last deployed.
         """
         if not self.loogle_bin:
@@ -223,6 +223,7 @@ class Config:
             # Recorded for the same reason as any other library in the prelude: a proof that
             # cites Cslib is only reproducible against the revision it was checked at.
             "cslib_rev": self.package_rev("cslib"),
+            "floatlib_rev": self.package_rev("floatlib"),
             "lean_dir": str(self.lean_dir),
             "repl_bin": str(self.repl_bin),
         }

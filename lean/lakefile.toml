@@ -16,16 +16,16 @@ name = "ActionSpeaksAll"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.33.0"
+rev = "v4.34.0"
 
 # The REPL is the verification backend. Requiring it here rather than cloning it by hand
 # means lake fetches it, pins the exact revision in lake-manifest.json, and guarantees it is
 # built against the same toolchain as this project - a mismatch silently breaks elaboration.
-# This revision is the one whose lean-toolchain is v4.33.0.
+# This revision is the one whose lean-toolchain is v4.34.0.
 [[require]]
 name = "repl"
 git = "https://github.com/leanprover-community/repl"
-rev = "bbeedf38e0898869fc3b7c009e1ea877b46204e4"
+rev = "193cf4bb9a22bb3fc6d25774f0fe6a70db1fd6ee"
 
 # Physlib is the physics library. It is pinned to an exact commit rather than a branch
 # because it ships deliberately incomplete results - `sorryful` (`sorryAx`), `pseudo`
@@ -34,20 +34,22 @@ rev = "bbeedf38e0898869fc3b7c009e1ea877b46204e4"
 # revision it was checked against is known. The audit rejects all three kinds anyway, since
 # none of those axioms is in `ActionSpeaks.Audit.trustedAxioms`.
 #
-# Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.33.0 above is
-# its constraint, not ours. Revisit both pins together when it bumps -- `scripts/check_updates.py`
-# reports when that has happened, and which release every required library can agree on.
+# Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.34.0 above is
+# its constraint, not ours. This pin is a commit on master rather than a release tag, because
+# Physlib tags behind its own branch and v4.34.0 is only on the branch so far.
+# `scripts/check_updates.py` reports when it moves, and which release every required library
+# can agree on.
 [[require]]
 name = "Physlib"
 git = "https://github.com/leanprover-community/physlib"
-rev = "98fbbee20d0a376ea9160408517a48e274df1663"
+rev = "d410e856abdd7c4c747332da2533c1596327a473"
 
 # Cslib is the computer science library: models of computation, lambda calculi, process
 # calculi, automata, and verified algorithms. It covers the half of this tool's remit -
 # algorithm correctness and termination arguments - that Mathlib serves only incidentally.
 #
-# The pin is the `v4.33.0` release tag, by commit rather than tag name so it cannot move.
-# Cslib tags a release per toolchain, and this one requires mathlib v4.33.0 - the exact
+# The pin is the `v4.34.0` release tag, by commit rather than tag name so it cannot move.
+# Cslib tags a release per toolchain, and this one requires mathlib v4.34.0 - the exact
 # revision Physlib requires and this project already builds. Lake admits one mathlib in the
 # graph, so that agreement is what makes the three coexist at all. Later Cslib tags move
 # mathlib forward and would break that agreement, and `main` is further ahead still. Bump
@@ -60,4 +62,20 @@ rev = "98fbbee20d0a376ea9160408517a48e274df1663"
 [[require]]
 name = "cslib"
 git = "https://github.com/leanprover/cslib"
-rev = "3951377e5a3f5772737f11cd62bc5bb6a72f95d1"
+rev = "990e65a685bed413f43b139db900a36ad5322a10"
+
+# FloatLib gives executable numerical representations with proof-backed semantics: IEEE-754
+# floats, quantization, and the refinement proofs relating them. It covers claims about
+# floating-point behaviour that Mathlib's reals cannot express, where the question is what a
+# machine actually computes rather than what holds exactly.
+#
+# Pinned to a commit on `main`: its only tag, `v1.0`, is built against v4.33.1, and v4.34.0
+# exists only on the branch. It sets `fixedToolchain := true`, so it cannot be pinned back to
+# meet an older toolchain - which is why it was unreachable until this bump.
+#
+# MIT rather than Apache-2.0. Compatible, but it is the first dependency here that is not
+# Apache-2.0, so the licence note in pyproject.toml no longer describes a single-licence graph.
+[[require]]
+name = "floatlib"
+git = "https://github.com/lean-dojo/FloatLib"
+rev = "0d91825727839f597fd06b22fdd038ea21480f0c"

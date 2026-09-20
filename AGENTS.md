@@ -111,7 +111,7 @@ what failed without claiming a proof.
 
 ## Writing Lean source
 
-- Do not include `import` lines. Mathlib, Physlib, Cslib, and the audit module are preloaded.
+- Do not include `import` lines. Mathlib, Physlib, Cslib, FloatLib, and the audit module are preloaded.
 - Put helper lemmas first and the theorem to check last, or select it with `target`.
 - Use tactics such as `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
   `aesop`, `simp`, `decide`, and `grind` for routine goals.

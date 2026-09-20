@@ -7,9 +7,10 @@ name = "action-speaks"
 description = "Machine-checked backing for an agent's mathematical claims, via Lean 4 + Mathlib"
 readme = "README.md"
 requires-python = ">=3.10"
-# Apache 2.0 to match the whole stack this sits on — Lean 4, Mathlib, Physlib, Cslib and Loogle are
-# all Apache 2.0 — so there is no license seam anywhere in the dependency graph, and results
-# proved here can be contributed upstream to Mathlib without relicensing.
+# Apache 2.0 to match the stack this sits on: Lean 4, Mathlib, Physlib, Cslib and Loogle are
+# all Apache 2.0, so results proved here can be contributed upstream to Mathlib without
+# relicensing. FloatLib is MIT, which is compatible and imposes nothing on this project, but
+# it means the graph is no longer single-licence — check before assuming that of a citation.
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 keywords = ["lean4", "mathlib", "theorem-proving", "verification", "llm", "agents"]

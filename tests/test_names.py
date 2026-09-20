@@ -34,7 +34,7 @@ FORBIDDEN = {
     "lean-ai": "the project is called action-speaks",
     "lean-proof-check": "the skill is named after the project: `action-speaks`",
     "indexes Mathlib only": (
-        "shape search covers Physlib and Cslib too when loogle is built locally"
+        "shape search covers Physlib, Cslib and FloatLib too when loogle is built locally"
     ),
     "Mathlib and Physlib are already imported": (
         "Cslib is imported as well; naming two of the three misleads"

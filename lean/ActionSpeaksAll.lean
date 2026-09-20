@@ -2,7 +2,7 @@
 The root module for local lemma search.
 
 Loogle indexes whatever a single root module transitively imports, so this exists to make
-that set *exactly* the environment a submission is checked in — the same four imports as
+that set *exactly* the environment a submission is checked in — the same five imports as
 `PRELUDE` in `action_speaks/repl.py`. Indexing `Mathlib` alone would hide every Physlib and Cslib
 lemma, and indexing either of those alone would hide most of Mathlib, since neither imports
 more of it than it needs. Either way the search would disagree with the verifier about what
@@ -17,4 +17,5 @@ This module is not part of the verifier's trusted path; it is imported by nothin
 import Mathlib
 import Physlib
 import Cslib
+import FloatLib
 import ActionSpeaks.Audit

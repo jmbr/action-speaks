@@ -112,7 +112,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         print(f"\nFAIL: {exc}")
         return 1
-    print("\nstarting REPL (first run imports Mathlib, Physlib and Cslib) ...")
+    print("\nstarting REPL (first run imports Mathlib, Physlib, Cslib and FloatLib) ...")
     t0 = time.time()
     try:
         s = _session(cfg)

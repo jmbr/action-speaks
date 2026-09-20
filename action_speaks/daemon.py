@@ -1,6 +1,7 @@
 """The per-user session daemon: where its socket lives, and how to run it as a service.
 
-Starting Lean loads the whole library environment, which costs seconds and a large resident
+Starting Lean loads the whole library environment, which costs seconds and a large
+resident
 set. The HTTP server already amortizes that across requests, but only while somebody runs it
 by hand; the CLI pays it on every invocation and the MCP server pays it once per process.
 A daemon that outlives a single command removes both, and gives the machine one memory
@@ -8,8 +9,8 @@ budget rather than one per caller.
 
 The daemon is deliberately **per user and per checkout**, not machine-wide:
 
-* A verdict records the toolchain and the Mathlib, Physlib and Cslib revisions it was checked
-  against, and a ledger entry means nothing without them. One daemon answering for two
+* A verdict records the toolchain and the library revisions it was checked against, and a
+  ledger entry means nothing without them. One daemon answering for two
   checkouts with different pins would answer from whichever it happened to load.
 * The source guard is not a sandbox. Running a submission as the person who submitted it is
   one proposition; running other users' submissions as the daemon's owner is another.

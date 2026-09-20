@@ -36,12 +36,13 @@ lake exe cache get && lake build
 lake build repl
 lake build Physlib
 lake build Cslib
+lake build FloatLib
 cd ..
 ./scripts/build-loogle.sh
 ```
 
-Mathlib's compiled files are downloaded from its cache. Physlib and Cslib build locally,
-which can take several minutes.
+Mathlib's compiled files are downloaded from its cache. Physlib, Cslib and FloatLib build
+locally, which can take several minutes.
 
 The last command builds local Loogle in `vendor/`. Its first query builds a search index;
 use `./scripts/build-loogle.sh --index` to build the index in advance. The index is cached

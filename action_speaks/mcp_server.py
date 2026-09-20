@@ -267,7 +267,8 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "Search for a lemma by name, shape or meaning. Backends: 'loogle' (default, "
             "with 'leansearch') searches a local index built from the very Mathlib, "
-            "Physlib and Cslib this verifier checks against, so its answers agree with what "
+            "Physlib, Cslib and FloatLib this verifier checks against, so its answers agree "
+            "with what "
             "you can actually cite; 'leansearch' takes natural language ('sum of two even "
             "numbers is even'); 'loogle' takes a shape ('|- Irrational (Real.sqrt _)', "
             "'(?a + ?b) * ?c', 'Nat.succ_le_succ'). Use this instead of guessing lemma "
