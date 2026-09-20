@@ -106,8 +106,6 @@ class TestProjectInterface:
             self.checkers[owner] = self.mock(owner, "verify_project", return_value=self.verdict)
             self.verifiers[owner] = self.mock(owner, "Verifier")
             self.verifiers[owner].return_value.verify.return_value = self.verdict
-        self.mcp_verifier = self.mock(mcp_server, "verifier")
-        self.mcp_verifier.return_value.verify.return_value = self.verdict
         self.origins = self.mock(harness, "read_entry_reference", return_value=LOCAL)
         self.reads = {}
         self.references = {}
@@ -698,7 +696,7 @@ class TestProjectInterface:
         global_ledger.record.assert_not_called()
         global_ledger.recall.assert_not_called()
         self.mcp_session.assert_not_called()
-        self.mcp_verifier.assert_not_called()
+        self.verifiers[mcp_server].assert_not_called()
 
     def test_mcp_project_source_keeps_fixed_prelude(self) -> None:
         response = self.mcp_call("verify", {"source": SOURCE, "project": "demo"})
@@ -715,7 +713,7 @@ class TestProjectInterface:
 
     def test_mcp_standalone_source_record_signature_unchanged(self) -> None:
         assert not self.mcp_call("verify", {"source": SOURCE})["isError"]
-        self.mcp_verifier.return_value.verify.assert_called_once_with(
+        self.verifiers[mcp_server].return_value.verify.assert_called_once_with(
             SOURCE, target=None, claim=None, require_nontrivial=False
         )
         self.ledgers[mcp_server].return_value.record.assert_called_once_with(
@@ -751,7 +749,7 @@ class TestProjectInterface:
             response = self.mcp_call(name, {"project": "demo"})
             assert response["isError"]
             assert "Traceback" not in response["content"][0]["text"]
-        self.mcp_verifier.assert_not_called()
+        self.verifiers[mcp_server].assert_not_called()
         self.mcp_session.assert_not_called()
 
     def test_module_boolean_options_are_never_coerced(self) -> None:

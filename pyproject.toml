@@ -74,8 +74,12 @@ ignore = [
     # readable.
     "N812",
     # Module-level singletons behind lazy initialisers (`_config`, `_ledger`, `_session`,
-    # `_harness`, `_local_loogle`). A Lean session costs ~3 s and half a gigabyte, so it is
-    # created once per process and reused; that is the design, not an oversight.
+    # `_harness`, `_local_loogle`). A Lean session costs ~3 s and, with Mathlib, Physlib and
+    # Cslib in the prelude, about 7.5 GB resident of which roughly 4 GB is private — the rest
+    # is shared through the memory-mapped `.olean` files, which is why a second session costs
+    # much less than the first. Measure with `grep -E '^(Rss|Pss):' /proc/<pid>/smaps_rollup`
+    # on a warm `repl` process. So a session is created once per process and reused; that is
+    # the design, not an oversight.
     "PLW0603",
     # The same judgment as the PLR0912/PLR0915 exclusions above, applied to the rest of the
     # family: the verification pipeline and the MCP dispatcher are wide by nature, and

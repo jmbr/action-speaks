@@ -24,7 +24,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nullius import cli  # noqa: E402
+from nullius import (
+    cli,  # noqa: E402
+    mcp_server,  # noqa: E402
+)
 from nullius import daemon as D  # noqa: E402
 from nullius.config import Config  # noqa: E402
 from nullius.http_server import UnixServer  # noqa: E402
@@ -426,3 +429,130 @@ def test_a_rival_daemon_is_still_refused_when_not_activated(monkeypatch, private
     )
     args = argparse.Namespace(socket=None, pool=1, no_warm=True, install=False, print_units=False)
     assert cli.cmd_serve(args) == 1
+
+
+# -- MCP routing -----------------------------------------------------------
+#
+# Without this, every agent on the machine holds its own Lean session: measured at ~7.6 GB
+# resident each, about half private. What matters is not merely that the daemon is preferred
+# but that no local session is created when it answers, so these assert on `session` being
+# untouched rather than on the reply.
+
+
+@pytest.fixture
+def no_local_session(monkeypatch):
+    """Make starting a Lean session in this process an error."""
+
+    def forbidden():
+        raise AssertionError("started a local Lean session while a daemon was available")
+
+    monkeypatch.setattr(mcp_server, "session", forbidden)
+
+
+def verdict_reply() -> dict:
+    return {
+        "status": "verified",
+        "target": "t",
+        "claim": "c",
+        "checks": [],
+        "axioms": [],
+        "statement": "True",
+        "verified": True,
+        "render": "VERIFIED: t",
+        "feedback": "",
+    }
+
+
+def test_mcp_verify_uses_the_daemon_without_starting_a_session(
+    monkeypatch, private: Path, no_local_session
+) -> None:
+    monkeypatch.setattr(D, "available", lambda cfg=None: D.Address(private / "s.sock"))
+    seen = {}
+
+    def call(path, payload=None, **kw):
+        seen["path"], seen["payload"] = path, payload
+        return verdict_reply()
+
+    monkeypatch.setattr(D, "call", call)
+    verdict = mcp_server.verify_source(CONFIG, {"claim": "c"}, "theorem t : True := trivial")
+    assert verdict.verified
+    assert seen["path"] == "/verify"
+    assert seen["payload"]["source"] == "theorem t : True := trivial"
+
+
+def test_mcp_statement_and_close_use_the_daemon_too(
+    monkeypatch, private: Path, no_local_session
+) -> None:
+    monkeypatch.setattr(D, "available", lambda cfg=None: D.Address(private / "s.sock"))
+    paths = []
+
+    def call(path, payload=None, **kw):
+        paths.append(path)
+        if path == "/statement":
+            return {"ok": True, "binders": 0, "statement": "True"}
+        return {"query": "g", "backend": "local", "hits": [], "error": None, "note": ""}
+
+    monkeypatch.setattr(D, "call", call)
+    assert mcp_server.check_statement(CONFIG, ": True")["ok"]
+    assert mcp_server.find_proof(CONFIG, "True", "", ("exact?",)).backend == "local"
+    assert paths == ["/statement", "/find_proof"]
+
+
+def test_mcp_project_selection_reaches_the_daemon(
+    monkeypatch, private: Path, no_local_session
+) -> None:
+    monkeypatch.setattr(D, "available", lambda cfg=None: D.Address(private / "s.sock"))
+    seen = {}
+    monkeypatch.setattr(
+        D, "call", lambda path, payload=None, **kw: seen.update(payload) or verdict_reply()
+    )
+    mcp_server.verify_source(CONFIG, {"project": "demo"}, "theorem t : True := trivial")
+    assert seen["project"] == "demo", "the daemon resolves the project, so it must be told"
+
+
+def test_mcp_falls_back_when_the_daemon_stops_between_probe_and_call(
+    monkeypatch, private: Path
+) -> None:
+    """The window the CLI also guards: probed present, gone by the time we call."""
+    monkeypatch.setattr(D, "available", lambda cfg=None: D.Address(private / "s.sock"))
+
+    def unreachable(*a, **kw):
+        raise D.DaemonUnreachable("gone")
+
+    monkeypatch.setattr(D, "call", unreachable)
+    used = {}
+    monkeypatch.setattr(mcp_server, "session", lambda: used.setdefault("local", True))
+    monkeypatch.setattr(
+        mcp_server,
+        "Verifier",
+        lambda *a, **kw: type("V", (), {"verify": lambda s, *a, **k: "local"})(),
+    )
+    assert mcp_server.verify_source(CONFIG, {}, "theorem t : True := trivial") == "local"
+    assert used.get("local"), "an unreachable daemon must not stop the check"
+
+
+def test_mcp_does_not_retry_a_refusal_in_process(
+    monkeypatch, private: Path, no_local_session
+) -> None:
+    """A daemon that answered has answered; redoing the work could hide the reason."""
+    monkeypatch.setattr(D, "available", lambda cfg=None: D.Address(private / "s.sock"))
+
+    def refused(*a, **kw):
+        raise D.DaemonError("project is untrusted")
+
+    monkeypatch.setattr(D, "call", refused)
+    with pytest.raises(D.DaemonError, match="untrusted"):
+        mcp_server.verify_source(CONFIG, {}, "theorem t : True := trivial")
+
+
+def test_mcp_works_normally_with_no_daemon(monkeypatch) -> None:
+    monkeypatch.setenv("NULLIUS_NO_DAEMON", "1")
+    used = {}
+    monkeypatch.setattr(mcp_server, "session", lambda: used.setdefault("local", True))
+    monkeypatch.setattr(
+        mcp_server,
+        "Verifier",
+        lambda *a, **kw: type("V", (), {"verify": lambda s, *a, **k: "local"})(),
+    )
+    assert mcp_server.verify_source(CONFIG, {}, "theorem t : True := trivial") == "local"
+    assert used.get("local")

@@ -238,8 +238,10 @@ cost; simple proofs can then take milliseconds, while harder proofs and probes t
 Use `Harness`, a persistent server, or `nullius serve` for repeated work — with the daemon
 running, a `nullius verify` that took three seconds takes about a third of one.
 
-Each concurrent verification needs a session. Measure memory use on your workload before
-increasing the pool size. Submissions start from the same initial environment, so definitions
+Each concurrent verification needs a session, and a session is expensive: roughly 7.5 GB
+resident, of which about 4 GB is private, the rest being shared `.olean` pages. A second
+session therefore costs much less than the first, but not nothing. Measure on your own
+workload before increasing the pool size. Submissions start from the same initial environment, so definitions
 from one submission are not available to the next.
 
 ## Reproducing a verdict

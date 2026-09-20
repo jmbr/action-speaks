@@ -27,6 +27,7 @@ import threading
 import traceback
 from typing import Any, Callable
 
+from . import daemon as D
 from . import search as S
 from .config import Config
 from .harness import (
@@ -39,7 +40,7 @@ from .ledger import Ledger, LedgerReadError, Recollection, read_ledger_row
 from .ledger_transfer import read_entry_reference, read_project_rows
 from .project_check import verify_project
 from .repl import ReplError, Session
-from .verify import Verifier
+from .verify import Verdict, Verifier
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "nullius", "version": "0.1.0"}
@@ -76,8 +77,76 @@ def session() -> Session:
         return _session
 
 
-def verifier() -> Verifier:
-    return Verifier(session(), config())
+# --- daemon routing -------------------------------------------------------
+#
+# Each MCP client starts its own server process, so without this every agent on the machine
+# holds a separate Lean session: measured at ~7.6 GB resident, about half of it private once
+# the memory-mapped `.olean` files are shared. Sending the work to `nullius serve` instead
+# means one warm pool for all of them, and no import cost per agent.
+#
+# These helpers must be consulted *before* `session()`, or the server starts the very process
+# the daemon exists to avoid.
+
+
+def _remote(cfg: Config) -> Any:
+    """The daemon to use for this request, or None to work in this process."""
+    return D.available(cfg)
+
+
+def _project_of(args: dict[str, Any]) -> dict[str, Any]:
+    return {"project": args["project"]} if "project" in args else {}
+
+
+def verify_source(cfg: Config, args: dict[str, Any], source: str) -> Verdict:
+    """Verify a snippet, through the daemon when one is listening."""
+    request = {
+        "source": source,
+        "target": args.get("target"),
+        "claim": args.get("claim"),
+        "require_nontrivial": args.get("require_nontrivial", False),
+        **_project_of(args),
+    }
+    addr = _remote(cfg)
+    if addr is not None:
+        try:
+            return Verdict.from_dict(D.call("/verify", request, address=addr))
+        except D.DaemonUnreachable:
+            # Stopped between the probe and the call. A refusal is different and is left to
+            # propagate: repeating it here would hide the reason behind a second attempt.
+            pass
+    vf = Verifier(session(), cfg)
+    return vf.verify(
+        source,
+        target=args.get("target"),
+        claim=args.get("claim"),
+        require_nontrivial=args.get("require_nontrivial", False),
+    )
+
+
+def check_statement(cfg: Config, statement: str) -> dict[str, Any]:
+    addr = _remote(cfg)
+    if addr is not None:
+        try:
+            return D.call("/statement", {"statement": statement}, address=addr)
+        except D.DaemonUnreachable:
+            pass
+    return Verifier(session(), cfg).check_statement(statement)
+
+
+def find_proof(cfg: Config, goal: str, binders: str, tactics: tuple[str, ...]) -> S.SearchResult:
+    addr = _remote(cfg)
+    if addr is not None:
+        try:
+            return S.SearchResult.from_dict(
+                D.call(
+                    "/find_proof",
+                    {"goal": goal, "binders": binders, "tactics": list(tactics)},
+                    address=addr,
+                )
+            )
+        except D.DaemonUnreachable:
+            pass
+    return S.local_search(session(), goal, tactics=tactics, binders=binders)
 
 
 # --- tools ---------------------------------------------------------------
@@ -350,13 +419,7 @@ def tool_verify(args: dict[str, Any]) -> str:
     else:
         source = args["source"]
         prior = lg.recall(source=source, current=cfg.provenance())
-        vf = verifier() if "project" not in args else Verifier(session(), cfg)
-        verdict = vf.verify(
-            source,
-            target=args.get("target"),
-            claim=args.get("claim"),
-            require_nontrivial=args.get("require_nontrivial", False),
-        )
+        verdict = verify_source(cfg, args, source)
         if cfg.project_id is None:
             row = lg.record(verdict, source, tag=args.get("tag") or "mcp")
         else:
@@ -391,7 +454,7 @@ def _selected_config(args: dict[str, Any]) -> Config:
 
 def tool_statement(args: dict[str, Any]) -> str:
     statement = args.get("statement", "")
-    res = verifier().check_statement(statement)
+    res = check_statement(config(), statement)
     if not res.get("ok"):
         return (
             f"statement does not elaborate ({res.get('error')}):\n"
@@ -438,9 +501,7 @@ def tool_search(args: dict[str, Any]) -> str:
 
 def tool_close(args: dict[str, Any]) -> str:
     tactics = tuple(args.get("tactics") or ("exact?", "apply?"))
-    res = S.local_search(
-        session(), args.get("goal", ""), tactics=tactics, binders=args.get("binders", "")
-    )
+    res = find_proof(config(), args.get("goal", ""), args.get("binders", ""), tactics)
     return res.render()
 
 

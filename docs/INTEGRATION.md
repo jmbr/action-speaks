@@ -167,16 +167,17 @@ The tools are `verify`, `statement`, `search`, `close`, and `log`. Give the agen
 [workflow instructions](../AGENTS.md), or install the skill as described in
 [agent setup](SETUP-AGENTS.md).
 
-Requests are handled **one at a time**, over a single Lean session held for the life of the
-process: the server reads a line from stdin, answers it, and only then reads the next. So a
-long verification delays whatever the agent asks for next, and `NULLIUS_POOL_SIZE` has no
-effect here — there is no pool on this path.
+Requests are handled **one at a time**: the server reads a line from stdin, answers it, and
+only then reads the next. So a long verification delays whatever the agent asks for next, and
+`NULLIUS_POOL_SIZE` does not change that — a single server has no pool of its own. That is
+the current behavior, not a commitment; making one server concurrent would change how it owns
+its work, and is not planned here.
 
-The MCP server also does not use the [session daemon](#session-daemon). It keeps its own
-session warm for as long as it runs, so it pays Lean startup once per process rather than
-once per request, but a second agent gets a second server and a second copy of the libraries.
-That is the current behavior, not a commitment: a concurrent MCP server would have to change
-how sessions are owned, and is not planned here.
+Each client starts its own server process, so **run the [session daemon](#session-daemon)**
+if more than one agent uses this machine. With it running, the servers send their checking to
+it and start no Lean process of their own; without it, each holds its own session and its own
+copy of the libraries, which is several gigabytes each. `NULLIUS_NO_DAEMON=1` forces the work
+back into the server process.
 
 ## CLI
 
@@ -291,15 +292,17 @@ or write the ledger.
 
 ## Operation and configuration
 
-- **Pool size:** each concurrent check needs a Lean process. Increase the pool only as
-  needed and measure memory use. The pool bounds the whole server, including requests that
+- **Pool size:** each concurrent check needs a Lean process, and each holds roughly 7.5 GB
+  resident, about 4 GB of it private; the remainder is shared `.olean` pages, so a second
+  session costs much less than the first. Increase the pool only as needed, and measure. The pool bounds the whole server, including requests that
   name a project: those reuse the same warm sessions, since selecting a project changes the
   ledger rather than the verifier tree. Requests beyond the pool wait for a free session.
 - **Isolation:** each submission starts from the preloaded library environment. Definitions
   from earlier submissions are not retained for later ones.
-- **Daemon:** `nullius serve` shares one warm pool with every CLI call for that checkout.
-  `NULLIUS_SOCKET` sets the socket path and `NULLIUS_NO_DAEMON=1` disables its use. The MCP
-  server handles requests sequentially over stdio and does not use the daemon.
+- **Daemon:** `nullius serve` shares one warm pool with every CLI call and MCP server for
+  that checkout, which is what keeps several agents from holding several copies of the
+  libraries. `NULLIUS_SOCKET` sets the socket path and `NULLIUS_NO_DAEMON=1` disables its
+  use. An MCP server still answers its own requests sequentially.
 - **Timeouts:** a timed-out Lean process is killed. A later call starts a replacement.
 - **Logging:** verdicts are appended to `ledger.sqlite3` with their source and library
   versions. `Harness(log=False)` disables ledger use.
@@ -315,7 +318,7 @@ or write the ledger.
 | `NULLIUS_LEDGER_REFRESH_TIMEOUT` | 900 seconds |
 | `NULLIUS_LOOGLE_BIN` | `<root>/vendor/loogle/.lake/build/bin/loogle`, if built |
 | `NULLIUS_LOOGLE_MODULE` | `NulliusAll` |
-| `NULLIUS_POOL_SIZE` | 2; ignored by the MCP server, which is single-session |
+| `NULLIUS_POOL_SIZE` | 2; an MCP server has no pool of its own, but the daemon it uses does |
 | `NULLIUS_COMMAND_TIMEOUT` | 120 seconds |
 | `NULLIUS_STARTUP_TIMEOUT` | 300 seconds |
 | `NULLIUS_LEAN_THREADS` | 4 |
