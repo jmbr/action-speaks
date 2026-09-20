@@ -58,9 +58,11 @@ SKIP_DIRS = ("lean/.lake/", ".agent-shell/", "tests/test_names.py")
 # Deliberate uses of a retired name: (path, string). Migration code has to name the thing it
 # is migrating away from.
 ALLOWED = {
-    ("install.sh", "lean-proof-check"),
-    # The installer removes the superseded install, so it has to name it.
-    ("install.sh", "nullius"),
+    ("install.py", "lean-proof-check"),
+    # The installer removes the superseded install, so it and its tests have to name it.
+    ("install.py", "nullius"),
+    ("tests/test_install.py", "lean-proof-check"),
+    ("tests/test_install.py", "nullius"),
 }
 
 # Files whose subject is comparing releases, so naming more than the pinned one is the point

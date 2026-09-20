@@ -74,7 +74,7 @@ needs semantic-release's `insecure` flag, which is deliberately not committed.
 | `action_speaks/ledger.py`, `action_speaks/search.py` | Stored results, recall, and lemma search |
 | `action_speaks/harness.py` | Python API |
 | `action_speaks/cli.py`, `action_speaks/http_server.py`, `action_speaks/mcp_server.py` | CLI and server entry points |
-| `skills/action-speaks/`, `mcp/`, `install.sh` | Agent instructions and installation |
+| `skills/action-speaks/`, `mcp/`, `install.py` | Agent instructions and installation |
 | `tests/`, `noxfile.py`, `.pre-commit-config.yaml` | Tests and development checks |
 | `scripts/check_updates.py` | Which Lean release the pins could move to, and what it costs |
 | `contrib/` | Separate contributions, not part of the verifier build |

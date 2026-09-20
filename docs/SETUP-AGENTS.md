@@ -4,8 +4,8 @@ The [installation guide](INSTALL.md) prepares one checkout. This guide connects 
 checkout to agent clients on the current machine. After building, run:
 
 ```bash
-./install.sh --dry-run    # Preview changes
-./install.sh              # Install the command, skill, and Copilot MCP entry
+python3 install.py --dry-run    # Preview changes
+python3 install.py              # Install the command, skill, and Copilot MCP entry
 action-speaks doctor
 ```
 
@@ -26,9 +26,9 @@ described here, use the skill's shell wrapper. For a Python application or batch
 You can install components separately:
 
 ```bash
-./install.sh --skill
-./install.sh --cli
-./install.sh --uninstall
+python3 install.py --skill
+python3 install.py --cli
+python3 install.py --uninstall
 ```
 
 The installer links the skill rather than copying it, so edits in this checkout take effect
@@ -88,7 +88,7 @@ session; use MCP or the Python API for repeated checks.
 
 ## MCP server for Copilot
 
-`install.sh` adds this entry to `~/.copilot/mcp-config.json`, using your checkout's paths:
+`install.py` adds this entry to `~/.copilot/mcp-config.json`, using your checkout's paths:
 
 ```json
 {

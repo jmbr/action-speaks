@@ -33,7 +33,7 @@ nox.options.reuse_existing_virtualenvs = True
 
 # Everything of ours that is Python. `examples/` is included because it is documentation
 # people copy from, and this file because a linter that exempts itself is a poor advertisement.
-SOURCES = ["action_speaks", "tests", "examples", "noxfile.py"]
+SOURCES = ["action_speaks", "tests", "examples", "install.py", "noxfile.py"]
 
 
 @nox.session

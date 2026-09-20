@@ -1,7 +1,7 @@
 ---
 name: action-speaks
 description: Check mathematical or computational claims by proving them in Lean 4 with Mathlib, Physlib and Cslib. Use for non-obvious inequalities, identities, bounds, closed forms, convergence, termination, correctness arguments, and counterexamples in mathematics, physics, or computer science. Also use to check statements for contradictory assumptions and to find library lemmas instead of guessing names.
-compatibility: Requires a built action-speaks checkout (Lean 4.33.0 + Mathlib + Physlib + Cslib) and its install.sh setup. Linux/macOS with python3.
+compatibility: Requires a built action-speaks checkout (Lean 4.33.0 + Mathlib + Physlib + Cslib) and its install.py setup. Linux/macOS with python3.
 metadata:
   repository: action-speaks
 ---

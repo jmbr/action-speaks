@@ -36,7 +36,7 @@ if [ ! -d "$ROOT/action_speaks" ]; then
 action-speaks verifier not found at: $ROOT
 
 This skill expects to live inside the verifier repository (as skills/action-speaks), or to
-be symlinked from it. Reinstall with the repository's install.sh, or set ACTION_SPEAKS_ROOT to the
+be symlinked from it. Reinstall with the repository's install.py, or set ACTION_SPEAKS_ROOT to the
 repository path.
 EOF
   exit 2
