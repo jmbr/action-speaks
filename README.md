@@ -258,6 +258,11 @@ cslib       3951377e5a3f5772737f11cd62bc5bb6a72f95d1
 
 Rebuild the recorded versions and rerun the stored source to reproduce a result.
 
+To find out whether those pins can move, run `scripts/check_updates.py`. Lake admits one
+Mathlib, so a bump is possible only at a release where every required library agrees on the
+same revision; the script reports that agreement rather than each library's latest version,
+and says what a move would cost. It needs no built checkout.
+
 ## Project layout
 
 | Path | Purpose |
@@ -272,6 +277,7 @@ Rebuild the recorded versions and rerun the stored source to reproduce a result.
 | `nullius/cli.py`, `nullius/http_server.py`, `nullius/mcp_server.py` | CLI and server entry points |
 | `skills/nullius/`, `mcp/`, `install.sh` | Agent instructions and installation |
 | `tests/`, `noxfile.py`, `.pre-commit-config.yaml` | Tests and development checks |
+| `scripts/check_updates.py` | Which Lean release the pins could move to, and what it costs |
 | `contrib/` | Separate contributions, not part of the verifier build |
 
 ## Contributing

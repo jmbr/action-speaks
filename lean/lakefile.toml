@@ -35,7 +35,8 @@ rev = "bbeedf38e0898869fc3b7c009e1ea877b46204e4"
 # none of those axioms is in `Nullius.Audit.trustedAxioms`.
 #
 # Physlib sets the toolchain floor: it tracks Mathlib a release behind, so v4.33.0 above is
-# its constraint, not ours. Revisit both pins together when it bumps.
+# its constraint, not ours. Revisit both pins together when it bumps -- `scripts/check_updates.py`
+# reports when that has happened, and which release every required library can agree on.
 [[require]]
 name = "Physlib"
 git = "https://github.com/leanprover-community/physlib"

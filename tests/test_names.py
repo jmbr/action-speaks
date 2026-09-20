@@ -55,6 +55,13 @@ ALLOWED = {
     ("install.sh", "lean-proof-check"),
 }
 
+# Files whose subject is comparing releases, so naming more than the pinned one is the point
+# rather than drift. Only the version check is relaxed; retired names are still caught here.
+MULTI_VERSION = {
+    "tests/test_update_check.py",
+    "scripts/check_updates.py",
+}
+
 
 def tracked_files() -> list[Path]:
     out = subprocess.run(
@@ -117,6 +124,7 @@ def test_cited_lean_version_is_the_pinned_one(sources: list[tuple[Path, str]]) -
     problems = [
         f"{rel}:{lineno}: cites Lean {found}, but lean-toolchain pins {version}"
         for rel, text in sources
+        if str(rel) not in MULTI_VERSION
         for lineno, line in enumerate(text.splitlines(), start=1)
         for found in LEAN_VERSION.findall(line)
         if found != version
@@ -130,6 +138,7 @@ def test_cited_library_revisions_are_the_pinned_ones(sources: list[tuple[Path, s
     problems = [
         f"{rel}:{lineno}: cites {pkg} {rev}, but lake pins {revs[pkg.lower()][:12]}"
         for rel, text in sources
+        if str(rel) not in MULTI_VERSION
         for lineno, line in enumerate(text.splitlines(), start=1)
         for pkg, rev in REV_CITATION.findall(line)
         if revs.get(pkg.lower()) and not revs[pkg.lower()].startswith(rev.lower())
