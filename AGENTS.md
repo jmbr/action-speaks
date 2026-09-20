@@ -126,6 +126,9 @@ what failed without claiming a proof.
 
 Use American spelling and vocabulary in code, comments, claims, and documentation.
 
+Keep commit messages and comments short: what changed and why, not what the diff shows.
+Comment only what the code cannot say for itself.
+
 ## Rejection rules
 
 | Construct or condition | Reason |

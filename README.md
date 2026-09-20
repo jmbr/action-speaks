@@ -320,8 +320,8 @@ feat!: rename the environment variables
 footer, marks a breaking change; below 1.0 that is still a minor bump, since 2.0 would claim
 a stability this project has not offered yet. Scopes are optional and free-form.
 
-Only the subject is constrained. The body is where the reasoning goes, and it is the part
-worth writing: say why the change is right, not what the diff already shows.
+Only the subject is constrained. Keep the body short: why the change is right, not what the
+diff already shows.
 
 ## Related tools
 
