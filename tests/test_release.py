@@ -55,6 +55,9 @@ def test_workflow_fetches_all_tags_and_runs_the_full_suite() -> None:
     text = workflow()
     assert "fetch-depth: 0" in text
     assert "lake exe cache get\n          lake build\n" in text
+    for target in ("repl", "Physlib", "Cslib", "FloatLib", "ActionSpeaksAll"):
+        assert f"lake build {target}" in text
+    assert "lake build repl Physlib" not in text
     assert ".venv/bin/nox -s lint format types tests" in text
     assert ".venv/bin/semantic-release version" in text
 

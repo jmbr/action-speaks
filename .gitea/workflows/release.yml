@@ -76,7 +76,11 @@ jobs:
           cd lean
           lake exe cache get
           lake build
-          lake build repl Physlib Cslib FloatLib ActionSpeaksAll
+          lake build repl
+          lake build Physlib
+          lake build Cslib
+          lake build FloatLib
+          lake build ActionSpeaksAll
           cd ..
           ./scripts/build-loogle.sh
 
