@@ -54,6 +54,7 @@ def test_generated_release_commit_is_conventional_and_nonreleasing() -> None:
 def test_workflow_fetches_all_tags_and_runs_the_full_suite() -> None:
     text = workflow()
     assert "fetch-depth: 0" in text
+    assert "lake exe cache get\n          lake build\n" in text
     assert ".venv/bin/nox -s lint format types tests" in text
     assert ".venv/bin/semantic-release version" in text
 

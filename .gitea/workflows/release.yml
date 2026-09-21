@@ -71,6 +71,7 @@ jobs:
           export PATH="$HOME/.elan/bin:$PATH"
           cd lean
           lake exe cache get
+          lake build
           lake build repl Physlib Cslib FloatLib ActionSpeaksAll
           cd ..
           ./scripts/build-loogle.sh
