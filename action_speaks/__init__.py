@@ -25,7 +25,7 @@ from .search import (
 )
 from .verify import Check, Status, Verdict, Verifier
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "Harness",

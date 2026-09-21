@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.2.2 (2026-09-21)
+
+### Bug Fixes
+
+- Use the runner API URL for Gitea releases
+  ([`84c5b5e`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/84c5b5e951565971c886f73bfd71b1e24042a963))
+
+
 ## v0.2.1 (2026-09-21)
 
 ### Bug Fixes
