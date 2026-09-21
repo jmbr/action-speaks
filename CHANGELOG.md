@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.2.1 (2026-09-21)
+
+### Bug Fixes
+
+- Use public URLs in release notes
+  ([`4e8c7cd`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/4e8c7cd325d2c0f422f285c66d4dd65f820ef51e))
+
+- Use the authenticated runner remote for release pushes
+  ([`20485ed`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/20485ed9831b5f12453460875331f0329806726e))
+
+
 ## v0.2.0 (2026-09-21)
 
 ### Bug Fixes
