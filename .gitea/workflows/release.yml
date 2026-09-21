@@ -35,8 +35,9 @@ jobs:
           fi
 
       - name: Restore Lean build
+        id: lean-cache
         if: steps.guard.outputs.run == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.elan
@@ -75,6 +76,16 @@ jobs:
           lake build repl Physlib Cslib FloatLib ActionSpeaksAll
           cd ..
           ./scripts/build-loogle.sh
+
+      - name: Save Lean build
+        if: steps.guard.outputs.run == 'true' && steps.lean-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.elan
+            lean/.lake
+            vendor/loogle
+          key: ${{ steps.lean-cache.outputs.cache-primary-key }}
 
       - name: Test
         if: steps.guard.outputs.run == 'true'

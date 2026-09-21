@@ -61,7 +61,9 @@ def test_workflow_fetches_all_tags_and_runs_the_full_suite() -> None:
 
 def test_workflow_caches_the_expensive_lean_build() -> None:
     text = workflow()
-    assert "uses: actions/cache@v4" in text
+    assert "uses: actions/cache/restore@v4" in text
+    assert "uses: actions/cache/save@v4" in text
+    assert text.index("Save Lean build") < text.index("- name: Test")
     for path in ("~/.elan", "lean/.lake", "vendor/loogle"):
         assert path in text
     for input_file in ("lean/lean-toolchain", "lean/lake-manifest.json"):
