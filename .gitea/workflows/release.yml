@@ -34,15 +34,12 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-python@v5
-        if: steps.guard.outputs.run == 'true'
-        with:
-          python-version: "3.12"
-
       - name: Install Python tooling
         if: steps.guard.outputs.run == 'true'
         run: |
-          python -m venv .venv
+          apt-get update
+          apt-get install -y python3-venv
+          python3 -m venv .venv
           .venv/bin/pip install -e ".[dev]"
 
       - name: Install Lean
