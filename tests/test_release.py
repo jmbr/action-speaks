@@ -31,7 +31,6 @@ def test_release_targets_this_http_gitea() -> None:
     assert remote == {
         "type": "gitea",
         "domain": "http://localhost:3000",
-        "api_domain": {"env": "GITEA_SERVER_URL"},
         "token": {"env": "GITEA_TOKEN"},
         "insecure": True,
         "ignore_token_for_push": True,
@@ -90,7 +89,7 @@ def test_type_session_targets_the_python_package() -> None:
 
 def test_workflow_uses_the_short_lived_forgejo_token() -> None:
     text = workflow()
-    assert "GITEA_SERVER_URL: ${{ forgejo.server_url }}" in text
+    assert "GITEA_API_URL: ${{ forgejo.api_url }}" in text
     assert "GITEA_TOKEN: ${{ forgejo.token }}" in text
     assert "secrets." not in text
 

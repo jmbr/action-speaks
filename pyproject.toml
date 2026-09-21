@@ -104,7 +104,6 @@ match = "main"
 # This instance deliberately uses HTTP.
 type = "gitea"
 domain = "http://localhost:3000"
-api_domain = { env = "GITEA_SERVER_URL" }
 token = { env = "GITEA_TOKEN" }
 insecure = true
 # actions/checkout has already authenticated the runner-internal remote. Reconstructing it from

@@ -107,6 +107,6 @@ jobs:
       - name: Release
         if: steps.guard.outputs.run == 'true'
         env:
-          GITEA_SERVER_URL: ${{ forgejo.server_url }}
+          GITEA_API_URL: ${{ forgejo.api_url }}
           GITEA_TOKEN: ${{ forgejo.token }}
         run: .venv/bin/semantic-release version
