@@ -93,15 +93,18 @@ upload_to_vcs_release = false
 # The release commit has to pass our own commit-msg hook, and `chore` releases nothing, so
 # it cannot trigger a second release.
 commit_message = "chore(release): v{version}"
+commit_author = "action-speaks release bot <action-speaks@localhost>"
 
 [tool.semantic_release.branches.main]
 match = "main"
 
 [tool.semantic_release.remote]
-# Gitea is the authoritative origin; GitHub is a mirror and is not released to. The web host
-# is not hardcoded: it differs per deployment, and a plain-HTTP one would need `insecure`,
-# which is not a default worth committing. Supply GITEA_SERVER_URL when releasing.
+# Gitea is the authoritative origin; GitHub is a mirror and is not released to. The runner
+# supplies its instance URL and job token. This instance deliberately uses HTTP.
 type = "gitea"
+domain = { env = "GITEA_SERVER_URL" }
+token = { env = "GITEA_TOKEN" }
+insecure = true
 
 [tool.semantic_release.changelog]
 exclude_commit_patterns = ["^chore(\\(.*\\))?: ", "^ci(\\(.*\\))?: ", "^style(\\(.*\\))?: "]

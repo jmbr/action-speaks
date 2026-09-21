@@ -50,7 +50,6 @@ diff already shows.
 
 ```bash
 .venv/bin/semantic-release --noop version --print   # what the next version would be
-GITEA_SERVER_URL=https://your-gitea .venv/bin/semantic-release version
 ```
 
 `feat` gives a minor bump, `fix` a patch one. Below 1.0 a breaking change stays minor. The
@@ -58,9 +57,14 @@ version lives in `action_speaks/__init__.py` and nowhere else; `CHANGELOG.md` is
 Tags are `vX.Y.Z`, starting from `v0.1.0`, which marks where Conventional Commits were
 adopted.
 
-Releasing is manual: this Gitea has no Actions runner registered, so a workflow would not
-run. `GITEA_SERVER_URL` sets the host used for changelog links; a plain-HTTP instance also
-needs semantic-release's `insecure` flag, which is deliberately not committed.
+`.gitea/workflows/release.yml` runs after every push to `main`, after the complete test suite.
+It supplies the instance URL and short-lived `GITEA_TOKEN`, updates the version and changelog,
+pushes `chore(release): vX.Y.Z` and the tag, and creates the Gitea release. Non-releasing
+commits make no release; the generated release commit is skipped on its second workflow run.
+The workflow may also be dispatched manually.
+
+This Gitea instance uses HTTP, so the remote explicitly permits an insecure connection.
+No package, PyPI upload, release artifact, or GitHub release is produced.
 
 ## Project layout
 

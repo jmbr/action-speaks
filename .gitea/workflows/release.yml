@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The job token needs no access beyond pushing the release commit/tag and creating the release.
+permissions:
+  code: write
+  releases: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ forgejo.token }}
+
+      # The release commit triggers this workflow once more. It contains no releasable change,
+      # but skipping the expensive Lean build is better than discovering that six minutes later.
+      - name: Decide whether to run
+        id: guard
+        shell: bash
+        run: |
+          if [[ "$(git log -1 --pretty=%s)" == "chore(release): "* ]]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.guard.outputs.run == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Install Python tooling
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Install Lean
+        if: steps.guard.outputs.run == 'true'
+        shell: bash
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh |
+            sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Build libraries and local search
+        if: steps.guard.outputs.run == 'true'
+        shell: bash
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          cd lean
+          lake exe cache get
+          lake build repl Physlib Cslib FloatLib ActionSpeaksAll
+          cd ..
+          ./scripts/build-loogle.sh
+
+      - name: Test
+        if: steps.guard.outputs.run == 'true'
+        shell: bash
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          .venv/bin/nox -s lint format types tests
+
+      - name: Release
+        if: steps.guard.outputs.run == 'true'
+        env:
+          GITEA_SERVER_URL: ${{ forgejo.server_url }}
+          GITEA_TOKEN: ${{ forgejo.token }}
+        run: .venv/bin/semantic-release version
