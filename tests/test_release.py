@@ -34,6 +34,7 @@ def test_release_targets_this_http_gitea() -> None:
         "api_domain": {"env": "GITEA_SERVER_URL"},
         "token": {"env": "GITEA_TOKEN"},
         "insecure": True,
+        "ignore_token_for_push": True,
     }
 
 

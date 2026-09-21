@@ -107,6 +107,9 @@ domain = "http://localhost:3000"
 api_domain = { env = "GITEA_SERVER_URL" }
 token = { env = "GITEA_TOKEN" }
 insecure = true
+# actions/checkout has already authenticated the runner-internal remote. Reconstructing it from
+# the public domain would make `localhost` point at the job container instead of Forgejo.
+ignore_token_for_push = true
 
 [tool.semantic_release.changelog]
 exclude_commit_patterns = ["^chore(\\(.*\\))?: ", "^ci(\\(.*\\))?: ", "^style(\\(.*\\))?: "]
