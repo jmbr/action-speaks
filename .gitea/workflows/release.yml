@@ -5,10 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# The job token needs no access beyond pushing the release commit/tag and creating the release.
-permissions:
-  code: write
-  releases: write
+# This runner's schema supports only the read-all/write-all shorthand. A release must push
+# its commit and tag and create the release, so read-only is insufficient.
+permissions: write-all
 
 concurrency:
   group: release-main
