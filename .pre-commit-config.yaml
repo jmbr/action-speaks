@@ -40,6 +40,11 @@ repos:
       - id: commitizen
         stages: [commit-msg]
 
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
   - repo: local
     hooks:
       - id: nox-quick

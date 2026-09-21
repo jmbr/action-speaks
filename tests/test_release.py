@@ -57,6 +57,15 @@ def test_workflow_fetches_all_tags_and_runs_the_full_suite() -> None:
     assert ".venv/bin/semantic-release version" in text
 
 
+def test_workflow_caches_the_expensive_lean_build() -> None:
+    text = workflow()
+    assert "uses: actions/cache@v4" in text
+    for path in ("~/.elan", "lean/.lake", "vendor/loogle"):
+        assert path in text
+    for input_file in ("lean/lean-toolchain", "lean/lake-manifest.json"):
+        assert input_file in text
+
+
 def test_type_session_targets_the_python_package() -> None:
     text = (ROOT / "noxfile.py").read_text()
     assert 'session.run("basedpyright", "action_speaks")' in text

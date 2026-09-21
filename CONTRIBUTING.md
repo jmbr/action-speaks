@@ -18,8 +18,9 @@ examples. Tests needing a built `lean/` checkout carry the `lean` marker, so
 `pytest -m "not lean"` selects the rest. Arguments reach pytest after `--`, for example
 `nox -s tests -- -k adversarial`.
 
-Commit hooks are deliberately few: file hygiene, a Conventional Commits check, plus
-`nox -s quick`. The Lean-backed tests need a built checkout and take minutes, so run
+Commit hooks are deliberately few: file hygiene, Gitleaks secret scanning, a Conventional
+Commits check, plus `nox -s quick`. The Lean-backed tests need a built checkout and take
+minutes, so run
 `nox -s tests` before pushing rather than on every commit. Use
 `.venv/bin/prek run --all-files` to run all hooks.
 

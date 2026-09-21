@@ -34,6 +34,18 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Restore Lean build
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            lean/.lake
+            vendor/loogle
+          key: lean-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json', 'scripts/build-loogle.sh') }}
+          restore-keys: |
+            lean-${{ runner.os }}-
+
       - name: Install Python tooling
         if: steps.guard.outputs.run == 'true'
         run: |
@@ -46,8 +58,10 @@ jobs:
         if: steps.guard.outputs.run == 'true'
         shell: bash
         run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh |
-            sh -s -- -y --default-toolchain none
+          if [[ ! -x "$HOME/.elan/bin/elan" ]]; then
+            curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh |
+              sh -s -- -y --default-toolchain none
+          fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Build libraries and local search
