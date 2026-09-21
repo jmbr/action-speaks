@@ -33,7 +33,7 @@ import threading
 from contextlib import contextmanager, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .config import Config, ConfigError
@@ -137,7 +137,7 @@ class UnixServer(ThreadingHTTPServer):
         # A bound socket file outlives the process, and the next bind fails over it.
         if self.owns_path and self.bound:
             with suppress(OSError):
-                Path(self.server_address).unlink()
+                Path(cast(str, self.server_address)).unlink()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -385,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         listening = inherited_socket()
         if listening is not None:
             # Socket-activated: systemd already created, bound and listened on this path.
-            server = UnixServer(str(path), Handler, bind_and_activate=False)
+            server = UnixServer(cast(Any, str(path)), Handler, bind_and_activate=False)
             server.socket.close()
             server.socket = listening
             server.owns_path = False
@@ -394,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
                 prepare(path)
             except DaemonError as exc:
                 p.exit(2, f"error: {exc}\n")
-            server = UnixServer(str(path), Handler)
+            server = UnixServer(cast(Any, str(path)), Handler)
             # The bind is subject to the umask, which commonly leaves the socket group- and
             # world-readable. The private directory is the real boundary, but there is no
             # reason to leave the socket looser than it needs to be.

@@ -64,7 +64,7 @@ def types(session):
     """Settings come from `[tool.pyright]` in pyproject.toml."""
     session.install("-e", ".")
     session.install("basedpyright")
-    session.run("basedpyright", "action-speaks")
+    session.run("basedpyright", "action_speaks")
 
 
 @nox.session
@@ -72,7 +72,7 @@ def mypy(session):
     """Not in the default set: it and pyright disagree, and one opinion is enough to act on."""
     session.install("-e", ".")
     session.install("mypy")
-    session.run("mypy", "action-speaks")
+    session.run("mypy", "action_speaks")
 
 
 @nox.session

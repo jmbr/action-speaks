@@ -57,6 +57,11 @@ def test_workflow_fetches_all_tags_and_runs_the_full_suite() -> None:
     assert ".venv/bin/semantic-release version" in text
 
 
+def test_type_session_targets_the_python_package() -> None:
+    text = (ROOT / "noxfile.py").read_text()
+    assert 'session.run("basedpyright", "action_speaks")' in text
+
+
 def test_workflow_uses_the_short_lived_forgejo_token() -> None:
     text = workflow()
     assert "GITEA_SERVER_URL: ${{ forgejo.server_url }}" in text
