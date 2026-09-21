@@ -30,7 +30,8 @@ def test_release_targets_this_http_gitea() -> None:
     remote = config()["remote"]
     assert remote == {
         "type": "gitea",
-        "domain": {"env": "GITEA_SERVER_URL"},
+        "domain": "http://localhost:3000",
+        "api_domain": {"env": "GITEA_SERVER_URL"},
         "token": {"env": "GITEA_TOKEN"},
         "insecure": True,
     }

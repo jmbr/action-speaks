@@ -100,9 +100,11 @@ match = "main"
 
 [tool.semantic_release.remote]
 # Gitea is the authoritative origin; GitHub is a mirror and is not released to. The runner
-# supplies its instance URL and job token. This instance deliberately uses HTTP.
+# reaches the API through its internal service name, while generated links use the public URL.
+# This instance deliberately uses HTTP.
 type = "gitea"
-domain = { env = "GITEA_SERVER_URL" }
+domain = "http://localhost:3000"
+api_domain = { env = "GITEA_SERVER_URL" }
 token = { env = "GITEA_TOKEN" }
 insecure = true
 

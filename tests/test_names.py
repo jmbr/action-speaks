@@ -63,6 +63,8 @@ ALLOWED = {
     ("install.py", "nullius"),
     ("tests/test_install.py", "lean-proof-check"),
     ("tests/test_install.py", "nullius"),
+    # Release history preserves the name a historical change actually replaced.
+    ("CHANGELOG.md", "nullius"),
 }
 
 # Files whose subject is comparing releases, so naming more than the pinned one is the point
