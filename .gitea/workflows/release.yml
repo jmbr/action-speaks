@@ -40,8 +40,11 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            ~/.elan
-            lean/.lake
+            lean/.lake/build
+            lean/.lake/packages/Physlib
+            lean/.lake/packages/cslib
+            lean/.lake/packages/floatlib
+            lean/.lake/packages/repl
             vendor/loogle
           key: lean-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json', 'scripts/build-loogle.sh') }}
           restore-keys: |
@@ -82,8 +85,11 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            ~/.elan
-            lean/.lake
+            lean/.lake/build
+            lean/.lake/packages/Physlib
+            lean/.lake/packages/cslib
+            lean/.lake/packages/floatlib
+            lean/.lake/packages/repl
             vendor/loogle
           key: ${{ steps.lean-cache.outputs.cache-primary-key }}
 

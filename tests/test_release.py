@@ -64,8 +64,17 @@ def test_workflow_caches_the_expensive_lean_build() -> None:
     assert "uses: actions/cache/restore@v4" in text
     assert "uses: actions/cache/save@v4" in text
     assert text.index("Save Lean build") < text.index("- name: Test")
-    for path in ("~/.elan", "lean/.lake", "vendor/loogle"):
+    for path in (
+        "lean/.lake/build",
+        "lean/.lake/packages/Physlib",
+        "lean/.lake/packages/cslib",
+        "lean/.lake/packages/floatlib",
+        "lean/.lake/packages/repl",
+        "vendor/loogle",
+    ):
         assert path in text
+    assert "~/.elan" not in text
+    assert "lean/.lake/packages/mathlib" not in text
     for input_file in ("lean/lean-toolchain", "lean/lake-manifest.json"):
         assert input_file in text
 
