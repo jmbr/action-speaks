@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-09-27)
+
+### Documentation
+
+- Lead INSTALL.md with the built-checkout path
+  ([`4a60a51`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/4a60a518a8121b6f58fcc1018812207ebeb4cef1))
+
+### Refactoring
+
+- Drop FloatLib
+  ([`dab437c`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/dab437ccbf143411edc9cf79d28a9a1596b6d5d2))
+
+
 ## v0.2.2 (2026-09-21)
 
 ### Bug Fixes
