@@ -55,9 +55,10 @@ def test_workflow_fetches_all_tags_and_runs_the_full_suite() -> None:
     text = workflow()
     assert "fetch-depth: 0" in text
     assert "lake exe cache get\n          lake build\n" in text
-    for target in ("repl", "Physlib", "Cslib", "FloatLib", "ActionSpeaksAll"):
+    for target in ("repl", "Physlib", "Cslib", "ActionSpeaksAll"):
         assert f"lake build {target}" in text
     assert "lake build repl Physlib" not in text
+    assert "floatlib" not in text.lower()
     assert ".venv/bin/nox -s lint format types tests" in text
     assert ".venv/bin/semantic-release version" in text
 
@@ -71,7 +72,6 @@ def test_workflow_caches_the_expensive_lean_build() -> None:
         "lean/.lake/build",
         "lean/.lake/packages/Physlib",
         "lean/.lake/packages/cslib",
-        "lean/.lake/packages/floatlib",
         "lean/.lake/packages/repl",
         "vendor/loogle",
     ):

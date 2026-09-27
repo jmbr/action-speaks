@@ -268,7 +268,7 @@ def _drift(row: dict[str, Any], current: dict[str, str] | None) -> list[str]:
     if not current:
         return []
     moved = []
-    for col in ("toolchain", "mathlib_rev", "physlib_rev", "cslib_rev", "floatlib_rev"):
+    for col in ("toolchain", "mathlib_rev", "physlib_rev", "cslib_rev"):
         was, now = row.get(col), current.get(col)
         if was and now and was != now:
             moved.append(col.removesuffix("_rev"))
@@ -498,6 +498,8 @@ class Ledger:
         for col, decl in (
             ("physlib_rev", "TEXT"),
             ("cslib_rev", "TEXT"),
+            # FloatLib is no longer a dependency. The column stays so rows checked with it
+            # keep their provenance and their exports still import.
             ("floatlib_rev", "TEXT"),
             ("statement_norm", "TEXT"),
             ("record_kind", "TEXT DEFAULT 'snippet'"),
@@ -616,9 +618,9 @@ class Ledger:
                 """INSERT INTO verifications
                    (created_at, created_iso, status, verified, target, claim, statement,
                     source, source_sha256, axioms, checks, failures, toolchain, mathlib_rev,
-                    physlib_rev, cslib_rev, floatlib_rev, elapsed, tag, statement_norm, record_kind,
+                    physlib_rev, cslib_rev, elapsed, tag, statement_norm, record_kind,
                     project_id, module, environment_id, provenance, derived_from)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
@@ -646,7 +648,6 @@ class Ledger:
                     verdict.provenance.get("mathlib_rev"),
                     verdict.provenance.get("physlib_rev"),
                     verdict.provenance.get("cslib_rev"),
-                    verdict.provenance.get("floatlib_rev"),
                     verdict.elapsed,
                     tag,
                     normalize_statement(verdict.statement),

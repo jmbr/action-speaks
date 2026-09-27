@@ -1,7 +1,7 @@
 # Install and build action-speaks
 
-Most of the work here is one-time: building Lean, Mathlib, Physlib, Cslib, FloatLib and the
-search index for this checkout. Once that is done, installing is two commands.
+Most of the work here is one-time: building Lean, Mathlib, Physlib, Cslib and the search
+index for this checkout. Once that is done, installing is two commands.
 
 ## If the checkout is already built
 
@@ -52,14 +52,13 @@ lake exe cache get && lake build
 lake build repl
 lake build Physlib
 lake build Cslib
-lake build FloatLib
 cd ..
 ./scripts/build-loogle.sh
 ```
 
-Mathlib's compiled files are downloaded from its cache. Physlib, Cslib and FloatLib build
-locally, which can take several minutes. All four libraries are needed: a submission is
-elaborated with every one of them imported, so `lake build` on its own — which reaches only
+Mathlib's compiled files are downloaded from its cache. Physlib and Cslib build locally,
+which can take several minutes. All three libraries are needed: a submission is elaborated
+with every one of them imported, so `lake build` on its own — which reaches only
 Mathlib — is not enough. Keep them as separate commands rather than collapsing them into one
 `lake build` invocation; the release workflow builds them the same way, and
 `tests/test_release.py` checks that it still does.

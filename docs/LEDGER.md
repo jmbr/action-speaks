@@ -89,7 +89,6 @@ toolchain   leanprover/lean4:v4.34.0
 mathlib     5ed2965256430c3649e86755f9576b54eca72435
 physlib     d410e856abdd7c4c747332da2533c1596327a473
 cslib       990e65a685bed413f43b139db900a36ad5322a10
-floatlib    0d91825727839f597fd06b22fdd038ea21480f0c
 ```
 
 Rebuild the recorded versions and rerun the stored source to reproduce a result. Set

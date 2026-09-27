@@ -188,6 +188,6 @@ Record the toolchain and library revisions with results you publish. A proof can
 compiling when dependencies change. For this checkout:
 
 ```text
-Lean 4.34.0, Mathlib 5ed296525643, Physlib d410e856abdd, Cslib 990e65a685be, FloatLib 0d9182572783
+Lean 4.34.0, Mathlib 5ed296525643, Physlib d410e856abdd, Cslib 990e65a685be
 Allowed axioms: propext, Classical.choice, Quot.sound
 ```
