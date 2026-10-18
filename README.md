@@ -16,9 +16,10 @@ that the Lean statement matches the claim you intended.**
 | Enable it in an agent | [Agent setup](docs/SETUP-AGENTS.md) |
 | Use Python, HTTP, MCP, or the CLI | [Integration guide](docs/INTEGRATION.md) |
 | Work through mathematical examples | [Cookbook](docs/COOKBOOK.md) |
-| Follow the agent workflow | [AGENTS.md](AGENTS.md) |
+| Follow the agent workflow | [Agent workflow](docs/AGENT-WORKFLOW.md) |
 | Keep proofs in a Lean project | [Project-backed proofs](docs/PROJECTS.md) |
 | Recall proofs or reproduce a verdict | [Ledger and reproducibility](docs/LEDGER.md) |
+| See which clients and versions were tested | [Compatibility](docs/COMPATIBILITY.md) |
 | Develop or release action-speaks | [Contributing guide](CONTRIBUTING.md) |
 
 Once installed:

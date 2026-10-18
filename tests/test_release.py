@@ -18,12 +18,43 @@ def workflow() -> str:
     return (ROOT / ".gitea/workflows/release.yml").read_text()
 
 
+def hooks() -> str:
+    return (ROOT / ".pre-commit-config.yaml").read_text()
+
+
 def test_semantic_release_is_the_only_version_engine() -> None:
     semantic = config()
     commitizen = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["commitizen"]
     assert semantic["commit_parser"] == "conventional"
     assert semantic["version_variables"] == ["action_speaks/__init__.py:__version__"]
     assert "version_files" not in commitizen
+
+
+def test_below_one_point_zero_a_breaking_change_stays_minor() -> None:
+    semantic = config()
+    commitizen = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["commitizen"]
+    assert semantic["allow_zero_version"] is True
+    assert semantic["major_on_zero"] is False
+    assert commitizen["major_version_zero"] is True
+
+
+def test_hooks_are_installed_at_every_stage_they_declare() -> None:
+    """A hook declared for a stage `prek install` does not wire up silently never runs."""
+    text = hooks()
+    declared = text.split("default_install_hook_types:")[1].split("\n")[0]
+    for stage in ("pre-commit", "commit-msg", "pre-push"):
+        assert stage in declared
+    assert "id: commitizen\n        stages: [commit-msg]" in text
+    assert "stages: [pre-push]" in text
+
+
+def test_push_runs_the_checks_the_release_workflow_runs() -> None:
+    noxfile = (ROOT / "noxfile.py").read_text()
+    defaults = noxfile.split("nox.options.sessions = [")[1].split("]")[0]
+    released = workflow().split(".venv/bin/nox -s ")[1].split("\n")[0].split()
+    for session in released:
+        assert f'"{session}"' in defaults
+    assert "exec .venv/bin/nox; fi; exec nox'" in hooks()
 
 
 def test_release_targets_this_http_gitea() -> None:
@@ -85,6 +116,13 @@ def test_workflow_caches_the_expensive_lean_build() -> None:
 def test_type_session_targets_the_python_package() -> None:
     text = (ROOT / "noxfile.py").read_text()
     assert 'session.run("basedpyright", "action_speaks")' in text
+
+
+def test_skill_security_findings_fail_the_checks() -> None:
+    """SkillSpector exits 0 on findings unless told otherwise, which would make it advisory."""
+    text = (ROOT / "noxfile.py").read_text()
+    assert '"skillspector", "scan", str(directory), "--no-llm", "--fail-on-findings"' in text
+    assert '"skills"' in text.split("nox.options.sessions = [")[1].split("]")[0]
 
 
 def test_workflow_uses_the_short_lived_forgejo_token() -> None:

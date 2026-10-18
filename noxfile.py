@@ -15,25 +15,31 @@ assumed, because both fail quietly:
   everything and takes minutes. Marking them is what makes that split possible, so a new
   test that starts Lean needs the marker too, or `quick` stops being quick.
 
-`lint`, `format` and `types` need neither Lean nor a built tree, so they are the ones worth
-running in a loop. `tests` needs a built checkout; see "Setup from scratch" in the README.
+`lint`, `format`, `types` and `skills` need neither Lean nor a built tree, so they are the ones
+worth running in a loop. `tests` needs a built checkout; see "Setup from scratch" in the README.
 
-    nox                      # lint, format, types, tests
+    nox                      # lint, format, types, skills, tests
     nox -s lint format       # seconds
+    nox -s skills            # validate and security-scan skills/
     nox -s fix               # apply what `format` asks for
     nox -s quick             # the Lean-free tests alone, ~1 s
     nox -s tests             # minutes, and needs lean/ built
     nox -s tests -- -k ledger  # arguments after `--` reach pytest
 """
 
+from pathlib import Path
+
 import nox
 
-nox.options.sessions = ["lint", "format", "types", "tests"]
+nox.options.sessions = ["lint", "format", "types", "skills", "tests"]
 nox.options.reuse_existing_virtualenvs = True
 
 # Everything of ours that is Python. `examples/` is included because it is documentation
 # people copy from, and this file because a linter that exempts itself is a poor advertisement.
 SOURCES = ["action_speaks", "tests", "examples", "install.py", "noxfile.py"]
+
+SKILLS_REF = "skills-ref==0.1.1"
+SKILLSPECTOR = "skillspector @ git+https://github.com/NVIDIA/SkillSpector.git@v2.13.0"
 
 
 @nox.session
@@ -73,6 +79,23 @@ def mypy(session):
     session.install("-e", ".")
     session.install("mypy")
     session.run("mypy", "action_speaks")
+
+
+@nox.session
+def skills(session):
+    """Validate every Agent Skill under skills/ and scan it for security findings.
+
+    The scan is static (`--no-llm`), so it needs no credentials and gives the same answer
+    every time. Without `--fail-on-findings` SkillSpector reports findings but exits 0.
+    """
+    directories = sorted(path for path in Path("skills").glob("*") if path.is_dir())
+    if not directories:
+        session.skip("no skills to validate")
+    session.install(SKILLS_REF, SKILLSPECTOR)
+    for directory in directories:
+        # The PyPI release of skills-ref installs its command as `agentskills`.
+        session.run("agentskills", "validate", str(directory))
+        session.run("skillspector", "scan", str(directory), "--no-llm", "--fail-on-findings")
 
 
 @nox.session

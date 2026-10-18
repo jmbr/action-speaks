@@ -46,8 +46,8 @@ skills/action-speaks/
 ```
 
 The skill description tells the agent which tasks should trigger verification. The full
-instructions are loaded when the skill is used. Unlike this repository's `AGENTS.md`, the
-installed skill can be used from other projects.
+instructions are loaded when the skill is used, from any project. For clients without
+skills, give the agent the [workflow instructions](AGENT-WORKFLOW.md) instead.
 
 To check discovery in pi:
 

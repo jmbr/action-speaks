@@ -6,7 +6,7 @@ install the development tools:
 ```bash
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/prek install
-.venv/bin/nox -s lint format
+.venv/bin/nox -s lint format skills
 .venv/bin/nox -s types
 .venv/bin/nox -s tests
 ```
@@ -19,10 +19,22 @@ examples. Tests needing a built `lean/` checkout carry the `lean` marker, so
 `nox -s tests -- -k adversarial`.
 
 Commit hooks are deliberately few: file hygiene, Gitleaks secret scanning, a Conventional
-Commits check, plus `nox -s quick`. The Lean-backed tests need a built checkout and take
-minutes, so run
-`nox -s tests` before pushing rather than on every commit. Use
-`.venv/bin/prek run --all-files` to run all hooks.
+Commits check, `nox -s quick`, and `nox -s skills` when `skills/` changes. The Lean-backed
+tests need a built checkout and take minutes, so they run on push instead: the pre-push hook
+runs the default nox sessions, which cover everything the release workflow checks. Use
+`.venv/bin/prek run --all-files` to run the commit hooks.
+
+## Skill changes
+
+`nox -s skills` validates `skills/` against the Agent Skills specification and runs a static
+SkillSpector security scan; any finding fails the session. The skill's
+`description` alone decides when an agent loads it, so after changing it run
+`tests/skill_trigger_eval.sh` and `tests/skill_trigger_eval.sh 1 holdout`, and compare the
+pass counts with the previous description. The script drives Copilot CLI, costs a model call
+per prompt, and may start a Lean session per positive prompt; `PARALLEL` limits concurrency.
+
+After a release, record the tested clients and library revisions in
+[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Commit messages
 
@@ -80,6 +92,7 @@ No package, PyPI upload, release artifact, or GitHub release is produced.
 | `action_speaks/harness.py` | Python API |
 | `action_speaks/cli.py`, `action_speaks/http_server.py`, `action_speaks/mcp_server.py` | CLI and server entry points |
 | `skills/action-speaks/`, `mcp/`, `install.py` | Agent instructions and installation |
+| `AGENTS.md` | Instructions for agents developing action-speaks |
 | `tests/`, `noxfile.py`, `.pre-commit-config.yaml` | Tests and development checks |
 | `scripts/check_updates.py` | Which Lean release the pins could move to, and what it costs |
 | `contrib/` | Separate contributions, not part of the verifier build |

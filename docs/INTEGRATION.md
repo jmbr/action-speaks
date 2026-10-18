@@ -164,7 +164,7 @@ networks.
 ```
 
 The tools are `verify`, `statement`, `search`, `close`, and `log`. Give the agent the
-[workflow instructions](../AGENTS.md), or install the skill as described in
+[workflow instructions](AGENT-WORKFLOW.md), or install the skill as described in
 [agent setup](SETUP-AGENTS.md).
 
 Requests are handled **one at a time**: the server reads a line from stdin, answers it, and

@@ -8,18 +8,19 @@
 # `files:` pattern beside it was a second, subtler thing to get wrong. Test selection now
 # lives in pytest and nox alone.
 #
-# The one test hook runs `nox -s quick`, which is the Lean-free part of the suite and takes
-# about a second. The Lean-backed tests are not run here: they need a built checkout
-# (`cd lean && lake exe cache get && lake build`), take minutes, and belong in
-# `nox -s tests` before pushing rather than on every commit.
+# On commit, `nox -s quick` runs the Lean-free part of the suite in about a second, and
+# `nox -s skills` validates and security-scans the skill when it changes. The Lean-backed tests need a built
+# checkout (`cd lean && lake exe cache get && lake build`) and take minutes, so they run on
+# push instead, with the rest of the default nox sessions: the same checks the release
+# workflow runs on `main`.
 #
-# Skippable in an emergency with `SKIP=nox-quick git commit`.
+# Skippable in an emergency with `SKIP=nox-quick git commit` or `SKIP=nox-default git push`.
 #
-# Two shims are installed, not one. `commit-msg` runs the Conventional Commits check and
-# `pre-commit` runs the rest; declaring both here means `prek install` wires them up, rather
-# than the message check sitting in this file uninstalled and silently never running.
+# Three shims are installed. `commit-msg` runs the Conventional Commits check, `pre-push`
+# the full suite, and `pre-commit` the rest; declaring them here means `prek install` wires
+# them all up, rather than a hook sitting in this file uninstalled and silently never running.
 
-default_install_hook_types: [pre-commit, commit-msg]
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -31,6 +32,8 @@ repos:
       - id: check-merge-conflict
       - id: end-of-file-fixer
       - id: trailing-whitespace
+      - id: check-added-large-files
+      - id: debug-statements
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.18.1
@@ -59,3 +62,18 @@ repos:
         # Prose can go stale as easily as code — `tests/test_names.py` exists because it did —
         # so this runs on every commit rather than only when Python changes.
         always_run: true
+
+      - id: nox-skills
+        name: Agent Skill validation and scan (nox -s skills)
+        entry: sh -c 'if [ -x .venv/bin/nox ]; then exec .venv/bin/nox -s skills; fi; exec nox -s skills'
+        language: system
+        files: ^skills/
+        pass_filenames: false
+
+      - id: nox-default
+        name: Full suite (nox)
+        entry: sh -c 'if [ -x .venv/bin/nox ]; then exec .venv/bin/nox; fi; exec nox'
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
