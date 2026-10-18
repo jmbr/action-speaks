@@ -21,6 +21,9 @@
 # them all up, rather than a hook sitting in this file uninstalled and silently never running.
 
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
+# Hooks without `stages:` would otherwise run at every installed stage, repeating the
+# commit checks while checking the message and again before the push.
+default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -30,9 +33,13 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-merge-conflict
+      # These three declare their own stages, which take precedence over `default_stages`.
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: trailing-whitespace
+        stages: [pre-commit]
       - id: check-added-large-files
+        stages: [pre-commit]
       - id: debug-statements
 
   - repo: https://github.com/commitizen-tools/commitizen

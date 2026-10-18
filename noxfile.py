@@ -38,21 +38,25 @@ nox.options.reuse_existing_virtualenvs = True
 # people copy from, and this file because a linter that exempts itself is a poor advertisement.
 SOURCES = ["action_speaks", "tests", "examples", "install.py", "noxfile.py"]
 
-SKILLS_REF = "skills-ref==0.1.1"
-SKILLSPECTOR = "skillspector @ git+https://github.com/NVIDIA/SkillSpector.git@v2.13.0"
+PYPROJECT = nox.project.load_toml("pyproject.toml")
+
+
+def install_group(session, group):
+    """Install a `[dependency-groups]` entry from pyproject.toml, the one place tools are named."""
+    session.install(*nox.project.dependency_groups(PYPROJECT, group))
 
 
 @nox.session
 def lint(session):
     """Rules and their exceptions live in `[tool.ruff.lint]` in pyproject.toml."""
-    session.install("ruff")
+    install_group(session, "lint")
     session.run("ruff", "check", *SOURCES)
 
 
 @nox.session
 def format(session):
     """Report formatting and import-order drift without rewriting anything."""
-    session.install("ruff")
+    install_group(session, "lint")
     session.run("ruff", "check", "--select", "I", *SOURCES)
     session.run("ruff", "format", "--check", "--diff", *SOURCES)
 
@@ -60,7 +64,7 @@ def format(session):
 @nox.session
 def fix(session):
     """The counterpart to `format`: apply what it would ask for."""
-    session.install("ruff")
+    install_group(session, "lint")
     session.run("ruff", "check", "--select", "I", "--fix", *SOURCES)
     session.run("ruff", "format", *SOURCES)
 
@@ -69,7 +73,7 @@ def fix(session):
 def types(session):
     """Settings come from `[tool.pyright]` in pyproject.toml."""
     session.install("-e", ".")
-    session.install("basedpyright")
+    install_group(session, "types")
     session.run("basedpyright", "action_speaks")
 
 
@@ -77,7 +81,7 @@ def types(session):
 def mypy(session):
     """Not in the default set: it and pyright disagree, and one opinion is enough to act on."""
     session.install("-e", ".")
-    session.install("mypy")
+    install_group(session, "mypy")
     session.run("mypy", "action_speaks")
 
 
@@ -91,7 +95,7 @@ def skills(session):
     directories = sorted(path for path in Path("skills").glob("*") if path.is_dir())
     if not directories:
         session.skip("no skills to validate")
-    session.install(SKILLS_REF, SKILLSPECTOR)
+    install_group(session, "skills")
     for directory in directories:
         # The PyPI release of skills-ref installs its command as `agentskills`.
         session.run("agentskills", "validate", str(directory))
@@ -101,7 +105,8 @@ def skills(session):
 @nox.session
 def quick(session):
     """Everything that needs no Lean, for when only prose or Python has changed."""
-    session.install("-e", ".", "pytest")
+    session.install("-e", ".")
+    install_group(session, "test")
     session.run("pytest", "-m", "not lean", *session.posargs)
 
 
@@ -111,5 +116,6 @@ def tests(session):
 
     Arguments after `--` are passed through, so `nox -s tests -- -x -k adversarial` works.
     """
-    session.install("-e", ".", "pytest")
+    session.install("-e", ".")
+    install_group(session, "test")
     session.run("pytest", *session.posargs)

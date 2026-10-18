@@ -36,7 +36,8 @@ and releases in more detail.
 on push.
 
 Define a new check as a nox session and call it from `.pre-commit-config.yaml`; do not
-write it in the hook file. Only checks with no nox equivalent (file hygiene, commit messages,
+write it in the hook file. A session's tools belong in a `[dependency-groups]` entry in
+`pyproject.toml`, installed with `install_group`; never name a package in `noxfile.py`. Only checks with no nox equivalent (file hygiene, commit messages,
 Gitleaks) stay as pinned upstream hooks.
 
 ## Invariants

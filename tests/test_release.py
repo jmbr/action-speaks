@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -46,6 +47,14 @@ def test_hooks_are_installed_at_every_stage_they_declare() -> None:
         assert stage in declared
     assert "id: commitizen\n        stages: [commit-msg]" in text
     assert "stages: [pre-push]" in text
+
+
+def test_each_hook_runs_at_one_stage() -> None:
+    """Unstaged hooks run at every installed stage, repeating the commit checks twice more."""
+    text = hooks()
+    assert "\ndefault_stages: [pre-commit]\n" in text
+    for hook in ("end-of-file-fixer", "trailing-whitespace", "check-added-large-files"):
+        assert f"id: {hook}\n        stages: [pre-commit]" in text
 
 
 def test_push_runs_the_checks_the_release_workflow_runs() -> None:
@@ -123,6 +132,16 @@ def test_skill_security_findings_fail_the_checks() -> None:
     text = (ROOT / "noxfile.py").read_text()
     assert '"skillspector", "scan", str(directory), "--no-llm", "--fail-on-findings"' in text
     assert '"skills"' in text.split("nox.options.sessions = [")[1].split("]")[0]
+
+
+def test_nox_sessions_install_tools_only_from_dependency_groups() -> None:
+    """Tool requirements live in pyproject.toml, not as literals in noxfile.py."""
+    noxfile = (ROOT / "noxfile.py").read_text()
+    groups = tomllib.loads((ROOT / "pyproject.toml").read_text())["dependency-groups"]
+    used = set(re.findall(r'install_group\(session, "([^"]+)"\)', noxfile))
+    assert used and used <= set(groups)
+    installs = re.findall(r'session\.install\(("[^)]*)\)', noxfile)
+    assert set(installs) <= {'"-e", "."', '"."'}
 
 
 def test_workflow_uses_the_short_lived_forgejo_token() -> None:
