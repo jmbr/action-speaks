@@ -118,4 +118,7 @@ def tests(session):
     """
     session.install("-e", ".")
     install_group(session, "test")
-    session.run("pytest", *session.posargs)
+    # Two workers, one module each: a module's Lean session or build is set up once, and two
+    # warm Lean sessions fit on a modest machine where more might not. `-n 0` after `--`
+    # runs serially, since the last `-n` wins.
+    session.run("pytest", "-n", "2", "--dist", "loadfile", *session.posargs)

@@ -48,7 +48,7 @@ dev = [
 lint = ["ruff"]
 types = ["basedpyright"]
 mypy = ["mypy"]
-test = ["pytest>=8.0"]
+test = ["pytest>=8.0", "pytest-xdist>=3.6"]
 skills = [
     "skills-ref==0.1.1",
     "skillspector @ git+https://github.com/NVIDIA/SkillSpector.git@v2.13.0",
