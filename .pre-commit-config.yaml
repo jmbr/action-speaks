@@ -9,15 +9,15 @@
 # lives in pytest and nox alone.
 #
 # On commit, `nox -s quick` runs the Lean-free part of the suite in about a second, and
-# `nox -s skills` validates and security-scans the skill when it changes. The Lean-backed tests need a built
-# checkout (`cd lean && lake exe cache get && lake build`) and take minutes, so they run on
-# push instead, with the rest of the default nox sessions: the same checks the release
-# workflow runs on `main`.
+# `nox -s skills` validates and security-scans the skill when it changes. On push, lint,
+# format and types run, which take seconds. The Lean-backed tests need a built checkout and
+# take minutes, too long to wait for on every push; the release workflow runs them on `main`,
+# and `nox -s tests` runs them locally.
 #
-# Skippable in an emergency with `SKIP=nox-quick git commit` or `SKIP=nox-default git push`.
+# Skippable in an emergency with `SKIP=nox-quick git commit` or `SKIP=nox-static git push`.
 #
 # Three shims are installed. `commit-msg` runs the Conventional Commits check, `pre-push`
-# the full suite, and `pre-commit` the rest; declaring them here means `prek install` wires
+# the static checks, and `pre-commit` the rest; declaring them here means `prek install` wires
 # them all up, rather than a hook sitting in this file uninstalled and silently never running.
 
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
@@ -77,9 +77,9 @@ repos:
         files: ^skills/
         pass_filenames: false
 
-      - id: nox-default
-        name: Full suite (nox)
-        entry: sh -c 'if [ -x .venv/bin/nox ]; then exec .venv/bin/nox; fi; exec nox'
+      - id: nox-static
+        name: Lint, format and types (nox -s lint format types)
+        entry: sh -c 'if [ -x .venv/bin/nox ]; then exec .venv/bin/nox -s lint format types; fi; exec nox -s lint format types'
         language: system
         always_run: true
         pass_filenames: false

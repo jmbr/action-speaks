@@ -32,8 +32,8 @@ and releases in more detail.
 ```
 
 `prek install` wires these sessions to git hooks: hygiene, secret scanning, `quick`, and
-`skills` on commit; the Conventional Commits check on the message; the default nox sessions
-on push.
+`skills` on commit; the Conventional Commits check on the message; `lint`, `format` and
+`types` on push. No hook runs `tests`; run it yourself when a change touches verification.
 
 Define a new check as a nox session and call it from `.pre-commit-config.yaml`; do not
 write it in the hook file. A session's tools belong in a `[dependency-groups]` entry in

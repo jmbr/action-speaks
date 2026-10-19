@@ -49,6 +49,13 @@ def test_hooks_are_installed_at_every_stage_they_declare() -> None:
     assert "stages: [pre-push]" in text
 
 
+def test_push_hook_skips_the_lean_suite() -> None:
+    """The Lean-backed suite takes minutes; waiting for it on every push is not worth it."""
+    push = hooks().split("stages: [pre-push]")[0].rsplit("- id:", 1)[1]
+    assert "nox -s lint format types" in push
+    assert "tests" not in push
+
+
 def test_each_hook_runs_at_one_stage() -> None:
     """Unstaged hooks run at every installed stage, repeating the commit checks twice more."""
     text = hooks()
@@ -57,13 +64,12 @@ def test_each_hook_runs_at_one_stage() -> None:
         assert f"id: {hook}\n        stages: [pre-commit]" in text
 
 
-def test_push_runs_the_checks_the_release_workflow_runs() -> None:
+def test_plain_nox_runs_the_checks_the_release_workflow_runs() -> None:
     noxfile = (ROOT / "noxfile.py").read_text()
     defaults = noxfile.split("nox.options.sessions = [")[1].split("]")[0]
     released = workflow().split(".venv/bin/nox -s ")[1].split("\n")[0].split()
     for session in released:
         assert f'"{session}"' in defaults
-    assert "exec .venv/bin/nox; fi; exec nox'" in hooks()
 
 
 def test_release_targets_this_http_gitea() -> None:

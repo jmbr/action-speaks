@@ -19,9 +19,10 @@ examples. Tests needing a built `lean/` checkout carry the `lean` marker, so
 `nox -s tests -- -k adversarial`.
 
 Commit hooks are deliberately few: file hygiene, Gitleaks secret scanning, a Conventional
-Commits check, `nox -s quick`, and `nox -s skills` when `skills/` changes. The Lean-backed
-tests need a built checkout and take minutes, so they run on push instead: the pre-push hook
-runs the default nox sessions, which cover everything the release workflow checks. Use
+Commits check, `nox -s quick`, and `nox -s skills` when `skills/` changes. The pre-push hook
+runs `nox -s lint format types`, which takes seconds. The Lean-backed tests need a built
+checkout and take minutes, so no hook runs them: run `nox -s tests` before pushing a change
+that touches verification, and the release workflow runs them on `main`. Use
 `.venv/bin/prek run --all-files` to run the commit hooks.
 
 ## Skill changes
