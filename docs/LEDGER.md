@@ -81,14 +81,15 @@ or moving those entries.
 
 ## Reproduce a verdict
 
-The ledger records the source, toolchain, and Mathlib, Physlib, and Cslib revisions.
+The ledger records the source, toolchain, and Mathlib, Physlib, Cslib, and Statlib revisions.
 The checkout pins its dependencies in `lean/lake-manifest.json`. Current library pins are:
 
 ```text
-toolchain   leanprover/lean4:v4.34.0
-mathlib     5ed2965256430c3649e86755f9576b54eca72435
-physlib     d410e856abdd7c4c747332da2533c1596327a473
-cslib       990e65a685bed413f43b139db900a36ad5322a10
+toolchain   leanprover/lean4:v4.35.0
+mathlib     56a005855ea17e0b0958f73ec801ae140b0a1679
+physlib     af04d60bcd7618af849ff511e0a19d77f709937e
+cslib       5b56df99362532c46e1175381fbbdd755bd56030
+statlib     ee032e7f26852bf6abfa3b90dc1d9f13740734b8
 ```
 
 Rebuild the recorded versions and rerun the stored source to reproduce a result. Set

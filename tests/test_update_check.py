@@ -33,17 +33,33 @@ def upstream(
     spec: dict[str, dict[str, tuple[str, str | None]]],
     tags=("v4.33.0", "v4.32.0"),
     branches: dict[str, str] | None = None,
+    behind: dict[tuple[str, str], int] | None = None,
 ):
-    """A fake GitHub: spec[repo][ref] = (toolchain version, lakefile body or None)."""
+    """A fake GitHub: spec[repo][ref] = (toolchain version, lakefile body or None).
+
+    `behind[(required, release)]` says `required` is that many commits behind `release` in
+    Mathlib's history; any pair not listed is unrelated, as distinct revisions usually are.
+    """
     branches = branches or {}
+    behind = behind or {}
 
     def get(path: str):
+        if "/mathlib4/compare/" in path:
+            required, release = path.rsplit("/", 1)[1].split("...")
+            if required == release:
+                return {"status": "identical", "ahead_by": 0}
+            if (required, release) in behind:
+                return {"status": "ahead", "ahead_by": behind[(required, release)]}
+            return {"status": "diverged", "ahead_by": 3}
+        if path.startswith("/repos/") and path.endswith("/tags?per_page=100"):
+            repo = path.split("/repos/")[1].rsplit("/tags", 1)[0]
+            if repo == "leanprover-community/mathlib4":
+                return [{"name": t} for t in tags]
+            return [{"name": ref} for ref in spec.get(repo, {}) if ref.startswith("v")]
         if path.startswith("/repos/") and path.count("/") == 3:
             return {"default_branch": branches.get(path.split("/repos/")[1], "main")}
         if "/commits/" in path:
             return {"sha": "c" * 40}
-        if path.startswith("/repos/leanprover-community/mathlib4/tags"):
-            return [{"name": t} for t in tags]
         if "/git/ref/tags/" in path:
             return {"object": {"type": "commit", "sha": "0" * 40}}
         if "/contents/" in path:
@@ -71,6 +87,8 @@ def shipped(mathlib: str, release: str) -> dict:
         "leanprover-community/physlib": {release: (release.lstrip("v"), LAKEFILE.format(mathlib))},
         "leanprover/cslib": {release: (release.lstrip("v"), LAKEFILE.format(mathlib))},
         "leanprover-community/repl": {release: (release.lstrip("v"), NO_MATHLIB)},
+        # Statlib tracks Mathlib's master; here its branch asks for exactly the release's.
+        "stat-lib/statlib": {"main": (release.lstrip("v"), LAKEFILE.format(mathlib))},
     }
 
 
@@ -144,14 +162,50 @@ def test_moving_refs_are_reported(monkeypatch, pins) -> None:
 
 
 def test_a_candidate_is_reported_lost_but_does_not_veto(monkeypatch, pins) -> None:
-    """The v4.33.0 case: everything shipped agreed, and the move cost Statlib."""
+    """The v4.33.0 case: everything shipped agreed, and the move cost a candidate."""
     spec = shipped("v4.33.0", "v4.33.0")
-    spec["stat-lib/statlib"] = {"v4.32.0": ("4.32.0", LAKEFILE.format("old"))}
+    spec["lean-dojo/FloatLib"] = {"v4.32.0": ("4.32.0", LAKEFILE.format("old"))}
     data = survey(monkeypatch, upstream(spec), candidates=True)
     moved = row(data, "v4.33.0")
     assert moved["converges"], "a candidate must not block a release"
-    assert "Statlib" in moved["candidates_lost"]
-    assert "Statlib" not in row(data, "v4.32.0")["candidates_lost"]
+    assert "FloatLib" in moved["candidates_lost"]
+    assert "FloatLib" not in row(data, "v4.32.0")["candidates_lost"]
+
+
+def test_a_tracking_library_behind_the_release_is_usable(monkeypatch, pins) -> None:
+    """Statlib's v4.35.0 case: its branch asked for a Mathlib 42 commits short of the
+    release. The root's Mathlib overrides it, so that is usable, and the report says how far."""
+    spec = shipped("v4.33.0", "v4.33.0")
+    spec["stat-lib/statlib"] = {"main": ("4.33.0-rc2", LAKEFILE.format("051bc08"))}
+    data = survey(monkeypatch, upstream(spec, behind={("051bc08", "v4.33.0"): 42}))
+    statlib = row(data, "v4.33.0")["libraries"]["Statlib"]
+    assert statlib["usable"]
+    assert statlib["mathlib_behind"] == 42
+    assert row(data, "v4.33.0")["converges"]
+
+
+def test_a_tracking_library_ahead_of_the_release_blocks_it(monkeypatch, pins) -> None:
+    """Overriding a pin with an older Mathlib removes what the library was written against."""
+    spec = shipped("v4.33.0", "v4.33.0")
+    spec["stat-lib/statlib"] = {"main": ("4.33.0", LAKEFILE.format("newer"))}
+    data = survey(monkeypatch, upstream(spec))
+    assert not row(data, "v4.33.0")["libraries"]["Statlib"]["usable"]
+    assert not row(data, "v4.33.0")["converges"]
+
+
+def test_a_tracking_library_falls_back_to_a_release_candidate_tag(monkeypatch, pins) -> None:
+    """By the time a release is examined the branch has usually moved on to the next one."""
+    spec = shipped("v4.33.0", "v4.33.0")
+    spec["stat-lib/statlib"] = {
+        "main": ("4.34.0-rc1", LAKEFILE.format("next")),
+        "v4.33.0-rc1": ("4.33.0-rc1", LAKEFILE.format("rc1")),
+        "v4.33.0-rc2": ("4.33.0-rc2", LAKEFILE.format("rc2")),
+    }
+    behind = {("rc1", "v4.33.0"): 90, ("rc2", "v4.33.0"): 10}
+    data = survey(monkeypatch, upstream(spec, behind=behind))
+    statlib = row(data, "v4.33.0")["libraries"]["Statlib"]
+    assert statlib["ref"] == "v4.33.0-rc2", "the newest candidate, not the first found"
+    assert statlib["mathlib_behind"] == 10
 
 
 def test_no_converging_release_is_stated_plainly(monkeypatch, pins, capsys) -> None:

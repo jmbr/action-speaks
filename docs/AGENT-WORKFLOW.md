@@ -1,6 +1,7 @@
 # Instructions for agents using action-speaks
 
-Use action-speaks to check mathematical claims with Lean 4, Mathlib, Physlib, and Cslib.
+Use action-speaks to check mathematical claims with Lean 4, Mathlib, Physlib, Cslib, and
+Statlib.
 Verify substantial inequalities, identities, bounds, convergence or correctness arguments,
 and counterexamples. Skip trivial arithmetic and non-mathematical claims.
 
@@ -39,12 +40,13 @@ search { "query": "|- Irrational (Real.sqrt _)", "backend": "loogle" }
 close   { "goal": "25 < n * n", "binders": "(n : Nat) (h : 5 < n)" }
 ```
 
-Local Loogle searches the installed Mathlib, Physlib, and Cslib. `close` asks the installed
+Local Loogle searches the installed Mathlib, Physlib, Cslib, and Statlib. `close` asks the installed
 Lean environment for tactic suggestions for a goal. Verify the resulting proof before
 citing it.
 
 If local Loogle is unavailable, report that. Use `backend: "loogle-remote"` only explicitly:
-the public index uses a different Mathlib revision and does not include Physlib or Cslib.
+the public index uses a different Mathlib revision and does not include Physlib, Cslib, or
+Statlib.
 A missing result there does not establish that a lemma is absent locally.
 
 When looking for reusable earlier proofs, explicitly search the local ledger:
@@ -111,7 +113,8 @@ what failed without claiming a proof.
 
 ## Writing Lean source
 
-- Do not include `import` lines. Mathlib, Physlib, Cslib, and the audit module are preloaded.
+- Do not include `import` lines. Mathlib, Physlib, Cslib, Statlib, and the audit module are
+  preloaded.
 - Put helper lemmas first and the theorem to check last, or select it with `target`.
 - Use tactics such as `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`,
   `aesop`, `simp`, `decide`, and `grind` for routine goals.
@@ -121,6 +124,8 @@ what failed without claiming a proof.
   Find a proved result or state that the dependency is unfinished.
 - Search Cslib for computation topics such as automata, type systems, and verified algorithms
   before defining your own model.
+- Search Statlib for mathematical statistics, such as e-values, contiguity, and quadratic
+  mean differentiability, before defining your own estimators or tests.
 
 ## Writing style
 

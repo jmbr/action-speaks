@@ -43,6 +43,7 @@ jobs:
             lean/.lake/build
             lean/.lake/packages/Physlib
             lean/.lake/packages/cslib
+            lean/.lake/packages/Statlib
             lean/.lake/packages/repl
             vendor/loogle
           key: lean-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json', 'scripts/build-loogle.sh') }}
@@ -78,6 +79,7 @@ jobs:
           lake build repl
           lake build Physlib
           lake build Cslib
+          lake build Statlib
           lake build ActionSpeaksAll
           cd ..
           ./scripts/build-loogle.sh
@@ -90,6 +92,7 @@ jobs:
             lean/.lake/build
             lean/.lake/packages/Physlib
             lean/.lake/packages/cslib
+            lean/.lake/packages/Statlib
             lean/.lake/packages/repl
             vendor/loogle
           key: ${{ steps.lean-cache.outputs.cache-primary-key }}

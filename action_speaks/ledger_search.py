@@ -437,7 +437,8 @@ def _export_entry(
         raise BuildFailure(verdict.feedback())
     module = f"Ledger.E{key}"
     text = (
-        "import Mathlib\nimport Physlib\nimport Cslib\nimport ActionSpeaks.LedgerExport\n\n"
+        "import Mathlib\nimport Physlib\nimport Cslib\nimport Statlib\n"
+        "import ActionSpeaks.LedgerExport\n\n"
         "#ledger_begin\n" + source + "\n\n"
         f'#ledger_export {json.dumps(target, ensure_ascii=False)} "E{key}"\n'
     )
@@ -691,6 +692,7 @@ def search_ledger(
                         "mathlib_rev",
                         "physlib_rev",
                         "cslib_rev",
+                        "statlib_rev",
                     )
                 },
                 "indexed_provenance": snapshot["provenance"],

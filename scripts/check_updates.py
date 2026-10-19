@@ -10,6 +10,12 @@ v4.33.0, where Statlib had an exact match for the old pin and no final tag for t
 So this reports convergence rather than latest-ness. "You are behind" is not actionable on
 its own; "v4.33.0 works for everything you ship, and costs you Statlib" is.
 
+Some libraries never tag in step: Statlib follows Mathlib's master, so no release of it names
+a Mathlib release exactly. Lake builds whatever Mathlib the root package requires, so such a
+library is usable at a release when some revision of it was built for that release (or one of
+its candidates) and asks for a Mathlib the release already contains. That is a judgement about
+history, not about compilation; the build is what confirms it.
+
     scripts/check_updates.py               # human-readable report
     scripts/check_updates.py --json        # same data for a workflow
     scripts/check_updates.py --candidates  # include libraries not yet required
@@ -42,14 +48,20 @@ SHIPPED = {
     "repl": "leanprover-community/repl",
 }
 
+# Libraries required but tracking Mathlib's master rather than its releases. They take no part
+# in the agreement test; the root package's Mathlib overrides theirs. See `tracking_support`.
+TRACKING = {
+    "Statlib": "stat-lib/statlib",
+}
+
 # Libraries under consideration but not required. Reported only with --candidates, and never
 # allowed to hold back a release: losing one is information, not a veto.
 CANDIDATES = {
-    "Statlib": "stat-lib/statlib",
     "FloatLib": "lean-dojo/FloatLib",
 }
 
 RELEASE = re.compile(r"^v4\.\d+\.\d+$")
+MATHLIB = "leanprover-community/mathlib4"
 TOOLCHAIN = re.compile(r"v(4\.\d+\.\d+(?:-rc\d+)?)")
 # `rev = "..."` in a lakefile.toml require block, or `@ "..."` in a lakefile.lean one.
 TOML_REV = re.compile(r'name\s*=\s*"mathlib".*?rev\s*=\s*"([^"]+)"', re.S | re.I)
@@ -115,6 +127,9 @@ class Support:
     toolchain: str | None = None
     mathlib: str | None = None
     moving: list[str] = field(default_factory=list)
+    # For a tracking library: how many commits its Mathlib is behind the release's.
+    behind: int | None = None
+    tracking: bool = False
 
     @property
     def usable(self) -> bool:
@@ -124,11 +139,17 @@ class Support:
         judged on its toolchain alone. Only libraries that name a Mathlib take part in the
         agreement test below.
         """
+        if self.tracking:
+            return self.ref is not None and self.behind is not None
         return self.ref is not None and self.toolchain == self.release.lstrip("v")
 
     def why_not(self) -> str | None:
+        if self.tracking and self.ref is None:
+            return "no revision built for this release asks for a Mathlib it contains"
         if self.ref is None:
             return "nothing built against this release"
+        if self.tracking:
+            return None
         if self.toolchain != self.release.lstrip("v"):
             return f"tagged, but built against v{self.toolchain}"
         return None
@@ -194,6 +215,45 @@ def support(repo: str, release: str) -> Support:
     return Support(release=release, tagged=False)
 
 
+def mathlib_behind(required: str, release: str) -> int | None:
+    """How far `required` is behind `release` in Mathlib's history, or None if not behind.
+
+    "Behind" includes equal. Anything else - ahead of the release, or on another line - means
+    the library uses Mathlib the release lacks, and overriding its pin would break it.
+    """
+    data = get(f"/repos/{MATHLIB}/compare/{required}...{release}")
+    if not isinstance(data, dict) or data.get("status") not in ("ahead", "identical"):
+        return None
+    return int(data.get("ahead_by", 0))
+
+
+def tracking_support(repo: str, release: str) -> Support:
+    """What a library that follows Mathlib's master offers for `release`.
+
+    Tried in order: a tag named after the release, the default branch, then the release's
+    candidate tags newest first, since the branch has usually moved on by the time a release
+    is examined. The first revision built for this release or one of its candidates, and
+    asking for a Mathlib the release contains, wins.
+    """
+    version = release.lstrip("v")
+    tags = get(f"/repos/{repo}/tags?per_page=100") or []
+    rcs = sorted(
+        (t["name"] for t in tags if t["name"].startswith(f"{release}-rc")),
+        key=lambda n: int(n.rsplit("rc", 1)[1]),
+        reverse=True,
+    )
+    for ref, tagged in ((release, True), (default_branch(repo), False), *((r, True) for r in rcs)):
+        found = _at_ref(repo, release, ref, tagged)
+        if found is None or not found.mathlib:
+            continue
+        if found.toolchain != version and not (found.toolchain or "").startswith(f"{version}-rc"):
+            continue
+        if (behind := mathlib_behind(found.mathlib, release)) is not None:
+            found.behind, found.tracking = behind, True
+            return found
+    return Support(release=release, tagged=False, tracking=True)
+
+
 def default_branch(repo: str) -> str:
     data = get(f"/repos/{repo}")
     return data.get("default_branch", "main") if isinstance(data, dict) else "main"
@@ -201,7 +261,7 @@ def default_branch(repo: str) -> str:
 
 def releases(limit: int) -> list[str]:
     """Mathlib's stable releases, newest first. Release candidates are not offered."""
-    tags = get("/repos/leanprover-community/mathlib4/tags?per_page=100")
+    tags = get(f"/repos/{MATHLIB}/tags?per_page=100")
     names = [t["name"] for t in tags or [] if RELEASE.match(t["name"])]
     return names[:limit]
 
@@ -228,7 +288,9 @@ def survey(candidates: bool, limit: int) -> dict:
     rows = []
     for release in releases(limit):
         answers = {name: support(repo, release) for name, repo in libraries.items()}
+        answers |= {name: tracking_support(repo, release) for name, repo in TRACKING.items()}
         shipped_ok = [n for n in SHIPPED if answers[n].usable]
+        tracking_ok = all(answers[n].usable for n in TRACKING)
         # Only libraries that name a Mathlib take part; `repl` names none.
         agree = {answers[n].mathlib for n in shipped_ok if answers[n].mathlib}
         rows.append(
@@ -244,12 +306,14 @@ def survey(candidates: bool, limit: int) -> dict:
                         "why_not": a.why_not(),
                         "ref": a.ref,
                         "from_branch": a.ref is not None and not a.tagged,
+                        "tracking": a.tracking,
+                        "mathlib_behind": a.behind,
                     }
                     for n, a in answers.items()
                 },
                 # `repl` has no Mathlib requirement of its own, so it is judged on its
                 # toolchain alone; everything else must name the same Mathlib.
-                "converges": len(shipped_ok) == len(SHIPPED) and len(agree) <= 1,
+                "converges": len(shipped_ok) == len(SHIPPED) and len(agree) <= 1 and tracking_ok,
                 "mathlib": next(iter(agree)) if len(agree) == 1 else None,
                 "candidates_lost": [
                     n for n in CANDIDATES if n in answers and not answers[n].usable
@@ -262,7 +326,7 @@ def survey(candidates: bool, limit: int) -> dict:
 def report(data: dict, candidates: bool) -> int:
     current = data["current"]
     print(f"current toolchain: v{current['toolchain']}")
-    for name in ("mathlib", *SHIPPED):
+    for name in ("mathlib", *SHIPPED, *TRACKING):
         if rev := current["revisions"].get(name):
             print(f"  {name:<10} {rev[:12]}")
 
@@ -273,8 +337,13 @@ def report(data: dict, candidates: bool) -> int:
     for row in data["releases"]:
         notes = []
         for name, info in row["libraries"].items():
-            if name in SHIPPED and info.get("why_not"):
+            if name in (*SHIPPED, *TRACKING) and info.get("why_not"):
                 notes.append(f"{name}: {info['why_not']}")
+            elif info.get("tracking"):
+                notes.append(
+                    f"{name}: {info['ref']} asks for Mathlib {info['mathlib_behind']} commits "
+                    "behind; build to confirm"
+                )
             elif info.get("from_branch"):
                 notes.append(f"{name}: from {info['ref']}, pin the commit")
             if info["moving_refs"]:
@@ -299,7 +368,7 @@ def report(data: dict, candidates: bool) -> int:
     print("\nPins for lean/lakefile.toml:")
     print(f'  lean-toolchain            leanprover/lean4:{newest["release"]}')
     print(f'  mathlib   rev = "{newest["release"]}"')
-    for name, repo in SHIPPED.items():
+    for name, repo in (SHIPPED | TRACKING).items():
         ref = newest["libraries"].get(name, {}).get("ref") or newest["release"]
         sha = resolve(repo, ref)
         print(f'  {name:<9} rev = "{sha}"' if sha else f"  {name:<9} (resolve by hand: no tag)")

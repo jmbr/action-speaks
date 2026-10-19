@@ -65,7 +65,9 @@ def directory_state(path: Path) -> dict[str, tuple[bytes, int, int]]:
 def legacy(path: Path) -> None:
     with closing(sqlite3.connect(path)) as conn, conn:
         conn.executescript(
-            SCHEMA.replace("    physlib_rev   TEXT,\n", "").replace("    cslib_rev     TEXT,\n", "")
+            SCHEMA.replace("    physlib_rev   TEXT,\n", "")
+            .replace("    cslib_rev     TEXT,\n", "")
+            .replace("    statlib_rev   TEXT,\n", "")
         )
         conn.execute(
             "INSERT INTO verifications "

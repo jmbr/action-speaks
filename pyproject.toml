@@ -7,8 +7,8 @@ name = "action-speaks"
 description = "Machine-checked backing for an agent's mathematical claims, via Lean 4 + Mathlib"
 readme = "README.md"
 requires-python = ">=3.10"
-# Apache 2.0 to match the stack this sits on: Lean 4, Mathlib, Physlib, Cslib and Loogle are
-# all Apache 2.0, so results proved here can be contributed upstream to Mathlib without
+# Apache 2.0 to match the stack this sits on: Lean 4, Mathlib, Physlib, Cslib, Statlib and
+# Loogle are all Apache 2.0, so results proved here can be contributed upstream to Mathlib without
 # relicensing. Some transitive dependencies (Cli, MD4Lean) are MIT, which is compatible, so
 # the graph is not single-license — check before assuming that of a citation.
 license = "Apache-2.0"

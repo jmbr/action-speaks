@@ -58,7 +58,8 @@ unsafe def main (args : List String) : IO UInt32 := do
     | throw <| IO.userError "expected MODULE TARGET REQUIRE_NONTRIVIAL"
   let imports : Array Import := #[
     {module := `Mathlib, importAll := true}, {module := `Physlib, importAll := true},
-    {module := `Cslib, importAll := true}, {module := `ActionSpeaks.Audit, importAll := true}]
+    {module := `Cslib, importAll := true}, {module := `Statlib, importAll := true},
+    {module := `ActionSpeaks.Audit, importAll := true}]
   enableInitializersExecution
   let base ← importModules (loadExts := true) imports {}
   let basePath ← searchPathRef.get

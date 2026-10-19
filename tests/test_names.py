@@ -34,10 +34,10 @@ FORBIDDEN = {
     "lean-ai": "the project is called action-speaks",
     "lean-proof-check": "the skill is named after the project: `action-speaks`",
     "indexes Mathlib only": (
-        "shape search covers Physlib and Cslib too when loogle is built locally"
+        "shape search covers Physlib, Cslib and Statlib too when loogle is built locally"
     ),
     "Mathlib and Physlib are already imported": (
-        "Cslib is imported as well; naming two of the three misleads"
+        "Cslib and Statlib are imported as well; naming two of the four misleads"
     ),
     "test_cookbook.py": "renamed to tests/test_docs.py, which also checks the skill docs",
     "check_names.py": "renamed to tests/test_names.py, so pytest discovers it",
@@ -47,7 +47,9 @@ FORBIDDEN = {
 }
 
 # Where a documented revision is expected to match what lake actually pins.
-REV_CITATION = re.compile(r"\b(mathlib|physlib|cslib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40})\b", re.I)
+REV_CITATION = re.compile(
+    r"\b(mathlib|physlib|cslib|statlib)\b[^0-9a-f\n]{0,4}([0-9a-f]{8,40})\b", re.I
+)
 # A citation has to name Lean to count. Matching a bare `4.x.y` caught unrelated pins that
 # merely look like one -- a `rev: v4.18.1` for a commit-hook tool, say -- and a version
 # number with nothing to attach it to is not a Lean citation in the first place.
@@ -72,6 +74,12 @@ ALLOWED = {
 MULTI_VERSION = {
     "tests/test_update_check.py",
     "scripts/check_updates.py",
+    # Records of what was tested at a past release. Rewriting them to the current pins would
+    # claim tests that were never run against those pins.
+    "docs/COMPATIBILITY.md",
+    "contrib/polyrith-local/README.md",
+    # Release history, written by semantic-release and never edited by hand.
+    "CHANGELOG.md",
 }
 
 
@@ -145,7 +153,7 @@ def test_cited_lean_version_is_the_pinned_one(sources: list[tuple[Path, str]]) -
 
 
 def test_cited_library_revisions_are_the_pinned_ones(sources: list[tuple[Path, str]]) -> None:
-    """A cited Mathlib, Physlib or Cslib revision must be a prefix of the pinned one."""
+    """A cited Mathlib, Physlib, Cslib or Statlib revision must be a prefix of the pinned one."""
     _, revs = pinned()
     problems = [
         f"{rel}:{lineno}: cites {pkg} {rev}, but lake pins {revs[pkg.lower()][:12]}"

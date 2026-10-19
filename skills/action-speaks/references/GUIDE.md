@@ -81,7 +81,7 @@ Loogle pattern syntax:
 
 Local Loogle searches the installed library versions. If it is unavailable, build it with
 `scripts/build-loogle.sh` in the verifier repository. Hosted Loogle must be requested with
-`--backend loogle-remote`; it searches a different Mathlib revision without Physlib or Cslib.
+`--backend loogle-remote`; it searches a different Mathlib revision without Physlib, Cslib, or Statlib.
 Natural-language search uses the remote LeanSearch service.
 
 `close` runs search tactics in Lean against your goal. Treat the suggestions as proof
@@ -188,6 +188,7 @@ Record the toolchain and library revisions with results you publish. A proof can
 compiling when dependencies change. For this checkout:
 
 ```text
-Lean 4.34.0, Mathlib 5ed296525643, Physlib d410e856abdd, Cslib 990e65a685be
+Lean 4.35.0, Mathlib 56a005855ea1, Physlib af04d60bcd76, Cslib 5b56df993625,
+Statlib ee032e7f2685
 Allowed axioms: propext, Classical.choice, Quot.sound
 ```

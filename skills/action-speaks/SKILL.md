@@ -1,7 +1,7 @@
 ---
 name: action-speaks
 description: Check mathematical or computational claims by proving them in Lean 4 with Mathlib, Physlib and Cslib. Use for non-obvious inequalities, identities, bounds, closed forms, convergence, termination, correctness arguments, and counterexamples in mathematics, physics, or computer science. Also use to check statements for contradictory assumptions and to find library lemmas instead of guessing names.
-compatibility: Requires a built action-speaks checkout (Lean 4.34.0 + Mathlib + Physlib + Cslib) and its install.py setup. Linux/macOS with python3.
+compatibility: Requires a built action-speaks checkout (Lean 4.35.0 + Mathlib + Physlib + Cslib + Statlib) and its install.py setup. Linux/macOS with python3.
 metadata:
   repository: action-speaks
 ---
@@ -49,12 +49,12 @@ action-speaks search '|- Irrational (Real.sqrt _)' --backend loogle
 action-speaks close '25 < n * n' -b '(n : ℕ) (h : 5 < n)'
 ```
 
-Local Loogle searches the installed Mathlib, Physlib, and Cslib. `close` asks the installed
+Local Loogle searches the installed Mathlib, Physlib, Cslib, and Statlib. `close` asks the installed
 Lean environment for tactic suggestions. Use these instead of guessing lemma names, and
 verify the resulting proof.
 
 LeanSearch is remote. Hosted Loogle is available only through `--backend loogle-remote`;
-it uses a different Mathlib revision and does not cover Physlib or Cslib.
+it uses a different Mathlib revision and does not cover Physlib, Cslib, or Statlib.
 
 #### Find reusable earlier proofs
 
@@ -108,12 +108,14 @@ For any other verdict, explain what failed. Do not present the claim as proved.
 
 ## Lean source rules
 
-- No `import` lines: Mathlib, Physlib, Cslib, and the audit module are preloaded.
+- No `import` lines: Mathlib, Physlib, Cslib, Statlib, and the audit module are preloaded.
 - Put helpers first and the target theorem last, or select the theorem explicitly.
 - Physlib includes unfinished results marked `@[sorryful]` or `@[pseudo]`. Citing one can
   fail the axiom check even if your source contains no `sorry`.
 - Cslib covers computation topics such as automata, type systems, and verified algorithms.
   Search it before writing your own definitions.
+- Statlib covers mathematical statistics such as e-values, contiguity, and quadratic mean
+  differentiability. Search it before defining your own estimators or tests.
 - Try `nlinarith`, `linarith`, `omega`, `positivity`, `norm_num`, `field_simp`, `aesop`,
   `simp`, `decide`, or `grind` for routine goals.
 - Choose types carefully: subtraction on `ℕ` stops at zero, and division discards the

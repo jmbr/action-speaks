@@ -6,8 +6,8 @@ the whole tool exists to prevent.
 
 Two properties matter and neither is covered elsewhere:
 
-* the local index reaches Physlib and Cslib, which is the reason for running Loogle locally
-  at all — the hosted service has neither in its index, and a search that cannot see a library
+* the local index reaches Physlib, Cslib and Statlib, which is the reason for running Loogle locally
+  at all — the hosted service has none of them in its index, and a search that cannot see a library
   the verifier can is worse than useless, because its silence looks like an answer;
 * an absent binary is *reported* rather than quietly answered from the hosted index, whose
   contents describe a different Mathlib. The hosted service stays reachable, but only when
@@ -31,13 +31,15 @@ pytestmark = pytest.mark.lean
 from action_speaks import search as S  # noqa: E402
 from action_speaks.config import Config  # noqa: E402
 
-# One declaration from each library in the prelude, to prove a single index spans all three.
-# Neither Physlib's nor Cslib's root module imports all of Mathlib, so indexing any one of
-# them alone leaves a hole; `lean/ActionSpeaksAll.lean` exists precisely to close it.
+# One declaration from each library in the prelude, to prove a single index spans all four.
+# None of Physlib's, Cslib's or Statlib's root modules imports all of Mathlib, so indexing any
+# one of them alone leaves a hole; `lean/ActionSpeaksAll.lean` exists precisely to close it.
 LIBRARIES = [
     ("physlib", "ClassicalMechanics.FreeParticle.linearMomentum", "Physlib."),
     ("mathlib", "|- Irrational (Real.sqrt _)", "Mathlib."),
     ("cslib", "Cslib.LambdaCalculus.LocallyNameless.Untyped.Term.confluent_fullBeta", "Cslib."),
+    # Statlib declares into Mathlib's namespaces, so only the module tells its lemmas apart.
+    ("statlib", "ProbabilityTheory.isEVar_one", "Statlib."),
 ]
 
 

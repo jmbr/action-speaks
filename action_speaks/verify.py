@@ -139,6 +139,9 @@ class Verdict:
             cslib = self.provenance.get("cslib_rev") or ""
             if cslib:
                 prov += f" cslib: {cslib[:12]}"
+            statlib = self.provenance.get("statlib_rev") or ""
+            if statlib:
+                prov += f" statlib: {statlib[:12]}"
             lines.append(prov)
         lines.append(f"  elapsed: {self.elapsed:.2f}s")
         return "\n".join(lines)

@@ -1,7 +1,7 @@
 # action-speaks-louder-than-words — check an agent's mathematical claims
 
 action-speaks checks Lean 4 proofs written by AI agents. It uses Mathlib for mathematics,
-Physlib for physics, and Cslib for computer science. You can call it from Python, the
+Physlib for physics, Cslib for computer science, and Statlib for statistics. You can call it from Python, the
 command line, an HTTP service, or an MCP tool.
 
 It checks more than whether a proof compiles: it rejects incomplete proofs and untrusted
@@ -113,11 +113,11 @@ and without the guard.
   limitation.
 - **Some Physlib results are unfinished.** A citation can compile but still depend on
   `sorryAx` or `Lean.ofReduceBool`. The axiom check rejects those dependencies.
-- **Library versions matter.** Lean, Mathlib, Physlib, Cslib, and the REPL must use compatible
+- **Library versions matter.** Lean, Mathlib, Physlib, Cslib, Statlib, and the REPL must use compatible
   versions. Update the pins in `lean/lakefile.toml` together.
 - **Search results depend on the backend.** Local Loogle searches the installed Mathlib,
-  Physlib, and Cslib. Hosted Loogle searches a different Mathlib version and does not cover
-  the other two libraries. LeanSearch is a remote natural-language service. `close` asks
+  Physlib, Cslib, and Statlib. Hosted Loogle searches a different Mathlib version and does not
+  cover the other three libraries. LeanSearch is a remote natural-language service. `close` asks
   the installed Lean environment for tactic suggestions.
 
 ## Related tools
@@ -134,6 +134,7 @@ as a fixed specification.
 
 ## License and authorship
 
-Apache 2.0; see [LICENSE](LICENSE). Lean, Mathlib, Physlib, Cslib, and Loogle also use Apache 2.0.
+Apache 2.0; see [LICENSE](LICENSE). Lean, Mathlib, Physlib, Cslib, Statlib, and Loogle also use Apache
+2.0.
 Coding agents contributed under human direction and review; commit trailers identify
 co-authored commits.
