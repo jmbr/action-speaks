@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-10-19)
+
+### Build System
+
+- Run each hook once and declare nox tools in dependency groups
+  ([`25f7022`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/25f7022c0b969f92422a06b27cae2ea38afa0505))
+
+### Features
+
+- Move to Lean v4.35.0 and add Statlib
+  ([`8d03572`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/8d03572bc1823f6a91e397d77f928d011c7bdb8e))
+
+- **skill**: Route probability and statistics theory to action-speaks
+  ([`86a8cc2`](http://localhost:3000/jmbr/action-speaks-louder-than-words/commit/86a8cc2a5d99c0a52b00f4d1132a82c500e8a59b))
+
+
 ## v0.3.0 (2026-09-27)
 
 ### Documentation
