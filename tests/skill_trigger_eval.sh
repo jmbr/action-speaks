@@ -20,6 +20,7 @@ MAIN=(
 "yes|odd-sum|I claim the sum of the first n odd numbers is always n^2. Can you confirm that holds for every n?"
 "yes|exp-vs-cube|Is 2^n > n^3 for all n >= 10? Give me an answer I can trust."
 "yes|termination|Does this always terminate for natural n? def f(n): return 0 if n == 0 else f(n // 2)"
+"yes|markov|Does P(X >= a) <= E[X]/a hold for every nonnegative random variable X and every a > 0? Check it rigorously before I rely on it."
 # Near misses share vocabulary with the skill but require a different task.
 "no|arithmetic|What is 37 * 43?"
 "no|prime-fn|Write a Python function that checks whether a number is prime."
@@ -27,6 +28,8 @@ MAIN=(
 "no|explain|Explain intuitively, to a high-school student, why the harmonic series diverges."
 "no|lake-error|Our CI fails with 'unknown package Mathlib' after editing lakefile.toml. How do I fix the build?"
 "no|latex|Typeset this in LaTeX: the sum from k=1 to n of k^2 equals n(n+1)(2n+1)/6."
+# Statistics on observed data belongs to a hypothesis-testing tool, not to a prover.
+"no|ab-test|Control converted 120 of 2400 visitors and the variant 151 of 2400. Is the lift real or noise?"
 )
 
 # Written after the main set; keep it unseen while tuning the description.
@@ -35,9 +38,11 @@ HOLDOUT=(
 "yes|midpoint|In my binary search on naturals, lo <= hi at loop entry. Does mid = (lo + hi) / 2 always stay within [lo, hi]?"
 "yes|counterexample|Every odd number greater than 1 is prime, right? Show me if that's wrong."
 "yes|divisibility|Is n^5 - n divisible by 30 for every integer n? I'm citing it in a proof sketch."
+"yes|chebyshev|For any distribution with finite variance, is the chance of landing two standard deviations from the mean at most 1/4? Make sure."
 "no|percent|What's 15% of 2400?"
 "no|history|Summarize the history of Fermat's Last Theorem."
 "no|unit-tests|Write pytest unit tests for a function that sorts a list of integers."
+"no|sample-size|How many users per arm do I need to detect a lift from 10% to 12% conversion?"
 )
 
 case "$SET" in
